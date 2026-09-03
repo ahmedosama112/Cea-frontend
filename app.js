@@ -2670,6 +2670,20 @@ async function renderApprovals(){
     aprBuildTable();
   }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
 }
+// تحديث تلقائي للطابور: كل 20 ثانية والتاب مفتوح وظاهر (وكمان أول ما ترجع للتطبيق) — عشان لما معتمد يخلص،
+// اللي بعده يشوف دوره من غير ريفرش. بيتخطى التحديث لو فيه قرار مفتوح أو معاينة ملف عشان ما يقطعش شغلك.
+function aprTabLive(){
+  const tab=document.getElementById('tab-approvals');
+  return !!(tab && tab.classList.contains('active') && !document.hidden && navigator.onLine && getAccessToken());
+}
+function aprAutoRefresh(){
+  if(!aprTabLive() || _aprPending) return;
+  const pv=document.getElementById('apr-preview-ov'); if(pv && pv.style.display && pv.style.display!=='none') return;
+  const m=document.getElementById('apr-modal'); if(m && m.style.display==='flex') return;
+  renderApprovals();
+}
+setInterval(aprAutoRefresh, 20*1000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) aprAutoRefresh(); });
 function aprLevelCell(r, level){
   // القرار المسجل على المستوى ده في النسخة الحالية
   const rv=(r.reviews||[]).filter(x=>x.level===level && x.revision===r.revision);
