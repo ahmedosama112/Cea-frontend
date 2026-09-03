@@ -2672,6 +2672,17 @@ async function renderApprovals(){
 }
 // تحديث تلقائي للطابور: كل 20 ثانية والتاب مفتوح وظاهر (وكمان أول ما ترجع للتطبيق) — عشان لما معتمد يخلص،
 // اللي بعده يشوف دوره من غير ريفرش. بيتخطى التحديث لو فيه قرار مفتوح أو معاينة ملف عشان ما يقطعش شغلك.
+// زرار "🔄 تحديث" في تاب الاعتمادات: إعادة تحميل التطبيق كله (بطلب صاحب المشروع) — بيرجع على نفس التاب
+function aprHardRefresh(){
+  showToast('⏳ جاري تحديث التطبيق...');
+  try{ sessionStorage.setItem('cea_reopen_tab','approvals'); }catch(e){}
+  setTimeout(()=>location.reload(), 150);
+}
+// بعد إعادة التحميل من زرار التحديث: نرجع لتاب الاعتمادات تلقائيًا
+document.addEventListener('DOMContentLoaded', ()=>{
+  let t=null; try{ t=sessionStorage.getItem('cea_reopen_tab'); sessionStorage.removeItem('cea_reopen_tab'); }catch(e){}
+  if(t==='approvals'){ const tryOpen=(n)=>{ if(getAccessToken() && document.getElementById('tab-approvals')){ switchTab('approvals'); } else if(n>0) setTimeout(()=>tryOpen(n-1), 400); }; setTimeout(()=>tryOpen(10), 600); }
+});
 function aprTabLive(){
   const tab=document.getElementById('tab-approvals');
   return !!(tab && tab.classList.contains('active') && !document.hidden && navigator.onLine && getAccessToken());
