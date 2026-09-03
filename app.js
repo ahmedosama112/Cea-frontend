@@ -2731,7 +2731,11 @@ function aprBuildTable(){
       +'</tr>';
   }).join('');
   html+='</tbody></table>';
+  // نحافظ على موضع التمرير الأفقي: إعادة الرسم (بعد قرار أو تحديث تلقائي) كانت بترجّع الجدول لأوله
+  // فعمود "الإجراء" (أقصى الشمال) بيختفي وكأن الأزرار راحت — خصوصًا على الموبايل
+  const sc=box.closest('.apr-scroll')||box; const keepX=sc.scrollLeft;
   box.innerHTML=html;
+  if(keepX) sc.scrollLeft=keepX;
 }
 // مراجعة = معاينة الملف جوه التطبيق (جدول) من غير تحميل — نفس محرك معاينة الكشوف
 async function aprReview(id){
