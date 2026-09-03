@@ -2639,10 +2639,11 @@ function sheetTimeline(s){
   const steps=[];
   steps.push('✅ وصل شيت الاعتماد');
   if(sh){
-    steps.push((sh.execApproval?('✅ مدير التنفيذ: '+esc(sh.execApproval)):'⏳ بانتظار مدير التنفيذ'));
-    if(sh.execApproval) steps.push((sh.pmApproval?('✅ مدير المشروع: '+esc(sh.pmApproval)):'⏳ بانتظار مدير المشروع'));
-    if(sh.execNotes) steps.push('📝 ملاحظات التنفيذ: '+esc(sh.execNotes));
-    if(sh.pmNotes) steps.push('📝 ملاحظات المشروع: '+esc(sh.pmNotes));
+    // الشيت (بعد تحديث سبتمبر 2026): خانة D = اعتماد DC (توقيعين + PDF)، F = الاعتماد الإداري (بيتملي تلقائيًا من التطبيق)، G = سلسلة الاعتماد
+    if(sh.pmApproval) steps.push('✅ الاعتماد الإداري: '+esc(sh.pmApproval));
+    steps.push((sh.execApproval?('✅ DC: '+esc(sh.execApproval)):'⏳ بانتظار DC (التوقيع والـ PDF)'));
+    if(sh.execNotes) steps.push('📝 ملاحظات DC: '+esc(sh.execNotes));
+    if(sh.pmNotes) steps.push('🖋 سلسلة الاعتماد: '+esc(sh.pmNotes));
   }
   return '<div class="s" style="font-size:11px;margin-top:4px;padding:6px 8px;background:var(--input);border-radius:8px;line-height:1.8">'
     + '<span style="font-weight:800;color:'+color+'">'+icon+' '+(st?esc(st):'قيد الاعتماد')+'</span><br>'

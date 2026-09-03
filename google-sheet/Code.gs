@@ -104,13 +104,17 @@ const APPROVAL = {
 /* توافق مع الصفوف القديمة (اللي فيها القيم الإنجليزية) */
 const LEGACY_APPROVAL = { 'APPROVED': APPROVAL.APPROVED, 'NOT APPROVED': APPROVAL.NOT_APPROVED, 'APPROVED WITH COMMENTS': APPROVAL.APPROVED_WITH_COMMENTS };
 const DROPDOWN_OPTIONS = ['', APPROVAL.APPROVED, APPROVAL.NOT_APPROVED, APPROVAL.APPROVED_WITH_COMMENTS];
-const isOk = v => v === APPROVAL.APPROVED || v === APPROVAL.APPROVED_WITH_COMMENTS || v === 'APPROVED' || v === 'APPROVED WITH COMMENTS';
+const isOk = v => v === APPROVAL.APPROVED || v === APPROVAL.APPROVED_WITH_COMMENTS || v === 'APPROVED' || v === 'APPROVED WITH COMMENTS' || v === ADMIN_APPROVED;
 const isNo = v => v === APPROVAL.NOT_APPROVED || v === 'NOT APPROVED';
 
+/* 🖋 (سبتمبر 2026) المراجعة والاعتماد بقوا جوه تطبيق CEA، والصف بيوصل الشيت بعد اكتمال السلسلة:
+   خانة F (كانت "إعتماد مدير المشروع") بتتملي تلقائيًا بالقيمة دي وتتقفل، وG بتحمل ملخص مين اعتمد */
+const ADMIN_APPROVED = '✅ معتمد بالكامل';
+
 const STATUS = {
-  NEW: 'جديد', CONVERTED: 'قيد الاعتماد',
-  EXEC_APPROVED: 'معتمد مدير التنفيذ', PM_APPROVED: 'معتمد مدير المشروع',
-  DONE: 'معتمد بالكامل ✅', REJ_EXEC: 'مرفوض من مدير التنفيذ', REJ_PM: 'مرفوض من مدير المشروع',
+  NEW: 'جديد', CONVERTED: 'بانتظار DC',            // كان "قيد الاعتماد" — دلوقتي المتبقي بعد التطبيق هو DC (التوقيع + PDF) بس
+  EXEC_APPROVED: 'معتمد مدير التنفيذ', PM_APPROVED: 'معتمد مدير المشروع', // (توافق مع الصفوف القديمة)
+  DONE: 'معتمد بالكامل ✅', REJ_EXEC: 'مرفوض من DC', REJ_PM: 'مرفوض من مدير المشروع',
 };
 
 const SIG_CELL_EXEC = 'A16';
@@ -138,15 +142,15 @@ function applyNewDesign() {
   const r1 = sheet.getRange(1, 1, 1, LAST_COL);
   r1.breakApart();
   sheet.getRange(1, 1, 1, 3).merge().setValue('مهندس الموقع');
-  sheet.getRange(1, 4, 1, 2).merge().setValue('مدير التنفيذ');
-  sheet.getRange(1, 6, 1, 2).merge().setValue('مدير المشروع');
+  sheet.getRange(1, 4, 1, 2).merge().setValue('DC');
+  sheet.getRange(1, 6, 1, 2).merge().setValue('اعتماد التطبيق');
   sheet.getRange(1, 8, 1, 3).merge().setValue('الاعتماد والإخراج');
   sheet.getRange(1, 11).setValue('المشروع');
   r1.setBackground(THEME.navyDark).setFontColor(THEME.white).setFontWeight('bold').setFontSize(11)
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setFontFamily('Cairo');
   sheet.setRowHeight(1, 32);
 
-  const headers = ['إسم المهندس', 'تاريخ الإرسال', 'ملف السركي', 'إعتماد مدير التنفيذ', 'ملاحظات', 'إعتماد مدير المشروع', 'ملاحظات', 'الحالة', 'السراكي بعد الإعتماد', 'PDF النهائي', 'سكني / تجاري'];
+  const headers = ['إسم المهندس', 'تاريخ الإرسال', 'ملف السركي', 'اعتماد DC', 'ملاحظات DC', 'الاعتماد الإداري', 'سلسلة الاعتماد', 'الحالة', 'السراكي بعد الإعتماد', 'PDF النهائي', 'سكني / تجاري'];
   const r2 = sheet.getRange(2, 1, 1, LAST_COL);
   r2.setValues([headers]).setBackground(THEME.navy).setFontColor(THEME.gold).setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setFontFamily('Cairo').setWrap(true);
@@ -187,11 +191,12 @@ function applyNewDesign() {
     const open = SpreadsheetApp.newDataValidation().requireValueInList(DROPDOWN_OPTIONS, true).setAllowInvalid(false).build();
     const locked = SpreadsheetApp.newDataValidation().requireValueInList([''], true).setAllowInvalid(false).build();
     sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_EXEC, n, 1).setDataValidation(open);
-    // خانة مدير المشروع: مفتوحة لو مدير التنفيذ اعتمد أو فيها قيمة، وإلا مقفولة — قاعدة واحدة لكل مجموعة متتالية
+    // خانة الاعتماد الإداري (F): لو فيها قيمة (اتملت تلقائيًا من التطبيق أو صف قديم خلصان) → مقفولة؛
+    // لو فاضية وDC اعتمد (صف قديم كان واقف عند مدير المشروع قبل التحديث) → مفتوحة للتوافق؛ غير كده مقفولة
     const execVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_EXEC, n, 1).getValues();
     const pmVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).getValues();
     const rules = [];
-    for (let i = 0; i < n; i++) rules.push([(isOk(execVals[i][0]) || pmVals[i][0]) ? open : locked]);
+    for (let i = 0; i < n; i++) rules.push([pmVals[i][0] ? locked : (isOk(execVals[i][0]) ? open : locked)]);
     sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).setDataValidations(rules);
 
     // ── عمود المشروع: دروب داون سكني/تجاري + الافتراضي للصفوف القديمة اللي فيها بيانات ──
@@ -227,8 +232,8 @@ function applyRowDropdowns(sheet, row) {
   sheet.getRange(row, COLS.APPROVE_EXEC).setDataValidation(open);
   const execVal = sheet.getRange(row, COLS.APPROVE_EXEC).getValue();
   const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-  // لو خانة مدير المشروع فيها قيمة بالفعل (صف قديم معتمد) ما نقفلهاش — القفل للصفوف الجديدة بس
-  sheet.getRange(row, COLS.APPROVE_PM).setDataValidation((isOk(execVal) || pmCell.getValue()) ? open : locked);
+  // الاعتماد الإداري (F): فيها قيمة (اتملت من التطبيق) → مقفولة؛ فاضية وDC اعتمد (صف قديم) → مفتوحة؛ غير كده مقفولة
+  pmCell.setDataValidation(pmCell.getValue() ? locked : (isOk(execVal) ? open : locked));
 }
 
 /* تنسيق شرطي: الاعتماد + الحالة + تظليل متناوب — قواعد واحدة للشيت كله */
@@ -250,7 +255,8 @@ function applyConditionalFormatting(sheet) {
     mk('NOT APPROVED', THEME.dangerBg, THEME.dangerFg, approveRanges),
     // الحالة
     mk('معتمد بالكامل', THEME.okBg, THEME.okFg, statusRange), mk('مرفوض', THEME.dangerBg, THEME.dangerFg, statusRange),
-    mk('قيد الاعتماد', THEME.infoBg, THEME.infoFg, statusRange), mk('معتمد مدير', THEME.warnBg, THEME.warnFg, statusRange),
+    mk('قيد الاعتماد', THEME.infoBg, THEME.infoFg, statusRange), mk('بانتظار DC', THEME.infoBg, THEME.infoFg, statusRange),
+    mk('معتمد مدير', THEME.warnBg, THEME.warnFg, statusRange),
     mk('⚠', THEME.dangerBg, THEME.dangerFg, statusRange),
     // المشروع
     mk('سكني', THEME.infoBg, THEME.infoFg, [sheet.getRange(HEADER_ROWS + 1, COLS.PROJECT, n, 1)]),
@@ -317,12 +323,13 @@ function normalizeProject(v) {
 
 /* 🔌 نقطة الدخول من التطبيق (تُستدعى عبر Web App أو Sheets API بعد رفع الملف لـ Drive)
  * engineerName: اسم المهندس، fileUrl: رابط الإكسيل على Drive، project: 'سكني' أو 'تجاري' */
-function addSubmissionRow(engineerName, fileUrl, project) {
-  return processNewSubmission(engineerName, fileUrl, normalizeProject(project));
+function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
+  return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary);
 }
 
-/* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد */
-function processNewSubmission(engineerName, fileUrl, project) {
+/* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
+   approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتماد" */
+function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -356,7 +363,10 @@ function processNewSubmission(engineerName, fileUrl, project) {
     sheet.getRange(row, COLS.CONVERTED_SHEET_URL).setNote(convertedId);
 
     sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
-    sheet.getRange(row, COLS.APPROVE_PM).setValue('');
+    // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
+    // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق (لو جت — الفورم القديم ما بيبعتهاش)
+    sheet.getRange(row, COLS.APPROVE_PM).setValue(ADMIN_APPROVED);
+    if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
     styleNewRow(sheet, row);
     try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
     return row;
@@ -403,17 +413,15 @@ function onEditHandler(e) {
       // 🖋 زرار واحد للـ DC (سبتمبر 2026): المراجعة والاعتماد بقوا جوه تطبيق CEA (اعتمادات المديرين)،
       // والكشف مابيوصلش الشيت إلا بعد اكتمال السلسلة. فاعتماد الخانة دي = "إخراج": بينزّل التوقيعين
       // (تنفيذ حسب المشروع + مدير المشروع) ويملّي خانة مدير المشروع تلقائيًا بنفس القيمة، والـ PDF بيتولد تحت.
+      // صف خلصان بالفعل (إعادة اختيار القيمة) → ما نكررش التوقيعات ولا الـ PDF
+      if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) return;
       const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
       insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
-      sheet.getRange(row, COLS.STATUS).setValue(STATUS.EXEC_APPROVED);
-      const open = SpreadsheetApp.newDataValidation().requireValueInList(DROPDOWN_OPTIONS, true).setAllowInvalid(false).build();
+      insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      // الاعتماد الإداري (F): الصفوف الجديدة بتوصل مختومة من التطبيق؛ الصف القديم الفاضي يتختم هنا ويتقفل
       const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-      pmCell.setDataValidation(open);
-      // لو خانة مدير المشروع متعتمدة من قبل (إعادة اعتماد لصف خلصان) ما نكررش توقيعه
-      if (!isOk(pmCell.getValue())) {
-        insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
-        pmCell.setValue(newValue);
-      }
+      if (!pmCell.getValue()) pmCell.setValue(ADMIN_APPROVED);
+      pmCell.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList([''], true).setAllowInvalid(false).build());
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     } else {
       // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث
@@ -655,7 +663,7 @@ function doPost(e) {
       body.fileName || ('سركي_' + body.engineerName + '.xlsx')
     );
     const file = DriveApp.createFile(blob);
-    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project));
+    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '');
     return out({ ok: true, row: row, fileId: file.getId(), fileUrl: file.getUrl() });
   } catch (err) {
     Logger.log('doPost error: ' + err);
