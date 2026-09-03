@@ -40,7 +40,9 @@ const CSP = [
   "img-src 'self' data: blob:",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
-  "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+  // 'unsafe-eval' مطلوب لمكتبة ExcelJS 4.3 (بتعمل eval عند التحميل — regenerator-runtime): من غيره التصدير المعتمد
+  // وإرسال الكشف بيفشلوا بـ "ExcelJS is not defined" (حصل فعليًا بعد نشر 3 سبتمبر 2026). يتشال لو المكتبة اتبدلت بنسخة بدون eval.
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net",
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
