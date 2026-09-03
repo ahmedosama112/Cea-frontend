@@ -117,6 +117,35 @@ function sealAdminApproval(cell) {
   cell.setValue(ADMIN_APPROVED);
   cell.setDataValidation(sealedValidation(ADMIN_APPROVED));
 }
+/* ارتفاع صف فيه سلسلة اعتماد متعددة الأسطر: wrap + ارتفاع حسب عدد السطور (بحد أدنى ارتفاع الشريط العادي) */
+function fitApprovalChainRow(sheet, row) {
+  const cell = sheet.getRange(row, COLS.NOTES_PM);
+  cell.setWrap(true).setVerticalAlignment('middle');
+  const lines = String(cell.getValue() || '').split('\n').length;
+  const wanted = Math.max(ROW_BAND_HEIGHT, 16 * lines + 12);
+  if (sheet.getRowHeight(row) < wanted) sheet.setRowHeight(row, wanted);
+}
+/* مرة واحدة (من القائمة ▶ Run): الصفوف القديمة اللي سلسلة الاعتماد فيها مفصولة بـ " | " → سطر لكل اعتماد + ضبط الارتفاع */
+function reformatApprovalChainColumn() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return;
+  const last = sheet.getLastRow();
+  if (last <= HEADER_ROWS) return;
+  const rng = sheet.getRange(HEADER_ROWS + 1, COLS.NOTES_PM, last - HEADER_ROWS, 1);
+  const vals = rng.getValues();
+  let changed = 0;
+  const fixed = vals.map(([v]) => {
+    const s = String(v || '');
+    if (!s.includes(' | ')) return [v];
+    changed++;
+    return [s.replace(/\s*\|\s*/g, '\n').replace(/^نسخة (\d+)\s*—\s*/, 'نسخة $1\n')];
+  });
+  if (changed) rng.setValues(fixed);
+  for (let r = HEADER_ROWS + 1; r <= last; r++) {
+    if (String(sheet.getRange(r, COLS.NOTES_PM).getValue() || '').includes('\n')) fitApprovalChainRow(sheet, r);
+  }
+  SpreadsheetApp.getUi().alert('✅ تم تنسيق سلسلة الاعتماد: ' + changed + ' صف اتعدل (سطر لكل اعتماد).');
+}
 function sealedValidation(value) {
   return SpreadsheetApp.newDataValidation().requireValueInList([String(value)], false).setAllowInvalid(false).build();
 }
@@ -381,6 +410,8 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
     sealAdminApproval(sheet.getRange(row, COLS.APPROVE_PM));
     if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
     styleNewRow(sheet, row);
+    // سلسلة الاعتماد بتيجي سطر لكل اعتماد → الصف ياخد ارتفاعه الطبيعي بدل ما السطور تتقطع عند 42px
+    if (approvalSummary) fitApprovalChainRow(sheet, row);
     try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
     return row;
   } finally { lock.releaseLock(); }
