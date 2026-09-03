@@ -2473,7 +2473,11 @@ function renderSheetHtml(ws, workbook){
     });
   }catch(e){}
   const widths=[]; for(let c=1;c<=colCount;c++){ const col=ws.getColumn(c); widths.push(Math.round((col.width||9)*7.2)); }
-  let html='<table class="xl-preview" dir="rtl"><colgroup>'+widths.map(w=>'<col style="width:'+w+'px">').join('')+'</colgroup>';
+  // ترتيب الأعمدة يسار→يمين (العمود A على الشمال): الكشف مبني بحيث "اليوم" في آخر عمود (M) والتوقيع في أول عمود (A)،
+  // وعناوين البيانات (إسم العامل/المهنة) على يمين قيمها — فبالترتيب ده الصفحة بتتقرأ عربي طبيعي من اليمين للشمال،
+  // وده نفس شكل الشيت/الـ PDF النهائي في جوجل (السكربت بيلغي علم RTL بتاع الملف لنفس السبب — FORCE_CONVERTED_SHEET_RTL=false).
+  // النص جوه كل خلية بيفضل عربي (unicode-bidi تلقائي) — بس الأعمدة نفسها ما تتعكسش.
+  let html='<table class="xl-preview" dir="ltr"><colgroup>'+widths.map(w=>'<col style="width:'+w+'px">').join('')+'</colgroup>';
   for(let r=1;r<=rowCount;r++){
     const row=ws.getRow(r); const h=row.height?Math.round(row.height*1.33):22;
     html+='<tr style="height:'+h+'px">';
