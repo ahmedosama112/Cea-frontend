@@ -110,6 +110,16 @@ const isNo = v => v === APPROVAL.NOT_APPROVED || v === 'NOT APPROVED';
 /* 🖋 (سبتمبر 2026) المراجعة والاعتماد بقوا جوه تطبيق CEA، والصف بيوصل الشيت بعد اكتمال السلسلة:
    خانة F (كانت "إعتماد مدير المشروع") بتتملي تلقائيًا بالقيمة دي وتتقفل، وG بتحمل ملخص مين اعتمد */
 const ADMIN_APPROVED = '✅ معتمد بالكامل';
+/* ختم خانة F: لازم نشيل قاعدة التحقق الأول — setValue من السكربت بيرفض القيمة لو القاعدة "مقفولة" (حصل فعليًا: F72)،
+   وبعد الكتابة نحط قاعدة بتسمح بالقيمة دي بس (= مقفولة عمليًا من غير ما تكسر الكتابة) */
+function sealAdminApproval(cell) {
+  cell.clearDataValidations();
+  cell.setValue(ADMIN_APPROVED);
+  cell.setDataValidation(sealedValidation(ADMIN_APPROVED));
+}
+function sealedValidation(value) {
+  return SpreadsheetApp.newDataValidation().requireValueInList([String(value)], false).setAllowInvalid(false).build();
+}
 
 const STATUS = {
   NEW: 'جديد', CONVERTED: 'بانتظار DC',            // كان "قيد الاعتماد" — دلوقتي المتبقي بعد التطبيق هو DC (التوقيع + PDF) بس
@@ -196,7 +206,9 @@ function applyNewDesign() {
     const execVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_EXEC, n, 1).getValues();
     const pmVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).getValues();
     const rules = [];
-    for (let i = 0; i < n; i++) rules.push([pmVals[i][0] ? locked : (isOk(execVals[i][0]) ? open : locked)]);
+    const sealedCache = {};
+    const sealedFor = v => (sealedCache[v] = sealedCache[v] || sealedValidation(v));
+    for (let i = 0; i < n; i++) rules.push([pmVals[i][0] ? sealedFor(pmVals[i][0]) : (isOk(execVals[i][0]) ? open : locked)]);
     sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).setDataValidations(rules);
 
     // ── عمود المشروع: دروب داون سكني/تجاري + الافتراضي للصفوف القديمة اللي فيها بيانات ──
@@ -233,7 +245,8 @@ function applyRowDropdowns(sheet, row) {
   const execVal = sheet.getRange(row, COLS.APPROVE_EXEC).getValue();
   const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
   // الاعتماد الإداري (F): فيها قيمة (اتملت من التطبيق) → مقفولة؛ فاضية وDC اعتمد (صف قديم) → مفتوحة؛ غير كده مقفولة
-  pmCell.setDataValidation(pmCell.getValue() ? locked : (isOk(execVal) ? open : locked));
+  const pmVal = pmCell.getValue();
+  pmCell.setDataValidation(pmVal ? sealedValidation(pmVal) : (isOk(execVal) ? open : locked));
 }
 
 /* تنسيق شرطي: الاعتماد + الحالة + تظليل متناوب — قواعد واحدة للشيت كله */
@@ -365,7 +378,7 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
     sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
     // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
     // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق (لو جت — الفورم القديم ما بيبعتهاش)
-    sheet.getRange(row, COLS.APPROVE_PM).setValue(ADMIN_APPROVED);
+    sealAdminApproval(sheet.getRange(row, COLS.APPROVE_PM));
     if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
     styleNewRow(sheet, row);
     try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
@@ -420,8 +433,7 @@ function onEditHandler(e) {
       insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
       // الاعتماد الإداري (F): الصفوف الجديدة بتوصل مختومة من التطبيق؛ الصف القديم الفاضي يتختم هنا ويتقفل
       const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-      if (!pmCell.getValue()) pmCell.setValue(ADMIN_APPROVED);
-      pmCell.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList([''], true).setAllowInvalid(false).build());
+      if (!pmCell.getValue()) sealAdminApproval(pmCell);
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     } else {
       // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث

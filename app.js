@@ -3250,6 +3250,7 @@ function subRow(s, adminView){
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
+      ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
       ${!adminView && s.reviewState==='IN_REVIEW' ? '<button class="btn btn-danger btn-inline" onclick="deleteMySubmission(\''+s.id+'\')" title="بيمسح التسليم من سجلك هنا فقط">🗑 حذف من سجل تسليماتي</button>' : ''}
     </div>
   </div>`;
@@ -3270,6 +3271,15 @@ async function downloadSubmission(id, name, base='/api/submissions'){
     const blob=await res.blob(); const url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
   }catch(e){ showToast('⚠ '+e.message, true); }
+}
+// الكشف عدّى اعتمادات المديرين (SENT) بس الرفع لجوجل شيت فشل (gsheetRow فاضي) → إعادة المحاولة عبر /gsync (بياخد لدقيقة)
+async function resyncSubmission(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الإرسال للشيت...'; }
+  try{
+    const r=await api('POST','/api/submissions/'+id+'/gsync');
+    showToast(r.data?.alreadySynced ? 'ℹ️ الكشف موجود في الشيت بالفعل (صف '+r.data.gsheetRow+')' : '☁️ وصل شيت الاعتماد — صف '+(r.data?.gsheetRow||''));
+    renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
+  }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='☁️ إعادة الإرسال للشيت'; } }
 }
 async function deleteMySubmission(id){
   try{ await api('DELETE','/api/submissions/'+id); showToast('🗑 اتحذف من سجلك — لو كان وصل شيت الاعتماد بيفضل موجود هناك'); renderMySubmissions(); }
