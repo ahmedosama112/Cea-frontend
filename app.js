@@ -44,31 +44,47 @@ function base64ToUtf8(b64) {
 
 // === Lazy library loader (extracted from inline bundles: xlsx.full.min.js + exceljs.min.js) ===
 // هذا الجزء بيقلل حجم الملف الأساسي جداً؛ المكتبتين بيتم تحميلهم فقط لما فعلياً يتحمل تصدير/استيراد إكسل
-function _loadScriptOnce(src){
-  return new Promise((resolve, reject)=>{
-    if(document.querySelector('script[data-lazylib="'+src+'"]')){ resolve(); return; }
+// ملاحظة مهمة: onload بيتنفذ حتى لو الملف اللي وصل مش JS سليم (نسخة مقطوعة/تالفة في كاش الـ service worker،
+// أو صفحة HTML بدل الملف) — ساعتها المكتبة "اتحملت" بس الـ global (ExcelJS/XLSX) مش موجود.
+// فبنتحقق من الـ global بعد التحميل، ولو مش موجود بنشيل الوسم ونجرب المصدر اللي بعده.
+const _lazyScriptPromises={};
+function _loadScriptOnce(src, globalName){
+  if(_lazyScriptPromises[src]) return _lazyScriptPromises[src];
+  _lazyScriptPromises[src]=new Promise((resolve, reject)=>{
     const s=document.createElement('script');
     s.src=src;
     s.dataset.lazylib=src;
-    s.onload=()=>resolve();
-    s.onerror=()=>reject(new Error('فشل تحميل المكتبة: '+src));
+    s.onload=()=>{
+      if(!globalName || window[globalName]) { resolve(); return; }
+      s.remove(); delete _lazyScriptPromises[src];
+      reject(new Error('المكتبة اتحملت لكن تالفة: '+src));
+    };
+    s.onerror=()=>{ s.remove(); delete _lazyScriptPromises[src]; reject(new Error('فشل تحميل المكتبة: '+src)); };
     document.head.appendChild(s);
   });
+  return _lazyScriptPromises[src];
 }
-// المكتبة المحلية (lib/ داخل APK) أولاً — ولو مش موجودة (نسخة PWA على الويب) بنحمّلها من CDN
-function _loadLib(localSrc, cdnSrc){
-  return _loadScriptOnce(localSrc).catch(()=>_loadScriptOnce(cdnSrc));
+// الترتيب: المحلية (lib/) → نفس المحلية بمعامل عشوائي (بيتخطى كاش الـ service worker لو النسخة المخزنة تالفة) → CDN
+function _loadLib(localSrc, cdnSrc, globalName){
+  return _loadScriptOnce(localSrc, globalName)
+    .catch(()=>_loadScriptOnce(localSrc+'?r='+Date.now(), globalName))
+    .catch(()=>_loadScriptOnce(cdnSrc, globalName))
+    .catch(e=>{
+      const msg='⚠ تعذر تحميل مكتبة الإكسيل ('+globalName+') — جرّب تحديث الصفحة أو تأكد من النت. '+e.message;
+      try{ showToast(msg, true); }catch(_){}
+      throw new Error(msg);
+    });
 }
 let _xlsxLoadPromise=null;
 function ensureXLSX(){
   if(window.XLSX) return Promise.resolve();
-  if(!_xlsxLoadPromise) _xlsxLoadPromise=_loadLib('lib/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  if(!_xlsxLoadPromise) _xlsxLoadPromise=_loadLib('lib/xlsx.full.min.js','https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','XLSX').catch(e=>{ _xlsxLoadPromise=null; throw e; });
   return _xlsxLoadPromise;
 }
 let _exceljsLoadPromise=null;
 function ensureExcelJS(){
   if(window.ExcelJS) return Promise.resolve();
-  if(!_exceljsLoadPromise) _exceljsLoadPromise=_loadLib('lib/exceljs.min.js','https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js');
+  if(!_exceljsLoadPromise) _exceljsLoadPromise=_loadLib('lib/exceljs.min.js','https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js','ExcelJS').catch(e=>{ _exceljsLoadPromise=null; throw e; });
   return _exceljsLoadPromise;
 }
 

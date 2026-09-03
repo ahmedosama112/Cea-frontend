@@ -60,11 +60,19 @@ self.addEventListener('fetch', (event) => {
   }
 
   // أصول ثابتة (أيقونات/مكتبات): من الكاش أولاً، وتحديث في الخلفية (stale-while-revalidate)
+  // ملفات lib/*.js: ما نخزّنش غير رد JS حقيقي (مش صفحة HTML/خطأ) — عشان ما نفضلش نقدّم مكتبة تالفة من الكاش
+  const isLibJs = /\/lib\/.+\.js$/.test(url.pathname);
+  const cacheable = (res) => {
+    if (!res || !res.ok) return false;
+    if (!isLibJs) return true;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    return ct.includes('javascript') || ct.includes('ecmascript');
+  };
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = fetch(req)
         .then((res) => {
-          if (res && res.ok) caches.open(CACHE_VERSION).then((c) => c.put(req, res.clone()));
+          if (cacheable(res)) caches.open(CACHE_VERSION).then((c) => c.put(req, res.clone()));
           return res;
         })
         .catch(() => cached);
