@@ -2838,11 +2838,13 @@ function aprOpenModal(bar, title, body, okLabel, okBg, withNote, okColor){
   document.getElementById('apr-modal-body').textContent=body;
   const note=document.getElementById('apr-note'); note.style.display=withNote?'block':'none'; note.value='';
   const ok=document.getElementById('apr-modal-ok');
+  // مهم: بعد قرار ناجح الزرار كان بيفضل disabled (من "جاري الحفظ") فالنافذة التالية تفتح بزرار باهت مش بيضغط — ده كان سبب "لازم أعمل ريفريش"
+  ok.disabled=false;
   if(okLabel){ ok.style.display=''; ok.textContent=okLabel; ok.style.background=okBg||bar; ok.style.color=okColor||'#fff'; ok.style.border='none'; ok.onclick=aprConfirm; }
   else ok.style.display='none';
   document.getElementById('apr-modal').style.display='flex'; document.body.classList.add('modal-open');
 }
-function aprCloseModal(){ document.getElementById('apr-modal').style.display='none'; document.body.classList.remove('modal-open'); _aprPending=null; }
+function aprCloseModal(){ document.getElementById('apr-modal').style.display='none'; document.body.classList.remove('modal-open'); _aprPending=null; const ok=document.getElementById('apr-modal-ok'); if(ok) ok.disabled=false; }
 async function aprConfirm(){
   if(!_aprPending) return;
   const {id, decision}=_aprPending;
