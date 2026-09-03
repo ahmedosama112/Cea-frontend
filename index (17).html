@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#173058">
+  <title>CEA – Civil Engineer Assistant</title>
+  <!-- PWA: التثبيت على الشاشة الرئيسية (أندرويد/آيفون/لابتوب) — لا يؤثر على نسخة APK -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CEA">
+  <script>
+    // Capacitor Bridge — detects if running inside native APK
+    window.isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    // Apply saved theme before first paint (avoids white flash in dark mode)
+    try{ if(localStorage.getItem('cea_dark_mode')==='1') document.documentElement.classList.add('dark-boot'); }catch(e){}
+    // بيئة التطوير المحلية بتكلم الـ Backend المحلي (مش الإنتاج) — عشان التجارب ما تلمسش بيانات الشغل الحقيقية
+    if(location.hostname==='localhost'||location.hostname==='127.0.0.1') window.CEA_API_URL='http://localhost:4000';
+    // PWA service worker — على الويب فقط (https أو localhost)، وليس داخل Capacitor APK
+    // ملاحظة: مفيش reload تلقائي عند التحديث عمدًا — الـ SW "شبكة أولاً" لملفات الكود،
+    // فأي فتحة جديدة بتجيب أحدث app.js تلقائيًا. الـ reload التلقائي كان بيعمل سباق مع فحص
+    // تسجيل الدخول (يقطع طلب التجديد فتنتهي الجلسة بالغلط) — فاتشال.
+    if('serviceWorker' in navigator && !window.isCapacitor && (location.protocol==='https:' || location.hostname==='localhost')){
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('sw.js').then(function(reg){
+          // فحص دوري لوجود تحديث (كل 30 دقيقة) طالما التطبيق مفتوح — بدون reload
+          setInterval(function(){ reg.update().catch(function(){}); }, 30*60*1000);
+          // (L8) لما نسخة جديدة تتفعّل: إشعار واضح للمستخدم — بدون reload تلقائي
+          // (الـ reload التلقائي كان بيسابق تجديد الجلسة فينهيها بالغلط — شوف التعليق فوق)
+          navigator.serviceWorker.addEventListener('controllerchange', function(){
+            if(typeof showToast==='function') showToast('🔄 نسخة جديدة من التطبيق جاهزة — اقفل التطبيق وافتحه تاني');
+          });
+        }).catch(function(){});
+      });
+    }
+  </script>
+  <style>html.dark-boot{background:#0F1621}</style>
+  <script src="capacitor.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Splash Screen -->
+<div id="splash">
+  <div class="splash-logo"><span>CEA</span></div>
+  <div class="splash-title">Civil Engineer<br>Assistant</div>
+  <div class="splash-sub">by Eng / Ahmed Osama</div>
+  <div class="splash-bar"><div class="splash-bar-fill"></div></div>
+</div>
+
+<!-- Login Screen -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo"><span>CEA</span></div>
+    <div class="login-title">Civil Engineer Assistant</div>
+    <div class="login-sub">سجّل دخولك بالإيميل وكلمة المرور</div>
+    <div id="login-error"></div>
+    <div class="field">
+      <label>البريد الإلكتروني</label>
+      <input type="email" id="login-email" placeholder="example@mail.com" autocomplete="username" inputmode="email">
+    </div>
+    <div class="field">
+      <label>كلمة المرور</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">دخول</button>
+  </div>
+</div>
+
+<header class="app-header">
+  <div class="header-title-wrap">
+    <div class="brand-title" id="header-title">الرئيسية</div>
+    <div class="brand-sub">Civil Engineer Assistant</div>
+  </div>
+  <div class="brand-logo"><span>CEA</span></div>
+</header>
+
+<div class="topbar">
+  <div id="offline-banner">⚠ وضع أوفلاين — مفيش اتصال بالخادم حاليًا، بياناتك محفوظة محليًا والمزامنة موقوفة مؤقتًا</div>
+</div>
+
+<!-- القائمة الجانبية (Drawer) — تنقل ثانوي + الحساب -->
+<div id="drawer-scrim" onclick="closeDrawer()"></div>
+<aside id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="drawer-user">
+      <div class="drawer-avatar" id="drawer-avatar">م</div>
+      <div class="drawer-user-text">
+        <div class="drawer-user-email" id="drawer-email">—</div>
+        <div class="drawer-user-role" id="drawer-role"></div>
+      </div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="إغلاق القائمة">✕</button>
+  </div>
+  <nav class="drawer-nav" role="navigation">
+    <button class="drawer-item" data-tab="home"     onclick="switchTab('home')"><span class="ico">🏠</span><span>الرئيسية</span></button>
+    <button class="drawer-item" data-tab="form"     onclick="switchTab('form')"><span class="ico">📝</span><span>تسجيل سركي</span></button>
+    <button class="drawer-item" data-tab="records"  onclick="switchTab('records')"><span class="ico">👷</span><span>السراكي</span></button>
+    <button class="drawer-item" data-tab="submissions" onclick="switchTab('submissions')"><span class="ico">📬</span><span>التسليمات</span></button>
+    <button class="drawer-item" data-tab="approvals" onclick="switchTab('approvals')"><span class="ico">📋</span><span>اعتمادات المديرين</span></button>
+    <div class="drawer-sep"></div>
+    <button class="drawer-item" data-tab="ir"       onclick="switchTab('ir')"><span class="ico">📋</span><span>طلبات الفحص (IR)</span></button>
+    <button class="drawer-item" data-tab="site"     onclick="switchTab('site')"><span class="ico">🏗</span><span>الموقف التنفيذي</span></button>
+    <button class="drawer-item" data-tab="todo"     onclick="switchTab('todo')"><span class="ico">✅</span><span>المهام</span></button>
+    <button class="drawer-item" data-tab="inventory" onclick="switchTab('inventory')"><span class="ico">📦</span><span>المخازن</span></button>
+    <button class="drawer-item" data-tab="summary"  onclick="switchTab('summary')"><span class="ico">📊</span><span>الملخص</span></button>
+    <div class="drawer-sep"></div>
+    <button class="drawer-item" data-tab="settings" onclick="switchTab('settings')"><span class="ico">⚙️</span><span>الإعدادات</span></button>
+    <button class="drawer-item admin-only" data-tab="admin" onclick="switchTab('admin')" style="display:none"><span class="ico">👥</span><span>إدارة الحسابات</span></button>
+  </nav>
+  <div class="drawer-foot">
+    <div class="drawer-sync" id="drawer-sync">—</div>
+    <button class="drawer-logout" onclick="doLogout()">🚪 تسجيل الخروج</button>
+  </div>
+</aside>
+
+<!-- ══ HOME ══ -->
+<div id="tab-home" class="panel active">
+  <div class="home-greet">
+    <div class="home-greet-text" id="home-greeting">أهلًا</div>
+    <div class="home-greet-date" id="home-date"></div>
+  </div>
+
+  <div class="stat-grid" data-feature="home_stats">
+    <button class="stat" onclick="switchTab('records')">
+      <div class="stat-l">سراكي اليوم</div>
+      <div class="stat-v" id="hs-today-count">0</div>
+      <div class="stat-s" id="hs-today-total">0 ج.م</div>
+    </button>
+    <button class="stat" onclick="switchTab('records')">
+      <div class="stat-l">إجمالي الأسبوع</div>
+      <div class="stat-v" id="hs-week-total">0</div>
+      <div class="stat-s" id="hs-week-count">0 سجل</div>
+    </button>
+    <button class="stat" id="hs-late-card" data-module="todo" onclick="switchTab('todo')">
+      <div class="stat-l">مهام متأخرة</div>
+      <div class="stat-v" id="hs-late">0</div>
+      <div class="stat-s" id="hs-todo-open">0 مفتوحة</div>
+    </button>
+    <button class="stat" data-module="site_exec" onclick="switchTab('site')">
+      <div class="stat-l">إنجاز الموقع</div>
+      <div class="stat-v" id="hs-exec">—</div>
+      <div class="stat-s" id="hs-exec-sub">لا يوجد بيانات</div>
+    </button>
+  </div>
+
+  <button class="home-cta" onclick="switchTab('form')">＋ تسجيل سركي جديد</button>
+
+  <div class="card" data-feature="home_recent">
+    <div class="card-title between"><span class="t">🕒 آخر السجلات</span><button class="link-btn" onclick="switchTab('records')">عرض الكل</button></div>
+    <div id="home-recent"></div>
+  </div>
+
+  <div class="card" id="home-todos-card" data-module="todo" data-feature="home_todos">
+    <div class="card-title between"><span class="t">✅ مهام اليوم</span><button class="link-btn" onclick="switchTab('todo')">كل المهام</button></div>
+    <div id="home-todos"></div>
+  </div>
+
+  <div class="home-sync" id="home-sync"></div>
+</div>
+
+<!-- ══ ADMIN — إدارة الحسابات (أدمن فقط) ══ -->
+<div id="tab-admin" class="panel">
+  <div class="card">
+    <div class="card-title between"><span class="t">📬 التسليمات <span id="admin-sub-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn" onclick="renderAdminSubmissions()">🔄 تحديث</button></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="pill sub-filter active" data-v="" onclick="setSubFilter('')">الكل</button>
+      <button class="pill sub-filter" data-v="SUBMITTED" onclick="setSubFilter('SUBMITTED')">⏳ بانتظار</button>
+      <button class="pill sub-filter" data-v="APPROVED" onclick="setSubFilter('APPROVED')">✅ معتمد</button>
+      <button class="pill sub-filter" data-v="REJECTED" onclick="setSubFilter('REJECTED')">❌ مرفوض</button>
+    </div>
+    <div id="admin-submissions" class="list-scroll" style="max-height:420px"><div class="home-empty">⏳</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>👥</span> الحسابات</div>
+    <p class="hint">كل مهندس له حسابه وبياناته. من هنا تحدد لكل حساب الوحدات اللي تظهر له، وأماكنه، وتعيد تعيين كلمة سره.</p>
+    <div id="admin-users-list" class="list-scroll"><div class="home-empty">⏳ جاري التحميل...</div></div>
+  </div>
+
+  <div class="card" id="admin-user-card" style="display:none">
+    <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
+
+    <div class="subhead" style="margin-top:0">🪪 المسمى الوظيفي والصلاحية</div>
+    <div class="add-row" style="margin-top:0">
+      <input type="text" id="admin-user-jobtitle" placeholder="المسمى (مثال: مهندس تنفيذ / مهندس مكتب فني / مساح)" maxlength="100">
+      <button class="btn btn-navy btn-inline" onclick="adminSaveTitle()">💾 حفظ</button>
+    </div>
+    <div class="add-row" style="margin-top:6px">
+      <select id="admin-user-role">
+        <option value="ENGINEER">مستخدم عادي — يشوف بياناته فقط</option>
+        <option value="ADMIN">مدير نظام — كل صلاحيات الإدارة</option>
+      </select>
+      <button class="btn btn-ghost btn-inline" onclick="adminSaveRole()">تغيير الصلاحية</button>
+    </div>
+    <div class="add-row" style="margin-top:6px">
+      <select id="admin-user-project">
+        <option value="سكني">🏠 مشروع سكني</option>
+        <option value="تجاري">🏪 مشروع تجاري</option>
+      </select>
+      <button class="btn btn-navy btn-inline" onclick="adminSaveProject()">💾 حفظ المشروع</button>
+    </div>
+    <p class="hint" style="margin-top:4px">نوع المشروع بيتبعت تلقائيًا مع كشوفه لجوجل شيت — وبيحدد توقيع مدير التنفيذ (سكني/تجاري).</p>
+    <div class="add-row" style="margin-top:6px">
+      <select id="admin-user-site">
+        <option value="1">🏗️ الموقع الأول</option>
+        <option value="2">🏗️ الموقع الثاني</option>
+      </select>
+      <button class="btn btn-navy btn-inline" onclick="adminSaveSite()">💾 حفظ الموقع</button>
+    </div>
+    <p class="hint" style="margin-top:4px">كل موقع ليه جوجل شيت واعتمادات مديرين مختلفة — كشوف المهندس بتروح لشيت موقعه.</p>
+    <div class="subhead" style="margin-top:8px">🖋️ مستوى الاعتماد (اعتمادات المديرين)</div>
+    <div class="add-row" style="margin-top:2px">
+      <select id="admin-user-aprlevel"><option value="">مش معتمد</option></select>
+      <button class="btn btn-navy btn-inline" onclick="adminSaveAprLevel()">💾 حفظ</button>
+    </div>
+    <p class="hint" style="margin-top:4px">لو خليته معتمد، فعّل له كمان وحدة "اعتمادات المديرين" من القائمة تحت عشان التاب يظهرله. رتّب المستويات من كارت "مستويات الاعتماد".</p>
+
+    <div class="subhead">🧩 الوحدات الظاهرة لهذا الحساب</div>
+    <div id="admin-user-modules"></div>
+    <button class="btn btn-primary mt8" onclick="adminSaveModules()">💾 حفظ الوحدات</button>
+
+    <div class="subhead">📍 أماكنه</div>
+    <div id="admin-user-places" class="list-scroll" style="max-height:180px"></div>
+    <div class="add-row">
+      <input type="text" id="admin-new-place" placeholder="إسم المكان الجديد">
+      <button class="btn btn-navy btn-inline" onclick="adminAddPlace()">➕ إضافة</button>
+    </div>
+    <div class="add-row" style="margin-top:6px">
+      <input type="text" id="admin-new-place-note" placeholder="❕ ملاحظة عن المكان (اختياري) — تظهر للمهندس عند اختياره" maxlength="500">
+    </div>
+    <button class="btn btn-ghost mt8" id="admin-copy-places-btn" onclick="adminCopyMyPlaces()">📋 انسخ كل أماكني لحسابه دفعة واحدة</button>
+    <div class="hint" style="margin-top:6px">أو اختار من أماكنك:</div>
+    <input type="search" class="select-search" id="admin-place-pick-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('admin-place-pick-search','admin-place-pick')" style="margin-top:4px">
+    <div class="select-search-empty" id="admin-place-pick-search-empty">لا يوجد مكان بهذا الاسم</div>
+    <div class="add-row" style="margin-top:4px">
+      <select id="admin-place-pick"><option value="">-- اختار مكان من عندك --</option></select>
+      <button class="btn btn-ghost btn-inline" onclick="adminPickPlace()">إضافة</button>
+    </div>
+
+    <div class="subhead">👷 مقاولوه</div>
+    <div id="admin-user-contractors" class="list-scroll" style="max-height:220px"></div>
+    <div class="hint" style="margin-top:8px">اكتب مقاول جديد (مش لازم يكون موجود عندك):</div>
+    <div class="inline-form" style="margin-top:6px">
+      <input type="text" id="admin-c-name" placeholder="إسم المقاول" class="mb7">
+      <input type="text" id="admin-c-spec" placeholder="التخصص (مثال: نقاش)" class="mb7">
+      <div class="add-row" style="margin-top:0">
+        <input type="number" id="admin-c-rate" placeholder="السعر" inputmode="decimal">
+        <select id="admin-c-rate-type"><option value="يومية">يومية</option><option value="ساعة">ساعة</option><option value="مقطوعية">مقطوعية</option></select>
+      </div>
+      <button class="btn btn-navy mt8" onclick="adminAddContractor()">➕ إضافة مقاول لحسابه</button>
+    </div>
+    <button class="btn btn-ghost mt8" id="admin-copy-contractors-btn" onclick="adminCopyMyContractors()">📋 انسخ كل مقاوليّ لحسابه دفعة واحدة</button>
+    <div class="hint" style="margin-top:8px">أو اختار من مقاولينك (بنفس التخصص والسعر):</div>
+    <input type="search" class="select-search" id="admin-contractor-pick-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('admin-contractor-pick-search','admin-contractor-pick')" style="margin-top:4px">
+    <div class="select-search-empty" id="admin-contractor-pick-search-empty">لا يوجد مقاول بهذا الاسم</div>
+    <div class="add-row" style="margin-top:4px">
+      <select id="admin-contractor-pick"><option value="">-- اختار مقاول من عندك --</option></select>
+      <button class="btn btn-navy btn-inline" onclick="adminPickContractor()">➕ إضافة</button>
+    </div>
+
+    <div class="subhead">✍️ التوقيع على كشوفه المعتمدة</div>
+    <div id="admin-sig-preview" class="hint" style="margin-bottom:8px">—</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;row-gap:8px">
+      <button class="btn btn-navy btn-inline" onclick="adminUseMySignature()">👤 استخدم توقيعي</button>
+      <button class="btn btn-ghost btn-inline" onclick="document.getElementById('admin-sig-file').click()">🖼 رفع صورة</button>
+      <button class="btn btn-danger btn-inline" onclick="adminClearSignature()">✕ إزالة</button>
+      <input type="file" id="admin-sig-file" accept="image/*" style="display:none" onchange="adminUploadSignature(this)">
+    </div>
+
+    <div class="subhead">🔑 كلمة المرور</div>
+    <div class="add-row" style="margin-top:0">
+      <input type="text" id="admin-new-pass" placeholder="كلمة مرور جديدة (8 أحرف على الأقل)" autocomplete="off">
+      <button class="btn btn-ghost btn-inline" onclick="adminResetPassword()">🔄 إعادة تعيين</button>
+    </div>
+    <p class="hint" style="margin-top:6px">بعد التعيين، سلّم كلمة المرور للمهندس — وهيتسجّل خروجه من كل أجهزته تلقائيًا.</p>
+
+    <div class="subhead" style="color:var(--red)">⚠ حذف الحساب نهائيًا</div>
+    <div id="admin-delete-step0">
+      <button class="btn btn-danger" onclick="adminDeleteStep1()">🗑 حذف هذا الحساب وكل بياناته</button>
+    </div>
+    <div id="admin-delete-step1" class="hint-box" style="display:none;border-color:var(--red)">
+      <strong style="color:var(--danger-fg)">تأكيد 1 من 2 — هيتمسح نهائيًا ومفيش رجوع:</strong>
+      <div id="admin-delete-summary" style="margin:8px 0;line-height:1.9"></div>
+      <div class="add-row" style="margin-top:4px">
+        <button class="btn btn-danger btn-inline" onclick="adminDeleteStep2()">متأكد — كمّل</button>
+        <button class="btn btn-ghost btn-inline" onclick="adminDeleteCancel()">إلغاء</button>
+      </div>
+    </div>
+    <div id="admin-delete-step2" class="hint-box" style="display:none;border-color:var(--red)">
+      <strong style="color:var(--danger-fg)">تأكيد 2 من 2 — اكتب إيميل الحساب بالظبط للتأكيد:</strong>
+      <input type="email" id="admin-delete-confirm-email" placeholder="اكتب الإيميل هنا" class="mb7" style="margin-top:8px;direction:ltr" autocomplete="off">
+      <div class="add-row" style="margin-top:0">
+        <button class="btn btn-danger btn-inline" onclick="adminDeleteFinal()">🗑 احذف نهائيًا</button>
+        <button class="btn btn-ghost btn-inline" onclick="adminDeleteCancel()">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🏗️</span> أسماء المواقع</div>
+    <p class="hint" style="margin-top:0">الأسماء دي بتظهر في كل قوائم اختيار "الموقع" هنا في لوحة الإدارة.</p>
+    <div class="add-row"><span class="hint" style="white-space:nowrap">الموقع الأول:</span><input type="text" id="site1-name-input" maxlength="60"></div>
+    <div class="add-row" style="margin-top:6px"><span class="hint" style="white-space:nowrap">الموقع الثاني:</span><input type="text" id="site2-name-input" maxlength="60"></div>
+    <button class="btn btn-navy btn-inline mt8" onclick="adminSaveSiteNames()">💾 حفظ الأسماء</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🖋️</span> مستويات الاعتماد</div>
+    <p class="hint" style="margin-top:0">مستويات اعتماد المديرين بالترتيب (الأول يراجع أولًا). افصل بينها بعلامة | — مثال: team leader | construction manager | project manager</p>
+    <input type="text" id="aprlevels-input" placeholder="team leader | construction manager | project manager" style="width:100%">
+    <button class="btn btn-navy btn-inline mt8" onclick="adminSaveAprLevelNames()">💾 حفظ المستويات</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>➕</span> إنشاء حساب مهندس</div>
+    <input type="email" id="admin-new-email" placeholder="الإيميل" class="mb7" inputmode="email" autocomplete="off">
+    <input type="text" id="admin-new-password" placeholder="كلمة المرور (8 أحرف على الأقل)" class="mb7" autocomplete="off">
+    <input type="text" id="admin-new-title" placeholder="المسمى الوظيفي (مثال: مهندس تنفيذ) — اختياري" class="mb7" maxlength="100">
+    <div class="subhead" style="margin-top:4px">الصلاحية</div>
+    <select id="admin-new-role" class="mb7">
+      <option value="ENGINEER">مستخدم عادي — يشوف بياناته فقط</option>
+      <option value="ADMIN">مدير نظام — كل صلاحيات الإدارة (إنشاء حسابات، تحكم في الكل)</option>
+    </select>
+    <div class="subhead" style="margin-top:4px">الموقع — كشوفه بتروح لجوجل شيت الموقع ده</div>
+    <select id="admin-new-site" class="mb7">
+      <option value="1">🏗️ الموقع الأول</option>
+      <option value="2">🏗️ الموقع الثاني</option>
+    </select>
+    <div class="subhead" style="margin-top:4px">نوع المشروع — بيحدد توقيع مدير التنفيذ (سكني/تجاري)</div>
+    <select id="admin-new-project" class="mb7">
+      <option value="سكني">🏠 سكني</option>
+      <option value="تجاري">🏪 تجاري</option>
+    </select>
+    <div class="subhead" style="margin-top:4px">الوحدات الظاهرة له</div>
+    <div id="admin-create-modules"></div>
+    <button class="btn btn-gold mt8" onclick="adminCreateUser()">إنشاء الحساب</button>
+    <div id="admin-created-box" class="hint-box" style="display:none;margin-top:10px">
+      <strong>✅ تم إنشاء الحساب — ابعت البيانات دي للمهندس:</strong>
+      <div style="margin-top:8px;font-size:13px;direction:ltr;text-align:left;font-family:monospace;line-height:1.9">
+        <div>📧 <span id="admin-created-email"></span></div>
+        <div>🔑 <span id="admin-created-pass"></span></div>
+      </div>
+      <button class="btn btn-navy btn-inline mt8" onclick="adminCopyCreated()">📋 نسخ البيانات</button>
+      <div class="hint" style="margin-top:6px">أول دخول له لازم يكون فيه نت. كلمة المرور مش هتظهر تاني بعد ما تقفل الصندوق ده — لو اتنسيت، أعد تعيينها من كارت الحساب.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SUBMISSIONS — التسليمات ══ -->
+<div id="tab-submissions" class="panel">
+  <div class="card">
+    <div class="card-title between"><span class="t">📬 تسليماتي</span><button class="link-btn" onclick="renderMySubmissions()">🔄 تحديث</button></div>
+    <p class="hint">كل كشف بعته للاعتماد وحالته. لإرسال كشف جديد: من شاشة السراكي ← "مراجعة وإرسال الكشف للاعتماد".</p>
+    <div id="my-submissions" class="list-scroll" style="max-height:none"><div class="home-empty">⏳</div></div>
+  </div>
+  <button class="btn btn-gold" onclick="switchTab('records')">📤 إرسال كشف جديد من السراكي</button>
+</div>
+
+<!-- الشريط السفلي — التنقل الأساسي (4 عناصر في متناول الإبهام) -->
+<nav class="bottombar" role="tablist" aria-label="التنقل الرئيسي">
+  <button class="bb-item active" data-tab="home"    onclick="switchTab('home')"><span class="ico">🏠</span><span>الرئيسية</span></button>
+  <button class="bb-item"        data-tab="form"    onclick="switchTab('form')"><span class="ico">📝</span><span>تسجيل</span></button>
+  <button class="bb-item"        data-tab="records" onclick="switchTab('records')"><span class="ico">👷</span><span>سراكي</span></button>
+  <button class="bb-item"        data-tab="more"    onclick="openDrawer()"><span class="ico">☰</span><span>المزيد</span></button>
+</nav>
+
+<!-- ══ FORM ══ -->
+<div id="tab-form" class="panel">
+  <div class="edit-banner" id="edit-banner">
+    <span>✏️ وضع التعديل — عدّل البيانات واضغط حفظ</span>
+    <button onclick="cancelEdit()">✕</button>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>📅</span> التوقيت</div>
+    <div class="field">
+      <label>التاريخ <span class="req">*</span></label>
+      <input type="date" id="f-date" onchange="autoSetDay(this.value)">
+    </div>
+    <div class="field">
+      <label>اليوم <span class="req">*</span> <small class="text-muted">(بيتظبط مع التاريخ — واختيار اليوم بيرجّع أقرب تاريخ ليه)</small></label>
+      <select id="f-day" onchange="autoSetDateFromDay(this.value,'f-date')">
+        <option value="">-- اختر اليوم --</option>
+        <option>الأحد</option><option>الاثنين</option><option>الثلاثاء</option>
+        <option>الأربعاء</option><option>الخميس</option><option>الجمعة</option><option>السبت</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>👷</span> المقاول</div>
+    <div class="field">
+      <label>إسم المقاول <span class="req">*</span></label>
+      <input type="search" class="select-search" id="f-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('f-contractor-search','f-contractor')">
+      <div class="select-search-empty" id="f-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
+      <select id="f-contractor" onchange="fillSpec()"></select>
+    </div>
+    <div class="field">
+      <label>تخصص المقاول</label>
+      <input type="text" id="f-spec" class="auto-field" readonly placeholder="يتحدد تلقائياً">
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>💰</span> الأعمال والمبالغ</div>
+    <div class="field">
+      <label>يومية / مقطوعية / ساعة / عدد <span class="req">*</span></label>
+      <div class="row">
+        <input type="number" id="f-qty" class="grow2" placeholder="0" min="0" step="any" inputmode="decimal" oninput="calcTotal()">
+        <select id="f-qty-type">
+          <option value="يومية" selected>يومية</option>
+          <option value="مقطوعية">مقطوعية</option>
+          <option value="ساعة">ساعة</option>
+          <option value="عدد">عدد</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>السعر <span class="req">*</span></label>
+        <input type="number" id="f-price" placeholder="0.00" min="0" step="0.01" inputmode="decimal" oninput="calcTotal()">
+      </div>
+      <div class="field">
+        <label>الخصم</label>
+        <input type="number" id="f-discount" placeholder="0.00" value="0" min="0" step="0.01" inputmode="decimal" oninput="calcTotal()">
+      </div>
+    </div>
+    <div class="field">
+      <label>بالخصم على</label>
+      <select id="f-deduct-on-select" onchange="addDeductChip()">
+        <option value="">-- اختر مقاول --</option>
+      </select>
+      <div id="f-deduct-chips" class="chips"></div>
+    </div>
+    <div class="field" id="f-deduct-note-wrap" style="display:none">
+      <label>ملاحظة الخصم</label>
+      <input type="text" id="f-deduct-note" placeholder="مثال: خصم بسبب تأخير أعمال البياض...">
+    </div>
+    <div class="field">
+      <label>الإجمالي</label>
+      <input type="text" id="f-total" class="total-field" readonly placeholder="0.00">
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>📍</span> تفاصيل الأعمال</div>
+    <div class="field">
+      <label>مكان الأعمال <span class="req">*</span></label>
+      <input type="search" class="select-search" id="f-place-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('f-place-search','f-place')">
+      <div class="select-search-empty" id="f-place-search-empty">لا يوجد مكان بهذا الاسم</div>
+      <div style="display:flex;gap:6px;align-items:stretch">
+        <select id="f-place" style="flex:1;min-width:0" onchange="updatePlaceNoteIcon()"></select>
+        <button type="button" id="f-place-note-btn" onclick="togglePlaceNoteBox()" title="ملاحظة عن المكان ده" style="display:none;flex:0 0 auto;width:44px;border:none;border-radius:10px;background:var(--warn-bg);color:var(--warn-fg);font-size:18px;font-weight:900;cursor:pointer">❕</button>
+      </div>
+      <div id="f-place-note-box" class="hint-box" style="display:none;margin-top:6px;border-color:var(--gold);background:var(--gold-bg);color:var(--gold-fg);font-weight:700"></div>
+    </div>
+    <div class="field">
+      <label>بيان الأعمال</label>
+      <textarea id="f-notes" rows="3" placeholder="اكتب تفاصيل الأعمال هنا..."></textarea>
+    </div>
+  </div>
+  <div class="actions-block">
+    <button class="btn btn-primary" id="save-btn" onclick="saveRecord()">✅ تسجيل البيانات</button>
+    <button class="btn btn-ghost" onclick="clearForm()">🗑 مسح النموذج</button>
+  </div>
+</div>
+
+<!-- ══ RECORDS ══ -->
+<div id="tab-records" class="panel">
+
+  <!-- Week navigator -->
+  <div id="week-nav" class="week-nav">
+    <div class="week-nav-row">
+      <button class="wk-arrow" onclick="shiftWeek(-1)" aria-label="الأسبوع السابق">‹</button>
+      <div class="week-nav-mid">
+        <div id="week-label"></div>
+        <div id="week-range"></div>
+      </div>
+      <button class="wk-arrow" onclick="shiftWeek(1)" aria-label="الأسبوع التالي">›</button>
+    </div>
+    <div class="week-nav-actions">
+      <button class="pill gold" onclick="resetWeek()" id="week-today-btn">📅 الأسبوع الحالي</button>
+      <button class="pill" onclick="toggleShowAll()" id="show-all-btn">📋 كل السجلات</button>
+    </div>
+  </div>
+
+  <!-- فلتر البحث / مقاولين وأماكن التصدير المعتمد / فلتر الترتيب — كل واحد فيتشر مستقل يتحكم فيه الأدمن -->
+  <div data-feature="records_search">
+  <div class="search-bar">
+    <input type="text" id="search-name" placeholder="🔍 ابحث بإسم المقاول..." oninput="renderRecords()">
+    <select id="search-place" onchange="renderRecords()"><option value="">📍 كل الأماكن</option></select>
+  </div>
+  <div class="search-bar">
+    <div class="date-hint">
+      <input type="date" id="search-day" onchange="this.closest('.date-hint').classList.toggle('has-val',!!this.value);renderRecords()" oninput="this.closest('.date-hint').classList.toggle('has-val',!!this.value)">
+    </div>
+    <select id="search-contractor-filter" onchange="renderRecords()"><option value="">👷 كل المقاولين</option></select>
+  </div>
+  </div>
+
+  <div data-feature="records_export_chips">
+  <div class="filter-box">
+    <div class="filter-box-head">
+      <div class="filter-box-title">👷‍♂️ مقاولين <span class="text-muted">(لازم تختار مقاول علشان الملف المعتمد ينزل)</span></div>
+      <button type="button" class="btn btn-danger btn-inline" onclick="clearExportContractorChips()">✕ مسح الكل</button>
+    </div>
+    <input type="search" class="select-search" id="export-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('export-contractor-search','export-contractor-select')">
+    <div class="select-search-empty" id="export-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
+    <select id="export-contractor-select" onchange="addExportContractorChip()"><option value="">-- اضف مقاول --</option></select>
+    <div id="export-contractor-chips" class="chips"></div>
+  </div>
+  <div class="filter-box">
+    <div class="filter-box-head">
+      <div class="filter-box-title">📍 أماكن <span class="text-muted">(لازم تختار مكان علشان الملف المعتمد ينزل)</span></div>
+      <button type="button" class="btn btn-danger btn-inline" onclick="clearExportPlaceChips()">✕ مسح الكل</button>
+    </div>
+    <input type="search" class="select-search" id="export-place-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('export-place-search','export-place-select')">
+    <div class="select-search-empty" id="export-place-search-empty">لا يوجد مكان بهذا الاسم</div>
+    <select id="export-place-select" onchange="addExportPlaceChip()"><option value="">-- اضف مكان --</option></select>
+    <div id="export-place-chips" class="chips"></div>
+  </div>
+  <p class="hint" style="margin-top:4px">إختار مقاول و مكان مع بعض لتقسيم شيت الإكسيل إلى (مقاول - مكان)</p>
+  </div>
+
+  <div class="sort-bar" data-feature="records_sort">
+    <span class="lbl">ترتيب:</span>
+    <button class="sort-btn" id="sort-date"       onclick="setSort('date')">📅 التاريخ</button>
+    <button class="sort-btn" id="sort-contractor" onclick="setSort('contractor')">👷 المقاول</button>
+    <button class="sort-btn" id="sort-place"      onclick="setSort('place')">📍 المكان</button>
+    <button class="sort-btn" id="sort-total"      onclick="setSort('total')">💰 الإجمالي</button>
+  </div>
+  <div class="records-header">
+    <div class="rh-title">سجلات المقاولين</div>
+    <div class="records-count" id="rec-count">0 سجل</div>
+  </div>
+  <div id="records-list"></div>
+
+  <div data-module="submissions">
+  <div class="section-title"><span>📤</span> إرسال السركي للاعتماد</div>
+  <button class="btn btn-gold" onclick="submitApprovedForReview()">📤 مراجعة وإرسال الكشف للاعتماد</button>
+  <p class="hint" style="margin-top:6px">بيبني كشف الأسبوع للمقاولين/الأماكن المحددة، تراجعه وتوافق، ويتبعت مباشرة — من غير تنزيل ولا Google Form.</p>
+  </div>
+  <details style="margin-top:10px">
+    <summary class="hint" style="cursor:pointer">لما يكون مفيش نت أو مشكلة في السيرفر (تنزيل الملف + جوجل فورم)</summary>
+    <!-- زرار Excel المعتمد: فيتشر records_export لوحده — وزرارين الفورم: فيتشرز gform_site1/2 لوحدهم (من غير تداخل) -->
+    <button class="btn btn-navy mt8" data-feature="records_export" onclick="exportApprovedExcel()">📄 تنزيل نسخة Excel معتمدة</button>
+    <button id="gform-btn-1" class="btn btn-ghost" onclick="window.open('https://forms.gle/VjYxT2BkGj8UdkPY8','_blank')">📤 رفع ملف السركي على Google Form</button>
+    <button id="gform-btn-2" class="btn btn-ghost" style="display:none" onclick="window.open('https://forms.gle/58VnYeRS69DgctbQ8','_blank')">📤 رفع ملف السركي على Google Form</button>
+  </details>
+</div>
+
+<!-- ══ APPROVALS — اعتمادات المديرين (وحدة قابلة للتفعيل، أونلاين فقط) ══ -->
+<div id="tab-approvals" class="panel">
+  <div class="card">
+    <div class="card-title between"><span class="t">📋 اعتمادات المديرين</span><button class="link-btn" onclick="renderApprovals()">🔄 تحديث</button></div>
+    <div id="apr-myrole" class="hint" style="margin-top:0"></div>
+    <div id="apr-scroll" class="apr-scroll"><div id="apr-table"></div></div>
+  </div>
+</div>
+
+<!-- مودال قرار الاعتماد -->
+<div class="modal-overlay" id="apr-modal">
+  <div class="modal-box" id="apr-modal-box" style="max-width:440px">
+    <div class="modal-head" id="apr-modal-head"></div>
+    <div class="modal-body">
+      <div id="apr-modal-body" style="font-size:13px;line-height:1.8"></div>
+      <textarea id="apr-note" placeholder="اكتب هنا..." style="width:100%;min-height:70px;margin-top:8px;display:none"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="apr-modal-ok"></button>
+      <button class="btn btn-ghost" onclick="aprCloseModal()">✕ إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ INVENTORY — المخازن (وحدة قابلة للتفعيل، أونلاين فقط — تصميم بروح Sortly) ══ -->
+<div id="tab-inventory" class="panel">
+
+  <!-- التبويبات الفرعية -->
+  <div class="inv-stabs">
+    <button class="inv-stab active" id="inv-stab-stock" onclick="invSwitchTab('stock')">📦 المخزون</button>
+    <button class="inv-stab" id="inv-stab-request" onclick="invSwitchTab('request')">📤 طلب صرف</button>
+    <button class="inv-stab" id="inv-stab-issues" onclick="invSwitchTab('issues')">📬 الطلبات<span class="dot" id="inv-issue-dot" style="display:none"></span></button>
+    <button class="inv-stab" id="inv-stab-purchases" onclick="invSwitchTab('purchases')">🛒 الشراء</button>
+  </div>
+
+  <!-- ── قسم المخزون ── -->
+  <div id="inv-sec-stock">
+    <div class="inv-tiles">
+      <div class="inv-tile"><div class="ic" style="background:var(--info-bg)">📦</div><div class="num" id="inv-tile-total">—</div><div class="lbl">صنف بالمخزن</div></div>
+      <div class="inv-tile"><div class="ic" style="background:var(--ok-bg)">✅</div><div class="num" id="inv-tile-ok" style="color:var(--ok-fg)">—</div><div class="lbl">متوفر</div></div>
+      <div class="inv-tile"><div class="ic" style="background:var(--danger-bg)">⚠️</div><div class="num" id="inv-tile-low" style="color:var(--danger-fg)">—</div><div class="lbl">محتاج طلب</div></div>
+    </div>
+    <div id="inv-shortages"></div>
+    <input type="search" class="select-search" id="inv-search" placeholder="🔍 ابحث بالاسم أو الكود..." oninput="renderInvItems()">
+    <div class="inv-cats" id="inv-cats"></div>
+    <div id="inv-items-list"></div>
+    <button class="inv-addbtn admin-only" onclick="invOpenItemModal()">➕ إضافة صنف جديد</button>
+    <div class="admin-only" style="margin-top:8px">
+      <input type="file" id="inv-import-file" accept=".xlsx,.xls" style="display:none" onchange="invImportExcel(this)">
+      <button class="btn btn-ghost" onclick="document.getElementById('inv-import-file').click()">📥 استيراد أصناف من Excel</button>
+      <p class="hint" style="margin-top:4px">الأعمدة بتتقري بالاسم: الكود، الاسم/الصنف، الوحدة، الفئة (اختياري)، الكمية (اختياري)، حد الطلب (اختياري) — الأكواد الموجودة بتتخطى.</p>
+    </div>
+  </div>
+
+  <!-- ── قسم طلب الصرف ── -->
+  <div id="inv-sec-request" style="display:none">
+  <div class="card">
+    <div class="card-title"><span>📤</span> طلب صرف جديد</div>
+    <p class="hint" style="margin-top:0">اختار الأصناف والكميات — الكمية المتاحة ظاهرة جنب كل صنف. الطلب بيروح لمدير التنفيذ للاعتماد ثم الصرف.</p>
+    <input type="search" class="select-search" id="inv-req-search" placeholder="🔍 ابحث عن صنف..." oninput="filterSelectOptions('inv-req-search','inv-req-item')">
+    <div class="select-search-empty" id="inv-req-search-empty">لا يوجد صنف بهذا الاسم</div>
+    <div class="add-row" style="margin-top:4px">
+      <select id="inv-req-item"><option value="">-- اختار الصنف --</option></select>
+      <input type="number" id="inv-req-qty" placeholder="الكمية" min="0" step="0.01" inputmode="decimal" style="max-width:110px">
+      <button class="btn btn-navy btn-inline" onclick="invAddLine()">➕</button>
+    </div>
+    <div id="inv-req-lines" style="margin-top:8px"></div>
+    <input type="text" id="inv-req-note" placeholder="ملاحظة (اختياري)" class="mb7" maxlength="500" style="margin-top:6px">
+    <button class="btn btn-gold" onclick="invSubmitIssue()">📤 إرسال طلب الصرف</button>
+  </div>
+  </div>
+
+  <!-- ── قسم طلبات الصرف ── -->
+  <div id="inv-sec-issues" style="display:none">
+  <div class="card">
+    <div class="card-title between"><span class="t">📬 طلبات الصرف <span id="inv-issue-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn" onclick="renderInvIssues()">🔄 تحديث</button></div>
+    <div id="inv-issue-list"></div>
+  </div>
+  </div>
+
+  <!-- ── قسم طلبات الشراء ── -->
+  <div id="inv-sec-purchases" style="display:none">
+  <div class="card">
+    <div class="card-title"><span>🛒</span> طلبات الشراء</div>
+    <input type="search" class="select-search" id="inv-pr-search" placeholder="🔍 ابحث عن صنف..." oninput="filterSelectOptions('inv-pr-search','inv-pr-item')">
+    <div class="select-search-empty" id="inv-pr-search-empty">لا يوجد صنف بهذا الاسم</div>
+    <div class="add-row" style="margin-top:4px">
+      <select id="inv-pr-item"><option value="">-- اختار الصنف --</option></select>
+      <input type="number" id="inv-pr-qty" placeholder="الكمية" min="0" step="0.01" inputmode="decimal" style="max-width:110px">
+      <button class="btn btn-navy btn-inline" onclick="invSubmitPurchase()">🛒 اطلب</button>
+    </div>
+    <div id="inv-purchase-list" style="margin-top:8px"></div>
+  </div>
+  </div>
+
+  <!-- مودال إضافة/تعديل صنف -->
+  <div class="modal-overlay" id="inv-item-modal">
+    <div class="modal-box">
+      <div class="modal-head" id="inv-item-modal-title">➕ إضافة صنف جديد</div>
+      <div class="modal-body inv-f">
+        <label>اسم الصنف *</label>
+        <input type="text" id="inv-i-name" placeholder="مثال: أسمنت بورتلاندي عادي" maxlength="190">
+        <div class="inv-row2">
+          <div><label>الكمية الافتتاحية</label><input type="number" id="inv-i-qty" placeholder="0" min="0" step="0.01" inputmode="decimal"></div>
+          <div><label>وحدة القياس *</label><div style="display:flex;gap:4px"><select id="inv-i-unit" style="flex:1"></select><button type="button" class="btn btn-ghost btn-inline" onclick="invAddUnit()" title="وحدة جديدة">➕</button></div></div>
+        </div>
+        <div class="inv-row2">
+          <div><label>الكود *</label><input type="text" id="inv-i-code" placeholder="CEM-01" maxlength="60"></div>
+          <div><label>حد إعادة الطلب ⚠️</label><input type="number" id="inv-i-min" placeholder="0" min="0" step="0.01" inputmode="decimal" title="الصنف بيظهر في النواقص لما ينزل تحت الرقم ده"></div>
+        </div>
+        <label>الفئة</label>
+        <div style="display:flex;gap:4px"><select id="inv-i-cat" style="flex:1"></select><button type="button" class="btn btn-ghost btn-inline" onclick="invAddCategory()" title="فئة جديدة">➕</button></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-navy" id="inv-item-save-btn" onclick="invSaveItem()">💾 إضافة الصنف</button>
+        <button class="btn btn-ghost" onclick="invCloseItemModal()">✕ إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ IR ══ -->
+<div id="tab-ir" class="panel">
+  <div class="edit-banner" id="ir-edit-banner">
+    <span>✏️ تعديل سجل IR</span>
+    <button onclick="cancelIrEdit()">✕</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>📋</span> تسجيل IR جديد</div>
+    <div class="field">
+      <label>التاريخ <span class="req">*</span></label>
+      <input type="date" id="ir-date">
+    </div>
+    <div class="field">
+      <label>البند <span class="req">*</span></label>
+      <select id="ir-item"><option value="">-- اختر البند --</option></select>
+    </div>
+    <div class="field">
+      <label>المكان <span class="req">*</span></label>
+      <select id="ir-place"><option value="">-- اختر المكان --</option></select>
+    </div>
+    <div class="field">
+      <label>الاستشاري المستلم</label>
+      <select id="ir-inspector"><option value="">-- اختر الاستشاري --</option></select>
+    </div>
+    <div class="field">
+      <label>الحالة <span class="req">*</span></label>
+      <select id="ir-status">
+        <option value="">-- اختر الحالة --</option>
+        <option value="A">A — مستلم بدون ملاحظات ✅</option>
+        <option value="B">B — مستلم مع ملاحظات ⚠️</option>
+        <option value="C">C — استلام بعد عمل الملاحظات 🔄</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>ملاحظات</label>
+      <textarea id="ir-notes" rows="2" placeholder="سبب الرفض أو الملاحظات..."></textarea>
+    </div>
+  </div>
+  <div class="actions-block">
+    <button class="btn btn-primary" id="ir-save-btn" onclick="saveIR()">✅ تسجيل IR</button>
+  </div>
+
+  <div class="search-bar">
+    <input type="text" id="ir-search" placeholder="🔍 ابحث في الـ IR..." oninput="renderIR()">
+    <select id="ir-filter-status" onchange="renderIR()">
+      <option value="">كل الحالات</option>
+      <option value="A">A فقط</option>
+      <option value="B">B فقط</option>
+      <option value="C">C فقط</option>
+    </select>
+  </div>
+  <div class="records-header">
+    <div class="rh-title purple">سجلات الـ IR</div>
+    <div class="records-count purple" id="ir-count">0 سجل</div>
+  </div>
+  <div id="ir-list"></div>
+  <div style="margin-top:12px">
+    <button class="btn btn-export" onclick="exportIRExcel()">📥 تنزيل IR Excel</button>
+  </div>
+</div>
+
+<!-- ══ SITE REPORT ══ -->
+<div id="tab-site" class="panel">
+
+  <div class="subtabs">
+    <button id="stab-daily-btn" class="subtab stab active" data-stab="daily" onclick="switchSiteTab('daily')">📋 التقرير اليومي</button>
+    <button id="stab-exec-btn"  class="subtab stab" data-stab="exec" onclick="switchSiteTab('exec')">🏗 الموقف التنفيذي</button>
+  </div>
+
+  <!-- ══ DAILY REPORT PANEL ══ -->
+  <div id="stab-daily">
+    <div class="edit-banner" id="daily-edit-banner">
+      <span>✏️ تعديل تقرير يومي</span>
+      <button class="txt" onclick="cancelDailyEdit()">إلغاء</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>📋</span> إضافة تقرير يومي</div>
+      <div class="field">
+        <label>التاريخ <span class="req">*</span></label>
+        <input type="date" id="daily-date" onchange="autoSetDailyDay(this.value)">
+      </div>
+      <div class="field">
+        <label>اليوم</label>
+        <select id="daily-day" onchange="autoSetDateFromDay(this.value,'daily-date')">
+          <option value="">-- اختر اليوم --</option>
+          <option>الأحد</option><option>الاثنين</option><option>الثلاثاء</option>
+          <option>الأربعاء</option><option>الخميس</option><option>الجمعة</option><option>السبت</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>المقاول / الفريق <span class="req">*</span></label>
+        <select id="daily-contractor" onchange="autoFillDailySpec()">
+          <option value="">-- اختر المقاول --</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>التخصص</label>
+        <input type="text" id="daily-spec" placeholder="يُملأ تلقائياً أو اكتب يدوياً">
+      </div>
+      <div class="field">
+        <label>بيان الأعمال <span class="req">*</span></label>
+        <textarea id="daily-work" rows="3" placeholder="اكتب الأعمال المنفذة اليوم..."></textarea>
+      </div>
+      <div class="field">
+        <label>📷 إضافة صورة</label>
+        <input type="file" id="daily-photo-input" accept="image/*" capture="environment" style="display:none" onchange="attachDailyPhoto(this)">
+        <input type="file" id="daily-gallery-input" accept="image/*" style="display:none" onchange="attachDailyPhoto(this)">
+        <div class="btn-group">
+          <button type="button" class="btn btn-navy btn-sm" onclick="document.getElementById('daily-photo-input').click()">📷 كاميرا</button>
+          <button type="button" class="btn btn-purple btn-sm" onclick="document.getElementById('daily-gallery-input').click()">🖼 استوديو</button>
+        </div>
+        <div id="daily-photo-preview" style="margin-top:10px;display:none">
+          <img id="daily-photo-img" style="width:100%;border-radius:10px;border:2px solid var(--border)" alt="">
+          <button type="button" class="btn btn-danger btn-inline" style="margin-top:6px" onclick="removeDailyPhoto()">🗑 حذف الصورة</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>المكان</label>
+        <select id="daily-place"><option value="">-- اختر المكان --</option></select>
+      </div>
+      <button class="btn btn-primary" id="daily-save-btn" onclick="saveDailyRecord()">✅ حفظ التقرير اليومي</button>
+    </div>
+    <div class="records-header">
+      <div class="rh-title">التقارير اليومية</div>
+      <div class="records-count" id="daily-count">0 سجل</div>
+    </div>
+    <div style="margin-bottom:10px">
+      <input type="date" id="daily-filter-date" onchange="renderDaily(this.value)">
+    </div>
+    <div id="daily-list"></div>
+  </div>
+
+  <!-- ══ EXEC STATUS PANEL ══ -->
+  <div id="stab-exec" style="display:none">
+    <div class="edit-banner" id="exec-edit-banner">
+      <span>✏️ تعديل موقف تنفيذي</span>
+      <button class="txt" onclick="cancelExecEdit()">إلغاء</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🏗</span> إضافة بند</div>
+      <div class="field">
+        <label>البند <span class="req">*</span></label>
+        <select id="exec-item" onchange="onExecItemChange()"><option value="">-- اختر البند --</option></select>
+      </div>
+      <div class="field">
+        <label>المكان</label>
+        <select id="exec-place"><option value="">-- اختر المكان --</option></select>
+      </div>
+      <div id="exec-stages-wrap" style="display:none">
+        <div class="subhead">مراحل الإنجاز</div>
+        <div id="exec-stages-sliders"></div>
+        <div id="exec-stages-note" class="exec-note"></div>
+      </div>
+      <div class="field" id="exec-total-pct-wrap" style="display:none">
+        <label>إجمالي الإنجاز: <strong id="exec-pct-label" style="color:var(--navy-text)">0%</strong></label>
+        <div class="track lg"><div id="exec-pct-fill" style="background:var(--red)"></div></div>
+      </div>
+      <div class="field">
+        <label>ملاحظات</label>
+        <textarea id="exec-notes" rows="2" placeholder="ملاحظات على التنفيذ..."></textarea>
+      </div>
+      <button class="btn btn-primary" id="exec-save-btn" onclick="saveExecRecord()">✅ حفظ البند</button>
+    </div>
+    <div class="records-header">
+      <div class="rh-title">بنود الموقف التنفيذي</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn btn-primary btn-inline" onclick="exportExecExcel()">📊 Excel</button>
+        <div class="records-count" id="exec-count">0 سجل</div>
+      </div>
+    </div>
+    <div id="exec-list"></div>
+  </div>
+
+</div>
+
+<!-- ══ TODO ══ -->
+<div id="tab-todo" class="panel">
+  <div class="edit-banner" id="todo-edit-banner">
+    <span>✏️ تعديل مهمة</span>
+    <button onclick="cancelTodoEdit()">✕</button>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>✅</span> إضافة مهمة جديدة</div>
+    <div class="field">
+      <label>التاريخ المطلوب <span class="req">*</span></label>
+      <input type="date" id="todo-date">
+    </div>
+    <div class="field">
+      <label>بيان الأعمال <span class="req">*</span></label>
+      <textarea id="todo-notes" rows="3" placeholder="اكتب المهمة هنا..."></textarea>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>المكان</label>
+        <select id="todo-place"></select>
+      </div>
+      <div class="field">
+        <label>الأولوية</label>
+        <select id="todo-priority">
+          <option value="عادي">🟢 عادي</option>
+          <option value="متوسط">🟡 متوسط</option>
+          <option value="عاجل">🔴 عاجل</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="todo-save-btn" onclick="saveTodo()" style="margin-top:12px">✅ إضافة المهمة</button>
+  </div>
+
+  <div class="search-bar">
+    <select id="todo-filter" onchange="renderTodo()">
+      <option value="">كل المهام</option>
+      <option value="pending">⏳ المعلقة</option>
+      <option value="done">✅ المنجزة</option>
+    </select>
+    <select id="todo-filter-priority" onchange="renderTodo()">
+      <option value="">كل الأولويات</option>
+      <option value="عاجل">🔴 عاجل</option>
+      <option value="متوسط">🟡 متوسط</option>
+      <option value="عادي">🟢 عادي</option>
+    </select>
+  </div>
+  <div class="records-header">
+    <div class="rh-title orange">قائمة المهام</div>
+    <div class="records-count orange" id="todo-count">0 مهمة</div>
+  </div>
+  <div id="todo-list"></div>
+  <div style="margin-top:12px">
+    <button class="btn btn-export" onclick="exportTodoExcel()">📥 تنزيل To-Do Excel</button>
+  </div>
+</div>
+
+<!-- ══ SUMMARY ══ -->
+<div id="tab-summary" class="panel">
+  <div class="summary-grid">
+    <div class="summary-box">
+      <span class="val" id="s-count">0</span>
+      <span class="lbl">إجمالي سجلات العمال</span>
+    </div>
+    <div class="summary-box green">
+      <span class="val" id="s-total">0</span>
+      <span class="lbl">إجمالي المدفوع (ج.م)</span>
+    </div>
+    <div class="summary-box red">
+      <span class="val" id="s-discount">0</span>
+      <span class="lbl">إجمالي الخصومات</span>
+    </div>
+    <div class="summary-box gold">
+      <span class="val" id="s-gross">0</span>
+      <span class="lbl">إجمالي قبل الخصم</span>
+    </div>
+  </div>
+  <div class="summary-grid">
+    <div class="summary-box tint-ok">
+      <span class="val" id="s-ir-a">0</span>
+      <span class="lbl">IR — A مستلم ✅</span>
+    </div>
+    <div class="summary-box tint-warn">
+      <span class="val" id="s-ir-b">0</span>
+      <span class="lbl">IR — B مع ملاحظات ⚠️</span>
+    </div>
+    <div class="summary-box tint-pink">
+      <span class="val" id="s-ir-c">0</span>
+      <span class="lbl">IR — C بعد ملاحظات 🔄</span>
+    </div>
+    <div class="summary-box tint-purple">
+      <span class="val" id="s-ir-total">0</span>
+      <span class="lbl">إجمالي سجلات IR</span>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title"><span>👷</span> إجمالي كل مقاول</div>
+    <div id="contractor-summary"></div>
+  </div>
+</div>
+
+<!-- ══ SETTINGS ══ -->
+<div id="tab-settings" class="panel">
+  <div class="card" data-feature="set_appearance">
+    <div class="card-title"><span>🎨</span> المظهر</div>
+    <button class="pref-row" id="dark-mode-btn" onclick="toggleDarkMode()" aria-pressed="false">
+      <div class="pref-text">
+        <div class="pref-title">الوضع الداكن</div>
+        <div class="pref-sub">مريح للعين ليلًا — التغيير فوري</div>
+      </div>
+      <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+    </button>
+  </div>
+  <div class="card" data-feature="set_contractors">
+    <div class="card-title"><span>👷</span> إدارة المقاولين</div>
+    <div id="contractors-list" class="list-scroll"></div>
+    <div id="edit-contractor-form" class="inline-form" style="display:none">
+      <div class="subhead" style="margin-top:0">✏️ تعديل بيانات المقاول</div>
+      <input type="text" id="ec-name" placeholder="إسم المقاول" class="mb7">
+      <input type="text" id="ec-spec" placeholder="التخصص" class="mb7">
+      <div class="row mb7">
+        <input type="number" id="ec-rate" placeholder="السعر" min="0" step="0.01" inputmode="decimal">
+        <select id="ec-rate-type">
+          <option value="ساعة">ساعة</option>
+          <option value="يومية">يومية</option>
+          <option value="مقطوعية">مقطوعية</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" onclick="saveEditContractor()">💾 حفظ</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelEditContractor()">✕ إلغاء</button>
+      </div>
+    </div>
+    <div class="admin-only">
+    <div class="subhead">➕ إضافة مقاول جديد</div>
+    <input type="text" id="new-contractor-name" placeholder="إسم المقاول" class="mb7">
+    <input type="text" id="new-contractor-spec" placeholder="التخصص" class="mb7">
+    <div class="row mb7">
+      <input type="number" id="new-contractor-rate" placeholder="السعر" min="0" step="0.01" inputmode="decimal">
+      <select id="new-contractor-rate-type">
+        <option value="ساعة">ساعة</option>
+        <option value="يومية" selected>يومية</option>
+        <option value="مقطوعية">مقطوعية</option>
+      </select>
+    </div>
+    <button class="btn btn-add" onclick="addContractor()">➕ إضافة مقاول</button>
+    </div>
+  </div>
+
+  <div class="card" data-feature="set_places">
+    <div class="card-title"><span>📍</span> إدارة أماكن الأعمال</div>
+    <div id="places-list" class="list-scroll"></div>
+    <div id="edit-place-form" class="inline-form" style="display:none">
+      <div class="subhead" style="margin-top:0">✏️ تعديل المكان</div>
+      <input type="text" id="ep-name" placeholder="إسم المكان" class="mb7">
+      <input type="text" id="ep-note" placeholder="❕ ملاحظة عن المكان (اختياري)" class="mb7" maxlength="500">
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" onclick="saveEditPlace()">💾 حفظ</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelEditPlace()">✕ إلغاء</button>
+      </div>
+    </div>
+    <div class="admin-only">
+    <div class="add-row">
+      <input type="text" id="new-place" placeholder="مكان الأعمال الجديد">
+    </div>
+    <div class="add-row" style="margin-top:6px">
+      <input type="text" id="new-place-note" placeholder="❕ ملاحظة عن المكان (اختياري) — تظهر للمهندس عند اختياره" maxlength="500">
+    </div>
+    <button class="btn btn-add" onclick="addPlace()">➕ إضافة مكان</button>
+    </div>
+  </div>
+
+  <div class="card" data-feature="set_inspectors">
+    <div class="card-title"><span>🏛</span> إدارة الاستشاريين</div>
+    <div id="inspectors-list" class="list-scroll"></div>
+    <div class="add-row">
+      <input type="text" id="new-inspector" placeholder="إسم الاستشاري">
+    </div>
+    <button class="btn btn-add" onclick="addInspector()">➕ إضافة استشاري</button>
+  </div>
+
+  <div class="card" data-feature="set_items">
+    <div class="card-title between">
+      <span class="t"><span>📋</span> إدارة بنود المقايسة</span>
+      <button class="btn btn-primary btn-inline" onclick="exportItemsExcel()">📊 Excel</button>
+    </div>
+    <div class="hint">يمكنك إضافة بنود وتحديد مراحل كل بند ونسبة إنجازها</div>
+    <div id="items-list" class="list-scroll"></div>
+    <div class="inline-form">
+      <div class="subhead" style="margin-top:0">➕ إضافة بند جديد</div>
+      <div class="add-row" style="margin-top:0">
+        <input type="text" id="new-item-cat" placeholder="الفئة (مثال: بياض)">
+        <input type="text" id="new-item-name" placeholder="إسم البند">
+      </div>
+      <div class="subhead">مراحل البند (اسم المرحلة - النسبة %)</div>
+      <div id="new-item-stages-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+      <div class="row mb7">
+        <input type="text" id="new-stage-name" class="grow2" placeholder="إسم المرحلة (مثال: تحضير)">
+        <input type="number" id="new-stage-pct" placeholder="%" min="1" max="100" inputmode="numeric">
+        <button class="mini-btn" style="flex:0 0 auto" onclick="addStageToNew()">+ مرحلة</button>
+      </div>
+      <div id="new-item-stages-total" class="stage-total"></div>
+      <button class="btn btn-add" onclick="addItem()">➕ إضافة البند</button>
+    </div>
+  </div>
+
+  <!-- Edit Item Form -->
+  <div class="card accent-gold" id="edit-item-form" style="display:none">
+    <div class="card-title" style="color:var(--gold-text)"><span>✏️</span> تعديل البند</div>
+    <div class="add-row" style="margin-top:0">
+      <input type="text" id="ei-cat" placeholder="الفئة">
+      <input type="text" id="ei-name" placeholder="إسم البند">
+    </div>
+    <div class="subhead">مراحل البند (اسم المرحلة - النسبة %)</div>
+    <div id="ei-stages-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px"></div>
+    <div class="row mb7">
+      <input type="text" id="ei-stage-name" class="grow2" placeholder="إسم المرحلة">
+      <input type="number" id="ei-stage-pct" placeholder="%" min="1" max="100" inputmode="numeric">
+      <button class="mini-btn" style="flex:0 0 auto" onclick="addStageToEdit()">+ مرحلة</button>
+    </div>
+    <div id="ei-stages-total" class="stage-total"></div>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="saveEditItem()">💾 حفظ التعديل</button>
+      <button class="btn btn-ghost btn-sm" onclick="cancelEditItem()">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- Import Items from Excel Card -->
+  <div class="card accent-navy" data-feature="set_items_import">
+    <div class="card-title"><span>📋</span> استيراد بنود من Excel</div>
+    <div class="hint">ارفع ملف Excel يحتوي على بنود المقايسة وسيتم إضافتها تلقائياً</div>
+    <div class="hint-box">
+      <strong>الأعمدة المطلوبة:</strong><br>
+      A: الفئة · B: إسم البند<br>
+      C,D: اسم المرحلة 1 + نسبتها% · E,F: اسم المرحلة 2 + نسبتها% ...
+    </div>
+    <input type="file" id="import-items-file" accept=".xlsx,.xls" class="mb7">
+    <button class="btn btn-export" onclick="importItemsExcel()">📋 استيراد البنود</button>
+  </div>
+
+  <div class="card" data-feature="set_records_import">
+    <div class="card-title"><span>📥</span> استرداد السجلات من Excel</div>
+    <div class="hint">ارفع ملف Excel بنفس أعمدة التصدير وسيتم استيراد السجلات تلقائياً (يتعرف على الأعمدة بالاسم)</div>
+    <div class="hint-box">
+      الأعمدة: اليوم · التاريخ · إسم المقاول · تخصص المقاول · العدد · النوع · السعر · الخصم · الإجمالي · مكان الأعمال · بيان الأعمال · بالخصم على · ملاحظة الخصم
+    </div>
+    <input type="file" id="import-file" accept=".xlsx,.xls" class="mb7">
+    <button class="btn btn-export" onclick="importExcel()">📤 استيراد السجلات</button>
+  </div>
+
+  <div class="card" data-feature="set_backup">
+    <div class="card-title"><span>💾</span> نسخة احتياطية</div>
+    <div class="hint">احفظ كل بياناتك في ملف واحد وارجّعها في أي وقت</div>
+    <button class="btn btn-export" onclick="backupData()">📤 تصدير نسخة احتياطية</button>
+    <div class="hint" style="margin:10px 0 6px">استيراد نسخة سابقة:</div>
+    <button class="btn btn-primary" onclick="restoreData()">📥 استعادة النسخة الاحتياطية</button>
+    <input type="file" id="restore-file-hidden" accept=".json" style="display:none" onchange="restoreFromFile(this)">
+  </div>
+
+  <div class="card accent-navy" data-feature="set_account">
+    <div class="card-title"><span>👤</span> الحساب</div>
+    <div class="hint" style="margin-bottom:4px">مسجّل دخول بـ:</div>
+    <div id="account-email-display" class="account-email"></div>
+    <button class="btn btn-danger" onclick="doLogout()">🚪 تسجيل الخروج</button>
+  </div>
+
+  <div class="card accent-gold" data-feature="set_pin">
+    <div class="card-title"><span>🔒</span> حماية PIN</div>
+    <div class="hint">رمز PIN يحمي إضافة/تعديل الأماكن وحفظ توقيع المهندس</div>
+    <button class="btn btn-primary" onclick="changePin()">🔑 إنشاء / تغيير رمز PIN</button>
+  </div>
+
+  <div class="card accent-navy" data-feature="set_sync">
+    <div class="card-title"><span>☁️</span> مزامنة السجلات</div>
+    <div class="hint">بياناتك مرتبطة بحسابك (الإيميل) وتلقائيًا خاصة بيك</div>
+    <div class="code-box">
+      <div class="k">كود الحساب (مرتبط بالإيميل)</div>
+      <div class="v">
+        <div id="sync-project-code-display" class="code"></div>
+        <button class="mini-btn" onclick="copySyncCode()">نسخ</button>
+      </div>
+    </div>
+    <div class="hint" style="margin-bottom:8px">لاسترجاع بياناتك على جهاز آخر، اكتب كود الجهاز الأصلي:</div>
+    <input type="text" id="sync-restore-code" placeholder="كود الجهاز الآخر" class="mb7" style="text-transform:uppercase;letter-spacing:2px;font-weight:700;font-family:ui-monospace,Consolas,monospace" oninput="this.value=this.value.toUpperCase()" autocapitalize="characters">
+    <div class="btn-group" style="margin-top:4px">
+      <button class="btn btn-navy btn-sm" onclick="syncUpload()">☁️ رفع السجلات</button>
+      <button class="btn btn-primary btn-sm" onclick="syncDownload()">⬇️ استعادة السجلات</button>
+    </div>
+    <div id="sync-status" class="status-line"></div>
+    <div id="load-older-wrap" style="display:none;margin-top:8px">
+      <button id="load-older-btn" class="btn btn-purple" onclick="loadOlderRecords()">⬇️ تحميل سجلات أقدم</button>
+      <div class="status-line" style="font-size:10px">الجهاز ده محمّل عليه آخر سجلات فقط لتوفير الذاكرة والسرعة</div>
+    </div>
+  </div>
+
+  <!-- ══ SIGNATURE CARD ══ -->
+  <div class="card accent-gold" data-feature="set_signature">
+    <div class="card-title" style="color:var(--gold-text)"><span>✍️</span> توقيع المهندس المسئول</div>
+    <div id="sig-preview-wrap" class="sig-preview">
+      <div class="hint" style="margin-bottom:6px">التوقيع الحالي:</div>
+      <img id="sig-preview-img" alt="التوقيع">
+      <div style="margin-top:8px">
+        <button class="btn btn-danger btn-inline" onclick="clearSignature()">🗑 حذف التوقيع</button>
+      </div>
+    </div>
+    <div id="sig-empty-msg" class="sig-empty">
+      <div class="big">✍️</div>
+      <div>لا يوجد توقيع محفوظ</div>
+    </div>
+    <input type="file" id="sig-camera-input" accept="image/*" capture="environment" style="display:none" onchange="processSignaturePhoto(this)">
+    <input type="file" id="sig-gallery-input" accept="image/*" style="display:none" onchange="processSignaturePhoto(this)">
+    <button class="btn btn-gold" onclick="document.getElementById('sig-camera-input').click()">📷 تصوير التوقيع بالكاميرا</button>
+    <button class="btn btn-navy" onclick="document.getElementById('sig-gallery-input').click()">🖼 اختيار من الاستوديو</button>
+    <canvas id="sig-canvas" style="display:none"></canvas>
+  </div>
+
+  <div class="card accent-red" data-feature="set_danger">
+    <div class="card-title" style="color:var(--red)"><span>⚠</span> منطقة الخطر</div>
+    <button class="btn btn-danger" onclick="clearAllData()">🗑 حذف كل سجلات العمال</button>
+    <button class="btn btn-danger" onclick="clearAllIR()">🗑 حذف كل سجلات IR</button>
+    <button class="btn btn-dark-red" onclick="resetAllApp()">⚠ إعادة تهيئة البرنامج كامل</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

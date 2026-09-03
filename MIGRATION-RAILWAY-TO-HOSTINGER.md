@@ -1,0 +1,220 @@
+# دليل نقل الـ Backend من Railway إلى Hostinger
+
+> **ملف توثيق فقط — لا شيء في هذا الملف مُنفَّذ.** كُتب يوم 2026-08-29 ليكون مرجعًا كاملًا لأي شخص (أو أي موديل AI) ينفّذ النقل لاحقًا خطوة بخطوة.
+> اقرأ [SYSTEM_REFERENCE.md](SYSTEM_REFERENCE.md) أولًا لو محتاج فهم أعمق للنظام.
+
+---
+
+## 1. الوضع الحالي (قبل النقل)
+
+| المكوّن | مكانه | ملاحظات |
+|---|---|---|
+| الواجهة (PWA) | Cloudflare Pages — مشروع `cea-app` → https://cea-app.pages.dev | **لا تُنقل** — تفضل مكانها، هيتغير فيها سطر واحد بس (عنوان الـ API) |
+| الـ Backend (Node/Express/Prisma) | Railway — مشروع `zooming-possibility` → خدمة `cea-backend` | https://cea-backend-production-5cbe.up.railway.app — Docker من `backend/Dockerfile`، بيسمع على `PORT` (Railway بيمرره 8080) |
+| قاعدة البيانات MySQL | Railway — خدمة `MySQL` (قاعدة اسمها `railway`) | وصول خارجي عبر TCP Proxy: `thomas.proxy.rlwy.net:38986` (اليوزر `root`) |
+| ملفات مرفوعة (اعتمادات/توقيعات/صور) | Railway Volume على `/data/uploads` | **لازم تتنقل مع الداتا** — من غيرها تنزيل ملفات التسليمات القديمة هيبوظ |
+| Google Apps Script (شيتين جريني/أزاليا) | حساب جوجل — مش على Railway | **لا يتأثر بالنقل إطلاقًا** — السيرفر بيندهه outbound فقط |
+| الكود المصدري | GitHub: `ahmedosama112/cea-backend` (فولدر `backend/` هو الريبو) | Railway حاليًا بينشر بـ `railway up` (رفع مباشر)، مش من GitHub |
+
+### متغيرات البيئة الحالية على Railway (خدمة cea-backend)
+
+انسخ **القيم الفعلية** من Railway → cea-backend → Variables قبل ما تقفل أي حاجة:
+
+| المتغير | ملاحظة |
+|---|---|
+| `DATABASE_URL` | هيتغير لعنوان قاعدة Hostinger الجديدة |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | **انقلهم زي ما هم بالظبط** — لو اتغيروا كل المستخدمين هيتسجل خروجهم |
+| `GOOGLE_WEBAPP_URL` / `GOOGLE_WEBAPP_SECRET` | ربط شيت جريني (الموقع 1) — زي ما هم |
+| `GOOGLE_WEBAPP_URL_2` / `GOOGLE_WEBAPP_SECRET_2` | ربط شيت أزاليا (الموقع 2) — زي ما هم |
+| `CORS_ORIGIN` | خليه `https://cea-app.pages.dev` (حاليًا `*` — دي فرصة تصليحها) |
+| `NODE_ENV` | `production` |
+| `UPLOAD_DIR` | حاليًا `/data/uploads` — في الإعداد الجديد تحت هيبقى `/app/uploads` (mount) |
+| `RATE_LIMIT_MAX` | `1200` |
+| `ACCESS_TOKEN_TTL_MIN` / `REFRESH_TOKEN_TTL_DAYS` / `BCRYPT_ROUNDS` | اختيارية — ليها defaults في `src/config/env.ts` |
+
+---
+
+## 2. المطلوب على Hostinger
+
+⚠️ **الاستضافة المشتركة (Shared/Cloud hosting) لا تصلح** — البرنامج محتاج Node.js دائم التشغيل + MySQL + كتابة ملفات على القرص. المطلوب: **Hostinger VPS** (أي خطة KVM، أوبنتو 22.04/24.04، 1-2 GB RAM كافية جدًا).
+
+الأسهل والأقرب لإعداد Railway الحالي: **Docker Compose** (نفس الـ Dockerfile الموجود، من غير أي تعديل كود).
+
+---
+
+## 3. خطوات النقل
+
+### الخطوة 0 — نسخ احتياطي كامل (قبل أي حاجة)
+
+من جهاز فيه `mysql` client (موجود محليًا في `E:\mysql-8.0.46-winx64\bin`):
+
+```bash
+# باسورد root من Railway → خدمة MySQL → Variables → MYSQL_ROOT_PASSWORD
+mysqldump -h thomas.proxy.rlwy.net -P 38986 -u root -p --single-transaction --routines railway > cea-db-backup.sql
+```
+
+الملفات المرفوعة (Volume): من فولدر `backend/` على جهاز متسجل دخول Railway CLI:
+
+```bash
+# من Git Bash على ويندوز (MSYS_NO_PATHCONV بيمنع تحويل مسار /data لمسار ويندوز)
+# متطلبات أول مرة: مفتاح SSH محلي + railway ssh keys add (اتعملوا بالفعل على جهاز E:)
+MSYS_NO_PATHCONV=1 railway ssh --service cea-backend -- tar czf - -C /data uploads > cea-uploads.tgz
+# للتحقق: tar tzf cea-uploads.tgz | wc -l
+```
+
+> ✅ نسخة فعلية اتسحبت بنجاح يوم 2026-09-01 → `backups/uploads-2026-09-01.tgz` في فولدر المشروع. أعد السحب بنفس الأمر قبل النقل مباشرة.
+
+> بديل لو `railway ssh` مش متاح: التطبيق فيه زرار نسخة احتياطية يدوية (لوحة الأدمن) بيرفع JSON كامل للقاعدة على Google Drive — بس ده للقاعدة فقط، مش بديل عن نسخ فولدر uploads.
+
+### الخطوة 1 — تجهيز الـ VPS
+
+```bash
+apt update && apt upgrade -y
+curl -fsSL https://get.docker.com | sh
+apt install -y docker-compose-plugin
+```
+
+وجّه دومين (مثلًا `api.yourdomain.com`) بسجل A على IP الـ VPS — شهادة HTTPS هتتعمل تلقائيًا بـ Caddy تحت.
+
+### الخطوة 2 — رفع الكود
+
+```bash
+git clone https://github.com/ahmedosama112/cea-backend.git /opt/cea-backend
+cd /opt/cea-backend
+```
+
+> تأكد إن آخر كود مدفوع على GitHub قبل النقل (`git log -1` محليًا في `backend/` وقارن). لو GitHub متأخر، ارفع الفولدر بـ scp/rsync بدل clone.
+
+### الخطوة 3 — ملفات التشغيل على الـ VPS
+
+أنشئ `/opt/cea-backend/docker-compose.yml`:
+
+```yaml
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "غيّرني-باسورد-قوي"
+      MYSQL_DATABASE: cea
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+
+volumes:
+  db-data:
+  uploads:
+  caddy-data:
+```
+
+وملف `/opt/cea-backend/Caddyfile` (بدّل الدومين):
+
+```
+api.yourdomain.com {
+    reverse_proxy api:4000
+}
+```
+
+وملف `/opt/cea-backend/.env.production` (القيم من الجدول في القسم 1):
+
+```
+NODE_ENV=production
+PORT=4000
+DATABASE_URL=mysql://root:نفس-باسورد-db-اللي-فوق@db:3306/cea
+CORS_ORIGIN=https://cea-app.pages.dev
+JWT_ACCESS_SECRET=(انسخه من Railway حرفيًا)
+JWT_REFRESH_SECRET=(انسخه من Railway حرفيًا)
+UPLOAD_DIR=/app/uploads
+MAX_UPLOAD_MB=8
+RATE_LIMIT_MAX=1200
+GOOGLE_WEBAPP_URL=(من Railway)
+GOOGLE_WEBAPP_SECRET=(من Railway)
+GOOGLE_WEBAPP_URL_2=(من Railway)
+GOOGLE_WEBAPP_SECRET_2=(من Railway)
+```
+
+### الخطوة 4 — استيراد الداتا والملفات
+
+```bash
+cd /opt/cea-backend
+docker compose up -d db          # شغّل القاعدة الأول لوحدها
+# انقل cea-db-backup.sql و cea-uploads.tgz للسيرفر (scp)، ثم:
+docker compose exec -T db mysql -u root -p"الباسورد" cea < cea-db-backup.sql
+docker compose up -d api         # أول إقلاع بيشغّل prisma migrate deploy تلقائيًا (docker-start.sh)
+docker compose cp cea-uploads.tgz api:/tmp/
+docker compose exec api sh -c "tar xzf /tmp/cea-uploads.tgz -C /app && rm /tmp/cea-uploads.tgz"
+docker compose up -d caddy
+```
+
+### الخطوة 5 — اختبار قبل التحويل
+
+```bash
+curl https://api.yourdomain.com/health
+# المفروض: {"success":true,"status":"ok"}
+```
+
+- سجّل دخول بحساب حقيقي عبر الـ API الجديد (Postman/curl) وتأكد إن نفس الباسوردات شغالة (دليل إن القاعدة والـ JWT secrets اتنقلوا صح).
+- نزّل ملف تسليم قديم (دليل إن uploads اتنقلت صح).
+
+### الخطوة 6 — تحويل الواجهة على السيرفر الجديد
+
+عنوان الـ API مكتوب في **سطر واحد** في `app.js` (حوالي السطر 3424):
+
+```js
+const API_URL = window.CEA_API_URL || 'https://cea-backend-production-5cbe.up.railway.app';
+```
+
+غيّر الرابط إلى `https://api.yourdomain.com`، ثم من فولدر المشروع:
+
+```bash
+node build-pwa.js
+npx wrangler pages deploy pwa-dist --project-name cea-app --commit-dirty=true
+```
+
+الـ Service Worker بتاع التطبيق network-first — المستخدمين هياخدوا النسخة الجديدة تلقائيًا مع أول فتح متصل بالنت.
+
+### الخطوة 7 — فترة مراقبة ثم إيقاف Railway
+
+- **سيب Railway شغال أسبوعًا** كخطة رجوع — النقل مش بيمسح حاجة منه.
+- **مهم:** بعد التحويل مباشرة، اعتبر قاعدة Railway مجمّدة — أي شغل بيحصل بيتسجل في قاعدة Hostinger فقط، والرجوع لـ Railway بعدها هيفقد الشغل الجديد (إلا لو عملت dump عكسي).
+- بعد التأكد إن كل حاجة مستقرة: اقفل خدمتي `cea-backend` و`MySQL` من لوحة Railway (أو امسح المشروع) لإيقاف الفوترة.
+
+---
+
+## 4. حاجات لا تتغير في النقل (لا تلمسها)
+
+- **Google Apps Script** (شيتي جريني وأزاليا + الفورمين + التوقيعات) — السيرفر بيندههم برابط خارجي، شغالين مع أي استضافة.
+- **النسخة الاحتياطية اليومية DB→Drive** — جزء من كود السيرفر، هتشتغل من Hostinger تلقائيًا طالما متغيرات `GOOGLE_WEBAPP_*` متنقلة.
+- **Cloudflare Pages** — الواجهة فضلت مكانها؛ التغيير الوحيد هو سطر `API_URL`.
+- **حسابات المستخدمين وكلمات السر** — جوه القاعدة المتنقلة، ومع نفس الـ JWT secrets مفيش حد هيحس بحاجة.
+
+## 5. مشاكل متوقعة وحلولها
+
+| العرض | السبب الغالب | الحل |
+|---|---|---|
+| `api` بيعمل restart loop وأول سطر في اللوج عن migrations | `DATABASE_URL` غلط أو القاعدة لسه بتقلع | `docker compose logs api` — راجع الرابط والباسورد |
+| تسجيل الدخول شغال بس الكل اتسجل خروجه | JWT secrets اتغيرت | انسخهم من Railway حرفيًا وأعد `docker compose up -d api` |
+| CORS errors في المتصفح | `CORS_ORIGIN` ناقص أو غلط | لازم يساوي أصل الواجهة بالظبط: `https://cea-app.pages.dev` |
+| تنزيل تسليم قديم بيرجع 404 بوضوح "الملف لم يعد موجودًا" | فولدر uploads ما اتنقلش أو اتفك في مكان غلط | الملفات لازم تكون تحت `/app/uploads` جوه كونتينر الـ api |
+| الاعتمادات مش بتوصل للشيتات | متغيرات `GOOGLE_WEBAPP_*` ناقصة | انقل الأربعة كلهم، وجرّب زرار إعادة المحاولة (gsync) من التطبيق |

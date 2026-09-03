@@ -1,0 +1,18 @@
+# ريبو الواجهة (PWA) + المستندات + سكربت جوجل شيت
+# الـ backend ليه ريبو منفصل (backend/.git على GitHub) — مش جزء من الريبو ده
+backend/
+
+# مخرجات البناء والنسخ الاحتياطية وملفات التجارب
+pwa-dist/
+backups/
+debug-x/
+debug-out.xlsx
+*.bak
+*.original.md
+
+# أدوات محلية
+.wrangler/
+.claude/
+node_modules/
+.DS_Store
+Thumbs.db
