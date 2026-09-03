@@ -2709,7 +2709,7 @@ function aprBuildTable(){
     return '<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(r.user?.email?.split('@')[0]||'')+'<small>'+esc(r.user?.title||'مهندس')+'</small></td>'
-      +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\')">⬇ تحميل</button></td>'
+      +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button></td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span></td>'
       +'<td>'+aprStatusCell(r)+'</td>'
@@ -2725,7 +2725,8 @@ async function aprReview(id){
   showToast('⏳ جاري فتح الملف للمراجعة...');
   try{
     await ensureExcelJS();
-    const res=await fetch(API_URL+'/api/submissions/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    // مسار الاعتمادات (مش /submissions): المعتمد مش صاحب الملف وغالبًا مالوش وحدة التسليمات
+    const res=await fetch(API_URL+'/api/approvals/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
     if(!res.ok) throw new Error('تعذر فتح الملف');
     const buf=await res.arrayBuffer();
     const wb=new ExcelJS.Workbook();
@@ -3246,9 +3247,10 @@ async function renderMySubmissions(){
     el.innerHTML = rows.length ? rows.map(s=>subRow(s,false)).join('') : '<div class="home-empty">مفيش تسليمات بعد — ابعت أول كشف من زرار "إرسال للاعتماد"</div>';
   }catch(e){ el.innerHTML='<div class="home-empty">⚠ تعذر التحميل</div>'; }
 }
-async function downloadSubmission(id, name){
+// base: '/api/submissions' (صاحب الملف/الأدمن) أو '/api/approvals' (المعتمدين من تاب الاعتمادات)
+async function downloadSubmission(id, name, base='/api/submissions'){
   try{
-    const res=await fetch(API_URL+'/api/submissions/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    const res=await fetch(API_URL+base+'/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
     if(!res.ok) throw new Error('تعذر التنزيل');
     const blob=await res.blob(); const url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
