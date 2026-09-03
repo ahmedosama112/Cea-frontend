@@ -2352,17 +2352,33 @@ async function buildApprovedWorkbook(exp, weekBounds, pq){
   }catch(e){ showToast('⚠ خطأ في بناء الكشف: '+e.message,true); return null; }
 }
 
+// قسم "مقاولين/أماكن للتصدير المعتمد" (الذهبي) خاصية قابلة للتعطيل لكل حساب (records_export_chips).
+// لو مقفول عند المستخدم، مش هيشوفه أصلًا — فبناخد اختياره من فلتر المقاول/المكان العلوي (select دقيق) بداله،
+// عشان زرار التصدير/الإرسال ما يطلبش منه حاجة مش ظاهرة له.
+function syncExportChipsFromTopFilter(){
+  if(featureEnabled('records_export_chips')) return;
+  const {pq,cq}=getRecordFilters();
+  exportContractorChips = cq ? [cq] : [];
+  exportPlaceChips = pq ? [pq] : [];
+}
+function exportSelectionHint(){
+  return featureEnabled('records_export_chips')
+    ? '⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة'
+    : '⚠ إختار مقاول من فلتر "👷 كل المقاولين" أعلى الصفحة الأول';
+}
+
 async function exportApprovedExcel(){
   const {nq,pq,dq,cq}=getRecordFilters();
+  syncExportChipsFromTopFilter();
 
   // التحقق: لازم يتحدد مقاول أو مكان من قوائم التصدير المعتمد المخصصة
   if(!exportContractorChips.length && !exportPlaceChips.length){
-    showToast('⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة', true);
+    showToast(exportSelectionHint(), true);
     return;
   }
   // لو المستخدم محدد فلتر من الفلاتر العلوية بدون تحديد المقاولين في التصدير المعتمد
   if((nq || pq || cq) && !exportContractorChips.length){
-    showToast('⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة', true);
+    showToast(exportSelectionHint(), true);
     return;
   }
 
@@ -2478,8 +2494,9 @@ function resendSubmission(id){
 }
 async function submitApprovedForReview(){
   const {nq,pq,dq,cq}=getRecordFilters();
-  if(!exportContractorChips.length && !exportPlaceChips.length){ showToast('⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة', true); return; }
-  if((nq || pq || cq) && !exportContractorChips.length){ showToast('⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة', true); return; }
+  syncExportChipsFromTopFilter();
+  if(!exportContractorChips.length && !exportPlaceChips.length){ showToast(exportSelectionHint(), true); return; }
+  if((nq || pq || cq) && !exportContractorChips.length){ showToast(exportSelectionHint(), true); return; }
   await ensureExcelJS();
   let exp=[...records];
   if(dq) exp=exp.filter(r=>r.date===dq);
