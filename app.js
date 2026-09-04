@@ -1446,10 +1446,25 @@ async function renderAdmin(){
         <div style="flex:1;min-width:0">
           <div class="setting-name" style="direction:ltr;text-align:right">${esc(u.email)} ${presenceDot(u.lastSeenAt)}</div>
           <div class="setting-sub">${esc(u.title||(u.role==='ADMIN'?'مدير النظام':'مستخدم'))}${u.role==='ADMIN'&&u.title?' · مدير نظام':''}${u.project?' · '+(u.project==='تجاري'?'🏪':'🏠')+' '+esc(u.project):''} · 🏗️ ${esc(siteName(u.site))} · ${presenceText(u.lastSeenAt)}</div>
+          <div class="setting-sub" style="margin-top:3px">${adminSyncLine(u)}</div>
         </div>
         <button class="btn-sm-edit" onclick="adminOpenUser('${u.id}')">${u.email===getCurrentUserEmail()?'حسابي':'إدارة'}</button>
       </div>`).join('') || '<div class="home-empty">لا يوجد حسابات</div>';
   }catch(e){ list.innerHTML='<div class="home-empty">⚠ تعذر تحميل الحسابات — تأكد من الاتصال</div>'; }
+}
+// سطر السراكي في كارت الحساب: عدد السراكي على السيرفر + حالة المزامنة اللي بلّغها جهاز المهندس
+// (السجلات المتزامنة = اللي على الجهاز ناقص اللي لسه بمعرّف محلي — من آخر إبلاغ بعد مزامنة)
+function adminSyncLine(u){
+  const server = Number(u.recordsCount||0);
+  let sync = '<span class="text-muted">السجلات المتزامنة: — (الجهاز لسه ما بلّغش)</span>';
+  if(u.syncReportedAt){
+    const local = Number(u.syncLocalRecords||0), un = Number(u.syncUnsynced||0);
+    const at = new Date(u.syncReportedAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
+    sync = un>0
+      ? '<span style="color:var(--danger-fg);font-weight:700">السجلات المتزامنة: '+(local-un)+' من '+local+' — ⚠ '+un+' لسه ما اترفعش</span> <span class="text-muted">('+esc(at)+')</span>'
+      : '<span style="color:var(--ok-fg);font-weight:700">السجلات المتزامنة: '+local+' من '+local+' ✅</span> <span class="text-muted">('+esc(at)+')</span>';
+  }
+  return '📊 عدد السراكي: <b>'+server+'</b> · '+sync;
 }
 async function adminOpenUser(id){
   _adminSelected=_adminUsers.find(u=>String(u.id)===String(id)); if(!_adminSelected) return;
@@ -4921,6 +4936,10 @@ async function syncNow(){
       if(typeof renderDashboard==='function') renderDashboard();
     }
     refreshServerOldest(); // يحدّث ظهور زرار "تحميل سجلات أقدم" حسب واقع السيرفر
+    // إبلاغ السيرفر بإحصاءات الجهاز (عدد السراكي محليًا + اللي لسه ما اترفعش) — الأدمن بيشوفها في إدارة الحسابات
+    if(moduleEnabled('records')){
+      api('POST','/api/account/sync-stats',{localRecords:records.length, unsynced:records.filter(r=>isLocalId(r.id)).length}).catch(()=>{});
+    }
     if(errors>0){
       setSyncStatus('⚠ اتزامن مع '+errors+' خطأ — هيتحاول تاني تلقائيًا', '#C62828');
     } else {
