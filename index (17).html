@@ -554,6 +554,13 @@
   <div class="card">
     <div class="card-title between"><span class="t">📋 اعتمادات المديرين</span><button class="link-btn" onclick="aprHardRefresh()" title="يعيد تحميل التطبيق كله (أحدث نسخة + أحدث بيانات)">🔄 تحديث</button></div>
     <div id="apr-myrole" class="hint" style="margin-top:0"></div>
+    <!-- تكبير/تصغير الجدول — للموبايل فقط (مخفي على الكمبيوتر بالـ CSS) -->
+    <div class="apr-zoom-bar">
+      <span class="hint" style="margin:0;flex:1">حجم الجدول</span>
+      <button type="button" class="xl-tool" onclick="aprTableZoom(-0.1)">➖</button>
+      <button type="button" class="xl-tool" id="apr-zoom-label" onclick="aprTableZoomReset()">100%</button>
+      <button type="button" class="xl-tool" onclick="aprTableZoom(0.1)">➕</button>
+    </div>
     <div id="apr-scroll" class="apr-scroll"><div id="apr-table"></div></div>
   </div>
 </div>

@@ -2683,6 +2683,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let t=null; try{ t=sessionStorage.getItem('cea_reopen_tab'); sessionStorage.removeItem('cea_reopen_tab'); }catch(e){}
   if(t==='approvals'){ const tryOpen=(n)=>{ if(getAccessToken() && document.getElementById('tab-approvals')){ switchTab('approvals'); } else if(n>0) setTimeout(()=>tryOpen(n-1), 400); }; setTimeout(()=>tryOpen(10), 600); }
 });
+// تكبير/تصغير جدول الاعتمادات (الشريط ظاهر على الموبايل بس — CSS). بيتحفظ على الجهاز.
+// CSS zoom بيصغّر الجدول فعليًا (مش transform) فالتمرير والعمود المثبّت بيفضلوا مظبوطين
+let _aprTblZoom=1;
+function aprTableApplyZoom(){
+  const box=document.getElementById('apr-table'); if(box) box.style.zoom=String(_aprTblZoom);
+  const lb=document.getElementById('apr-zoom-label'); if(lb) lb.textContent=Math.round(_aprTblZoom*100)+'%';
+}
+function aprTableZoom(d){
+  _aprTblZoom=Math.min(1.3, Math.max(0.5, Math.round((_aprTblZoom+d)*10)/10));
+  try{ localStorage.setItem('cea_apr_zoom', String(_aprTblZoom)); }catch(e){}
+  aprTableApplyZoom();
+}
+function aprTableZoomReset(){ _aprTblZoom=1; try{ localStorage.removeItem('cea_apr_zoom'); }catch(e){} aprTableApplyZoom(); }
+document.addEventListener('DOMContentLoaded', ()=>{
+  try{ const z=parseFloat(localStorage.getItem('cea_apr_zoom')||''); if(z>=0.5 && z<=1.3) _aprTblZoom=z; }catch(e){}
+  aprTableApplyZoom();
+});
 function aprTabLive(){
   const tab=document.getElementById('tab-approvals');
   return !!(tab && tab.classList.contains('active') && !document.hidden && navigator.onLine && getAccessToken());

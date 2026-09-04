@@ -617,6 +617,9 @@ body.dark-mode .xl-wrap { background:#fff; }
 .modal-box.wide.fullscreen .xl-wrap { max-height:calc(100vh - 240px); }
 
 /* ─── اعتمادات المديرين ─── */
+/* شريط تكبير جدول الاعتمادات: للموبايل/الشاشات الضيقة فقط — على الكمبيوتر مخفي والجدول بحجمه الطبيعي */
+.apr-zoom-bar { display:none; align-items:center; gap:6px; margin-top:8px; }
+@media (max-width:899px){ .apr-zoom-bar { display:flex; } }
 .apr-scroll { overflow-x:auto; border:1px solid var(--border-strong); border-radius:12px; margin-top:8px; -webkit-overflow-scrolling:touch; }
 /* تاب الاعتمادات بس: على الشاشات الكبيرة (كمبيوتر) يتوسع لحد 1400px عشان الجدول يبان من غير تمرير أفقي —
    باقي التبويبات تفضل على عرض 760px المريح للقراءة */
