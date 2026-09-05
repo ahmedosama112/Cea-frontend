@@ -353,7 +353,8 @@ function onFormSubmitHandler(e) {
   const engineerName = findAnswer(CONFIG.FORM_Q_ENGINEER_NAME, ['مهندس', 'الاسم', 'إسم', 'اسم']);
   const fileUrl = findAnswer(CONFIG.FORM_Q_FILE, ['ملف', 'سركي', 'سراكي', 'حمل', 'رفع']);
   const rawProject = findAnswer(CONFIG.FORM_Q_PROJECT, ['مشروع', 'سكني', 'تجاري', 'نوع']);
-  processNewSubmission(engineerName, fileUrl, normalizeProject(rawProject));
+  // 🆘 مسار الطوارئ: الفورم = الملف مش موقّع → المسار القديم بالكامل (DC يعتمد من الشيت → توقيعات Drive → PDF)
+  processNewSubmission(engineerName, fileUrl, normalizeProject(rawProject), '', false);
 }
 
 /* توحيد قيمة المشروع من أي مصدر (فورم/تطبيق) — بيرجع '' لو مفيش اختيار صريح
@@ -368,12 +369,15 @@ function normalizeProject(v) {
 /* 🔌 نقطة الدخول من التطبيق (تُستدعى عبر Web App أو Sheets API بعد رفع الملف لـ Drive)
  * engineerName: اسم المهندس، fileUrl: رابط الإكسيل على Drive، project: 'سكني' أو 'تجاري' */
 function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
-  return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary);
+  return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary, true);
 }
 
 /* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
-   approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتماد" */
-function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
+   approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتمادات"
+   signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
+           false = جاي من الفورم (طوارئ — السيرفر واقع) → المسار القديم: "بانتظار DC"، والـ DC يعتمد من
+           خانة D فتنزل توقيعات Drive (تنفيذ + مشروع) ويتولّد الـ PDF (onEditHandler) */
+function processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -407,15 +411,22 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
     sheet.getRange(row, COLS.CONVERTED_SHEET_URL).setNote(convertedId);
 
     sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
+    if (!signed) {
+      // 🆘 صف من الفورم (طوارئ): الملف مش موقّع → نسيبه "بانتظار DC" بخانة F فاضية،
+      // والـ DC يعتمد من D زي زمان → onEditHandler بينزّل توقيعات Drive ويختم F ويطلّع الـ PDF
+      styleNewRow(sheet, row);
+      try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
+      return row;
+    }
     // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
-    // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق (لو جت — الفورم القديم ما بيبعتهاش)
+    // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق
     sealAdminApproval(sheet.getRange(row, COLS.APPROVE_PM));
     if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
 
     // 🖋 (سبتمبر 2026) الملف بيوصل **موقّعًا بالكامل** من التطبيق: توقيع كل معتمد اتختم على
     // الإكسيل قبل الإرسال (signStamp.ts)، والتحويل بيحافظ على الصور. فما بقاش فيه خطوة DC:
     // الـ PDF بيتولّد هنا على طول والصف بيبقى "معتمد بالكامل".
-    // (زرار "اعتماد DC" كان حيلة عشان التوقيعات والـ PDF ينزلوا — onEditHandler بقى للصفوف القديمة بس.)
+    // (زرار "اعتماد DC" فضل شغال للصفوف القديمة ولصفوف الفورم في الطوارئ — onEditHandler.)
     try {
       const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
       const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
@@ -435,12 +446,12 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
 }
 
 /* =====================================================================
- * 2) الاعتماد (onEdit) — ⚠ للصفوف القديمة فقط (سبتمبر 2026)
- *    الصفوف الجديدة بتوصل موقّعة بالكامل وحالتها "معتمد بالكامل ✅" فورًا،
+ * 2) الاعتماد (onEdit) — للصفوف القديمة + 🆘 صفوف الفورم في الطوارئ (سبتمبر 2026)
+ *    الصفوف الجاية من التطبيق بتوصل موقّعة بالكامل وحالتها "معتمد بالكامل ✅" فورًا،
  *    والدالة دي بتخرج من غير ما تعمل حاجة على أي صف حالته DONE.
- *    فبتشتغل بس على الصفوف اللي كانت واقفة "بانتظار DC" قبل التحديث.
- *    تتشال هي وتوابعها (دوال إدراج التوقيعات و getSignatureRowNumbers و execSignatureIdFor
- *    ومفاتيح التوقيعات في CONFIG) بعد ما ما يفضلش أي صف قديم معلّق.
+ *    بتشتغل على: الصفوف اللي كانت واقفة "بانتظار DC" قبل التحديث، وأي صف جاي من الفورم
+ *    (السيرفر واقع → المهندس بيرفع الملف من الفورم → DC يعتمد من هنا → توقيعات Drive + PDF).
+ *    ⚠ عشان كده الدالة دي ومفاتيح التوقيعات في CONFIG لازم يفضلوا — دي خطة الاسترجاع (RECOVERY-PLAN.md).
  * ===================================================================== */
 function onEditHandler(e) {
   const sheet = e.range.getSheet();
