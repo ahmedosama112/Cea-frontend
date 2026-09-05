@@ -2524,14 +2524,17 @@ function renderSheetHtml(ws, workbook){
     master[r1+':'+c1]={rs:r2-r1+1, cs:c2-c1+1};
     for(let r=r1;r<=r2;r++) for(let c=c1;c<=c2;c++){ if(r!==r1||c!==c1) covered.add(r+':'+c); }
   });
-  // صور التوقيع: الصف اللي فيها صورة
+  // صور التوقيع: الصف/العمود اللي فيه صورة. صورة مرساتها جوّه خلية مدموجة (توقيعات المديرين في الصف 16
+  // بتتوسّط جوّه البلوك فمرساتها مش أول خلية فيه) بتتنسب للخلية الرئيسية للدمج — وإلا ما كانتش بتترسم
   const imgRows=new Map();
+  const mergeMaster={}; Object.keys(master).forEach(k=>{ const [r1,c1]=k.split(':').map(Number); const m=master[k]; for(let r=r1;r<r1+m.rs;r++) for(let c=c1;c<c1+m.cs;c++) mergeMaster[r+':'+c]=k; });
   try{
     (ws.getImages ? ws.getImages() : []).forEach(im=>{
       const r=Math.floor(im.range.tl.nativeRow)+1, c=Math.floor(im.range.tl.nativeCol)+1;
+      const key=mergeMaster[r+':'+c]||(r+':'+c);
       const media=workbook.getImage ? workbook.getImage(im.imageId) : null;
-      if(media && media.base64) imgRows.set(r+':'+c, 'data:image/'+(media.extension||'png')+';base64,'+media.base64);
-      else if(media && media.buffer){ imgRows.set(r+':'+c, 'data:image/'+(media.extension||'png')+';base64,'+bytesToBase64(new Uint8Array(media.buffer))); }
+      if(media && media.base64) imgRows.set(key, 'data:image/'+(media.extension||'png')+';base64,'+media.base64);
+      else if(media && media.buffer){ imgRows.set(key, 'data:image/'+(media.extension||'png')+';base64,'+bytesToBase64(new Uint8Array(media.buffer))); }
     });
   }catch(e){}
   const widths=[]; for(let c=1;c<=colCount;c++){ const col=ws.getColumn(c); widths.push(Math.round((col.width||9)*7.2)); }
@@ -2555,7 +2558,8 @@ function renderSheetHtml(ws, workbook){
       let v=cell.value;
       if(v && typeof v==='object'){ if(v.richText) v=v.richText.map(t=>t.text).join(''); else if(v.result!==undefined) v=v.result; else if(v.text) v=v.text; else v=String(v); }
       let content = (v===null||v===undefined) ? '' : esc(String(v)).replace(/\n/g,'<br>');
-      const img=imgRows.get(r+':'+c); if(img) content='<img src="'+img+'" alt="توقيع" style="height:22px;max-width:70px;object-fit:contain">'+content;
+      // توقيع المهندس في صف البيانات صغير؛ توقيعات المديرين في البلوكات المدموجة أكبر (بنسبة الصورة، جوّه الخلية)
+      const img=imgRows.get(r+':'+c); if(img) content='<img src="'+img+'" alt="توقيع" style="'+(m.cs>1?'max-height:36px;max-width:60%;':'height:22px;max-width:70px;')+'object-fit:contain;vertical-align:middle">'+content;
       html+='<td'+(m.rs>1?' rowspan="'+m.rs+'"':'')+(m.cs>1?' colspan="'+m.cs+'"':'')+' style="'+st.join(';')+'">'+content+'</td>';
     }
     html+='</tr>';
@@ -2887,7 +2891,7 @@ function aprOpenPreview(title, wb, r){
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(r.file?.fileName||'')}</span> (${wb.worksheets.length} شيت)</div>
         </div>
         <div class="subhead" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <span>📄 الكشف كما بعته المهندس (${wb.worksheets.length} شيت)</span>
+          <span>${r.reviewState==='SENT' ? '🖋️ الكشف بعد اكتمال الاعتمادات والتوقيعات — نفس النسخة اللي وصلت جوجل شيت' : '📄 الكشف كما بعته المهندس'} (${wb.worksheets.length} شيت)</span>
           <span class="xl-tools">
             <button type="button" class="xl-tool" onclick="aprZoom(-0.15)">➖</button>
             <button type="button" class="xl-tool" id="apr-xl-zoom-label" onclick="aprZoomReset()">100%</button>
