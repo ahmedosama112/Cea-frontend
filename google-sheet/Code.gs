@@ -768,7 +768,8 @@ function doPost(e) {
       body.fileName || ('سركي_' + body.engineerName + '.xlsx')
     );
     const file = DriveApp.createFile(blob);
-    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '');
+    // signed=true: الملف جاي من التطبيق موقّعًا بالكامل → PDF فورًا و"معتمد بالكامل" (مش بانتظار DC)
+    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '', true);
     return out({ ok: true, row: row, fileId: file.getId(), fileUrl: file.getUrl() });
   } catch (err) {
     Logger.log('doPost error: ' + err);
