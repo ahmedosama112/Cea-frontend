@@ -18,7 +18,7 @@
 
 ## ✅ اتنشر مساء 5 سبتمبر 2026: الدرجات والمعتمدون المسندون + التوقيعات جوّه التطبيق
 
-> Backend `fb2c10d` على Railway (اللوجات: "Applying migration 20260905120000_grade_and_assigned_approvers … All migrations have been successfully applied"، `/health` ok). الواجهة على Cloudflare (كاش `cea-202609051737`، deployment `15f1c9c7`). قاعدة الإنتاج بعد الترحيل: 3 team leader / 1 construction manager / 2 project manager / 15 junior، صفر إسناد (صاحب المشروع هيظبطه)، الكشف 45 قيد المراجعة اتحوّل `current_approver_id=NULL` (السلوك القديم). **`Code.gs` لسه ما اتلصقش.** تحديث لاحق نفس الليلة: backend `a428d32` + واجهة كاش `cea-202609051815` (deployment `b0b95a20`) — حجم التوقيع بنسبته + معاينة الكشف الموقّع (SESSION-LOG 12.5).
+> Backend `fb2c10d` على Railway (اللوجات: "Applying migration 20260905120000_grade_and_assigned_approvers … All migrations have been successfully applied"، `/health` ok). الواجهة على Cloudflare (كاش `cea-202609051737`، deployment `15f1c9c7`). قاعدة الإنتاج بعد الترحيل: 3 team leader / 1 construction manager / 2 project manager / 15 junior، صفر إسناد (صاحب المشروع هيظبطه)، الكشف 45 قيد المراجعة اتحوّل `current_approver_id=NULL` (السلوك القديم). **`Code.gs` لسه ما اتلصقش.** تحديث لاحق نفس الليلة: backend `a428d32` + واجهة كاش `cea-202609051815` (deployment `b0b95a20`) — حجم التوقيع بنسبته + معاينة الكشف الموقّع (SESSION-LOG 12.5). وبعدها backend `fe83113` + كاش `cea-202609051832` (deployment `a7d5819d`): تبديل أماكن التوقيعات + "مدير الفريق" (12.6).
 
 ### (مرجع) الدرجات والمعتمدون المسندون
 
