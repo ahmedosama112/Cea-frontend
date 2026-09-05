@@ -3377,6 +3377,7 @@ function subRow(s, adminView){
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
       ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
+      ${adminView && isAdmin() ? '<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+s.id+'\')" title="حذف نهائي من التطبيق (الأدمن فقط)">🗑 حذف</button>' : ''}
     </div>
   </div>`;
 }
