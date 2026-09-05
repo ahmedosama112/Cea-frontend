@@ -601,8 +601,13 @@ function restoreRowHeightsForImages(ws) {
 }
 
 function insertSignatureOnAllSheets(sheetId, sigFileId, cellA1) {
+  // توقيع مش مضبوط (مفتاح فاضي / PUT_...) أو صورته اتمسحت من Drive → نتخطاه ونكمّل (الـ PDF بيتولّد برضو).
+  // كده ممكن تشيل صور التوقيعات من CONFIG وقت ما تحب والاعتماد ما يتكسرش — وترجّعها بلصق الـ ID تاني.
+  if (!sigFileId || String(sigFileId).indexOf('PUT_') === 0) { Logger.log('⚠ توقيع غير مضبوط — اتخطى: ' + cellA1); return; }
+  let blob;
+  try { blob = DriveApp.getFileById(sigFileId).getBlob(); }
+  catch (e) { Logger.log('⚠ صورة التوقيع مش موجودة في Drive (' + sigFileId + ') — اتخطى: ' + cellA1); return; }
   const ss = SpreadsheetApp.openById(sheetId);
-  const blob = DriveApp.getFileById(sigFileId).getBlob();
   ss.getSheets().forEach(ws => { try { insertSignatureImageCentered(ws, blob, cellA1); } catch (e) {} });
 }
 function insertSignatureImageCentered(ws, blob, cellA1) {
