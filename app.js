@@ -1475,6 +1475,7 @@ async function adminOpenUser(id){
   document.getElementById('admin-user-project').value=_adminSelected.project||'سكني';
   document.getElementById('admin-user-site').value=String(_adminSelected.site||1);
   adminFillGradeAndApprovers();
+  adminLoadUserSubs();
   adminDeleteCancel();
   // حذف/تغيير صلاحية حسابي أنا مش متاح من هنا
   const isMe=_adminSelected.email===getCurrentUserEmail();
@@ -3376,7 +3377,6 @@ function subRow(s, adminView){
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
       ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
-      ${!adminView && s.reviewState==='IN_REVIEW' ? '<button class="btn btn-danger btn-inline" onclick="deleteMySubmission(\''+s.id+'\')" title="بيمسح التسليم من سجلك هنا فقط">🗑 حذف من سجل تسليماتي</button>' : ''}
     </div>
   </div>`;
 }
@@ -3406,8 +3406,22 @@ async function resyncSubmission(id, btn){
     renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
   }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='☁️ إعادة الإرسال للشيت'; } }
 }
-async function deleteMySubmission(id){
-  try{ await api('DELETE','/api/submissions/'+id); showToast('🗑 اتحذف من سجلك — لو كان وصل شيت الاعتماد بيفضل موجود هناك'); renderMySubmissions(); }
+// حذف الكشف بقى للأدمن فقط من كارت الحساب في إدارة الحسابات (المهندس مابقاش يقدر يحذف بعد الإرسال)
+async function adminLoadUserSubs(){
+  const box=document.getElementById('admin-user-subs'); if(!box||!_adminSelected) return;
+  box.innerHTML='<div class="hint">⏳ ...</div>';
+  try{
+    const rows=(await api('GET','/api/submissions?userId='+_adminSelected.id+'&limit=100')).data;
+    if(!rows.length){ box.innerHTML='<div class="hint">مفيش كشوف لهذا الحساب.</div>'; return; }
+    const st=r=> r.reviewState==='IN_REVIEW' ? '⏳ قيد مراجعة المديرين ('+esc(r.currentLevel||'')+')' : r.reviewState==='RETURNED' ? '❌ مرفوض — عند المهندس' : (r.gsheetRow ? '✅ وصل الشيت (صف '+r.gsheetRow+')' : '☁️ اتبعت (لسه ما وصلش الشيت)');
+    box.innerHTML=rows.map(r=>'<div class="list-item" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'
+      +'<div><b>'+esc(r.contractorName||'')+'</b>'+(r.placeName?' · '+esc(r.placeName):'')+' <small class="text-muted">'+esc(r.weekStart)+' → '+esc(r.weekEnd)+' · rev '+String(r.revision).padStart(2,'0')+'</small><br><small>'+st(r)+'</small></div>'
+      +'<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+r.id+'\')">🗑 حذف</button></div>').join('');
+  }catch(e){ box.innerHTML='<div class="hint">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+async function adminDeleteSubmission(id){
+  if(!confirm('حذف الكشف ده نهائيًا من التطبيق؟\n\nهيتمسح من سجل المهندس ومن طابور الاعتمادات مع سجل مراجعاته. لو كان وصل جوجل شيت، الصف هناك بيفضل زي ما هو.')) return;
+  try{ await api('DELETE','/api/submissions/'+id); showToast('🗑 اتحذف'); adminLoadUserSubs(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions(); }
   catch(e){ showToast('⚠ '+e.message, true); }
 }
 // ── التسليمات (الأدمن) ──
