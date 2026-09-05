@@ -16,7 +16,11 @@
    - `20260903120000_manager_approvals` — أعمدة `users.approval_level`، `submissions.revision/review_state/current_level`، وجدول `submission_reviews`.
    - `20260903150000_backfill_review_state` — **حرجة**: بتحوّل كل الكشوف القديمة لحالة `SENT` (لأنها فعليًا اتبعتت للشيت زمان). من غيرها الكشوف القديمة كانت هتظهر "قيد مراجعة المديرين". بتتطبق تلقائيًا مع الباقي.
 
-## ⚠ النشرة الجاية: الدرجات والمعتمدون المسندون (5 سبتمبر 2026 — لسه ما اتنشرتش)
+## ✅ اتنشر مساء 5 سبتمبر 2026: الدرجات والمعتمدون المسندون + التوقيعات جوّه التطبيق
+
+> Backend `fb2c10d` على Railway (اللوجات: "Applying migration 20260905120000_grade_and_assigned_approvers … All migrations have been successfully applied"، `/health` ok). الواجهة على Cloudflare (كاش `cea-202609051737`، deployment `15f1c9c7`). قاعدة الإنتاج بعد الترحيل: 3 team leader / 1 construction manager / 2 project manager / 15 junior، صفر إسناد (صاحب المشروع هيظبطه)، الكشف 45 قيد المراجعة اتحوّل `current_approver_id=NULL` (السلوك القديم). **`Code.gs` لسه ما اتلصقش.**
+
+### (مرجع) الدرجات والمعتمدون المسندون
 
 migration `20260905120000_grade_and_assigned_approvers`:
 - `users.approval_level` **اتعاد تسميته** لـ `users.grade` (نفس القيم) وبقى `NOT NULL DEFAULT 'junior'` — أي حساب مكنش معتمد بقى `junior`.
@@ -30,7 +34,7 @@ migration `20260905120000_grade_and_assigned_approvers`:
 
 الكشوف اللي كانت في المراجعة قبل النشر ما بتتأثرش — بتكمل بالسلوك القديم.
 
-## ⚠ النشرة الجاية أيضًا: التوقيعات جوّه التطبيق (SESSION-LOG قسم 12)
+### (مرجع) التوقيعات جوّه التطبيق (SESSION-LOG قسم 12)
 
 - تبعية جديدة في الـ backend: **exceljs 4.4** (Railway هيثبتها تلقائيًا مع `npm ci`).
 - الملف بيوصل جوجل موقّعًا: توقيع كل معتمد بيتختم في `A16` (مدير التنفيذ) / `G16` (مدير المشروع) / `J16` (رئيس الفريق).
