@@ -2742,12 +2742,26 @@ function aprLevelCell(r, level){
   if(r.reviewState==='IN_REVIEW' && li>ci) return '<span class="apr-pill apr-lock">🔒 مقفول</span>';
   return '<span class="apr-pill apr-lock">—</span>';
 }
+// زرار الأدمن "إخفاء من الجدول": بيخفي الصف من طابور الاعتمادات بس — الكشف وسجل المراجعات و"تسليماتي" والشيت زي ما هم.
+// بيظهر للأدمن فقط وعلى الكشوف اللي خلصت أو اترفضت (اللي في المراجعة لازم يفضل ظاهر)
+function aprHideBtn(r){
+  if(!isAdmin()) return '';
+  return '<button class="apr-fbtn apr-hide" title="إخفاء الصف من الجدول فقط — الكشف وسجله ما بيتمسحوش" onclick="aprHide(\''+r.id+'\')">🧹 إخفاء</button>';
+}
+async function aprHide(id){
+  if(!confirm('إخفاء الصف ده من جدول الاعتمادات؟\n\nده تنظيف للعرض فقط: الكشف وسجل الاعتمادات و"تسليماتي" عند المهندس وجوجل شيت كلهم بيفضلوا زي ما هم.')) return;
+  try{
+    await api('POST','/api/approvals/'+id+'/hide');
+    showToast('🧹 اتخفى من الجدول');
+    renderApprovals();
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
 function aprStatusCell(r){
   if(r.reviewState==='RETURNED'){
     const rej=(r.reviews||[]).filter(x=>x.decision==='REJECTED').pop();
-    return '<span class="apr-pill apr-rej">❌ رجع للمهندس'+(rej?' من '+esc(rej.level):'')+'</span>';
+    return '<span class="apr-pill apr-rej">❌ رجع للمهندس'+(rej?' من '+esc(rej.level):'')+'</span>'+aprHideBtn(r);
   }
-  if(r.reviewState==='SENT') return '<span class="apr-pill apr-ok">✅ اتبعت للتوقيع</span>';
+  if(r.reviewState==='SENT') return '<span class="apr-pill apr-ok">✅ اتبعت للتوقيع</span>'+aprHideBtn(r);
   if(r.canAct) return '<div class="apr-acts">'
     + '<button class="apr-a apr-a-ok" onclick="aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED\')">!</span></button>'
     + '<button class="apr-a apr-a-notes" onclick="aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED_NOTES\')">!</span></button>'

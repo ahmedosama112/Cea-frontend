@@ -640,6 +640,8 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-ok { background:var(--ok-bg); color:var(--ok-fg); } .apr-wait { background:var(--warn-bg); color:var(--warn-fg); }
 .apr-lock { background:var(--input); color:var(--muted); } .apr-rej { background:var(--danger-bg); color:var(--danger-fg); } .apr-notes { background:var(--info-bg); color:var(--info-fg); }
 .apr-rev { font-family:monospace; font-weight:800; background:var(--input); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:11px; }
+.apr-hide { margin-inline-start:6px; opacity:.75; }
+.apr-hide:hover { opacity:1; }
 .apr-acts { display:flex; gap:5px; flex-wrap:wrap; justify-content:center; }
 .apr-a { border:none; border-radius:8px; padding:6px 9px; font-family:inherit; font-size:11px; font-weight:800; cursor:pointer; color:#fff; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
 .apr-a-ok { background:linear-gradient(135deg,#1B5E20,#2E7D32); } .apr-a-notes { background:linear-gradient(135deg,#8A6D1D,var(--gold)); color:#1A2640; } .apr-a-rej { background:#C62828; }
