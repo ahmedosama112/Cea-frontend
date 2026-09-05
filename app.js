@@ -2352,11 +2352,12 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
   styleRange(sigRow,1,sigRow,13,{font:{size:10,name:'Arial'}});
   ws.getRow(sigRow).height = 55;
 
-  // بلوك J16: كان "توقيع العامل" (فاضي دايمًا) — بقى مكان توقيع رئيس الفريق، بيتختم في السيرفر
-  // من حساب المعتمد نفسه لحظة اكتمال السلسلة (signStamp.ts)
-  ws.mergeCells(sigCapRow,10,sigCapRow,13); ws.getCell(sigCapRow,13).value = 'توقيع رئيس الفريق';
-  ws.mergeCells(sigCapRow,7,sigCapRow,9);   ws.getCell(sigCapRow,7).value = 'توقيع مدير المشروع';
-  ws.mergeCells(sigCapRow,1,sigCapRow,5);   ws.getCell(sigCapRow,5).value = 'توقيع مدير التنفيذ';
+  // بلوكات التوقيع (سبتمبر 2026): A = مدير المشروع · G = مدير التنفيذ · J = مدير الفريق (كان "توقيع العامل").
+  // التوقيعات بتتختم في السيرفر من حساب كل معتمد لحظة اكتمال السلسلة (signStamp.ts) — وبيتعرّف على
+  // البلوك من نص العنوان ده نفسه، فلو اتغيّر ترتيب البلوكات هنا السيرفر بيتبعه تلقائيًا.
+  ws.mergeCells(sigCapRow,10,sigCapRow,13); ws.getCell(sigCapRow,13).value = 'توقيع مدير الفريق';
+  ws.mergeCells(sigCapRow,7,sigCapRow,9);   ws.getCell(sigCapRow,7).value = 'توقيع مدير التنفيذ';
+  ws.mergeCells(sigCapRow,1,sigCapRow,5);   ws.getCell(sigCapRow,5).value = 'توقيع مدير المشروع';
   styleRange(sigCapRow,1,sigCapRow,13,{font:{bold:true,size:9,color:{argb:navy},name:'Arial'}});
 
   if(sigImgId!==null){
