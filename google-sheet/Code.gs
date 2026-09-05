@@ -662,9 +662,32 @@ function unhideAllRows() {
   const lastRow = sheet.getLastRow();
   if (lastRow > HEADER_ROWS) sheet.showRows(HEADER_ROWS + 1, lastRow - HEADER_ROWS);
 }
+/* 🖨 صف وصل من التطبيق موقّعًا لكن السكربت القديم كان لسه شغال وقتها فوقف "بانتظار DC":
+   اعتماد D هيحط توقيعات Drive فوق التوقيعات الموجودة (تكرار). بدل كده: حدد الصف ← القائمة ← الأمر ده
+   → PDF من الشيت المحوّل زي ما هو + "معتمد بالكامل ✅". (الصفوف الجديدة بعد لصق السكربت بتاخد PDF لوحدها.) */
+function finalizeSignedRow() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) { ui.alert('افتح شيت "' + CONFIG.SHEET_NAME + '" وحدد الصف الأول.'); return; }
+  const row = sheet.getActiveRange().getRow();
+  if (row <= HEADER_ROWS) { ui.alert('حدد صف كشف (مش الترويسة).'); return; }
+  if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) { ui.alert('الصف ده معتمد بالكامل خلاص.'); return; }
+  const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
+  if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
+  const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
+  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
+  setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+  const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
+  if (!pmCell.getValue()) sealAdminApproval(pmCell);
+  sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
+  ui.alert('✅ اتولّد الـ PDF للصف ' + row + ' والحالة بقت "معتمد بالكامل".');
+}
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('⚙ أدوات السراكي')
     .addItem('🎨 إعادة تطبيق التصميم', 'applyNewDesign')
+    .addItem('🖨 إخراج PDF لصف موقّع من التطبيق (بدون توقيعات Drive)', 'finalizeSignedRow')
     .addSeparator()
     .addItem('🙈 إخفاء بيانات الأسبوع الآن', 'hideWeeklyData')
     .addItem('👁 إظهار كل الصفوف المخفية', 'unhideAllRows')
