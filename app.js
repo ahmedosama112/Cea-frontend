@@ -1474,7 +1474,7 @@ async function adminOpenUser(id){
   document.getElementById('admin-user-role').value=_adminSelected.role||'ENGINEER';
   document.getElementById('admin-user-project').value=_adminSelected.project||'سكني';
   document.getElementById('admin-user-site').value=String(_adminSelected.site||1);
-  adminFillAprLevels(_adminSelected.approvalLevel||'');
+  adminFillGradeAndApprovers();
   adminDeleteCancel();
   // حذف/تغيير صلاحية حسابي أنا مش متاح من هنا
   const isMe=_adminSelected.email===getCurrentUserEmail();
@@ -1701,34 +1701,79 @@ async function adminSaveProject(){
     showToast('✅ اتحفظ — كشوفه الجاية هتتبعت كمشروع '+project);
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
-// مستويات الاعتماد — تُحمّل مرة في renderAdmin وتُملأ في دروب داون الحساب
-let _aprLevelsAdmin=[];
+// الدرجات وسلسلة الاعتماد — تُحمّل مرة في renderAdmin وتُستخدم في كارت الحساب
+// الدرجة بتحدد المستويات المطلوبة (المصفوفة)، وكل مستوى بيتسند له شخص بعينه لكل حساب على حدة.
+let _aprMeta={grades:[],levels:[],matrix:{},approvers:[],solePmId:null};
+const GRADE_LABELS={
+  'junior':'مهندس — junior',
+  'senior':'مهندس أول — senior',
+  'team leader':'مدير فريق — team leader',
+  'construction manager':'مدير تنفيذ — construction manager',
+  'project manager':'مدير مشروع — project manager'
+};
+const APR_LEVEL_UI={
+  'team leader':{field:'approverTlId', label:'مدير الفريق'},
+  'construction manager':{field:'approverCmId', label:'مدير التنفيذ'},
+  'project manager':{field:'approverPmId', label:'مدير المشروع'}
+};
+function gradeLabel(g){ return GRADE_LABELS[g]||g||'—'; }
 async function loadAprLevelsAdmin(){
-  try{ _aprLevelsAdmin=(await api('GET','/api/admin/approval-levels')).data; }catch(e){ _aprLevelsAdmin=[]; }
-  const i1=document.getElementById('aprlevels-input'); if(i1&&document.activeElement!==i1) i1.value=_aprLevelsAdmin.join(' | ');
+  try{ _aprMeta=(await api('GET','/api/admin/approval-levels')).data; }catch(e){ _aprMeta={grades:[],levels:[],matrix:{},approvers:[],solePmId:null}; }
+  const box=document.getElementById('apr-matrix');
+  if(box) box.innerHTML=(_aprMeta.grades||[]).map(g=>{
+    const chain=(_aprMeta.matrix||{})[g]||[];
+    return '<div class="apr-mx-row"><b>'+esc(gradeLabel(g))+'</b><span>'
+      +(chain.length? chain.map(l=>esc(APR_LEVEL_UI[l]?APR_LEVEL_UI[l].label:l)).join(' ← ') : 'محدش بيعتمد له — الكشف بيروح جوجل شيت فورًا')
+      +'</span></div>';
+  }).join('');
 }
-function adminFillAprLevels(current){
-  const sel=document.getElementById('admin-user-aprlevel'); if(!sel) return;
-  sel.innerHTML='<option value="">مش معتمد</option>'+_aprLevelsAdmin.map(l=>`<option value="${esc(l)}">${esc(l)}</option>`).join('');
-  sel.value=current||'';
+// كارت الحساب: دروب داون الدرجة + دروب داون معتمد لكل مستوى مطلوب لدرجته
+function adminFillGradeAndApprovers(){
+  const u=_adminSelected; if(!u) return;
+  const sel=document.getElementById('admin-user-grade');
+  if(sel){
+    sel.innerHTML=(_aprMeta.grades||[]).map(g=>`<option value="${esc(g)}">${esc(gradeLabel(g))}</option>`).join('');
+    sel.value=u.grade||'junior';
+  }
+  const chain=(_aprMeta.matrix||{})[u.grade||'junior']||[];
+  const hint=document.getElementById('admin-grade-hint');
+  if(hint) hint.innerHTML = chain.length
+    ? ('سلسلة اعتماد كشوفه: <b>'+chain.map(l=>esc(APR_LEVEL_UI[l]?APR_LEVEL_UI[l].label:l)).join(' ← ')+'</b>')
+    : 'محدش بيعتمد لكشوفه — بتروح جوجل شيت فورًا.';
+  const box=document.getElementById('admin-user-approvers'); if(!box) return;
+  if(!chain.length){ box.innerHTML='<p class="hint" style="margin:0">مفيش مستويات اعتماد لدرجته.</p>'; return; }
+  box.innerHTML=chain.map(l=>{
+    const ui=APR_LEVEL_UI[l]; const cur=u[ui.field]?String(u[ui.field]):'';
+    const opts=(_aprMeta.approvers||[]).filter(a=>a.grade===l&&String(a.id)!==String(u.id))
+      .map(a=>`<option value="${esc(String(a.id))}"${String(a.id)===cur?' selected':''}>${esc(a.title||a.email.split('@')[0])} — ${esc(a.email)}</option>`).join('');
+    // مدير المشروع الوحيد في النظام بيتحدد تلقائيًا من غير إسناد صريح
+    const auto = l==='project manager' && !cur && _aprMeta.solePmId;
+    const empty = auto ? '<option value="">(تلقائي — مدير المشروع الوحيد)</option>' : '<option value="">— مش محدد (المستوى ده هيتخطى) —</option>';
+    const warn = (!cur && !auto) ? '<div class="apr-miss">⚠ مالوش '+esc(ui.label)+' — المستوى ده هيتخطى في سلسلته</div>' : '';
+    return '<div class="add-row" style="margin-top:4px"><span class="hint" style="white-space:nowrap;min-width:74px">'+esc(ui.label)+':</span>'
+      +'<select id="apr-sel-'+ui.field+'">'+empty+(opts||'')+'</select>'
+      +'<button class="btn btn-navy btn-inline" onclick="adminSaveApprover(\''+ui.field+'\')">💾</button></div>'+warn;
+  }).join('');
 }
-async function adminSaveAprLevel(){
+async function adminSaveGrade(){
   if(!_adminSelected) return;
-  const approvalLevel=document.getElementById('admin-user-aprlevel').value||null;
+  const grade=document.getElementById('admin-user-grade').value;
   try{
-    const r=await api('PATCH',`/api/admin/users/${_adminSelected.id}`,{approvalLevel});
-    _adminSelected.approvalLevel=r.data.approvalLevel;
-    showToast(approvalLevel?('✅ بقى معتمد في مستوى '+approvalLevel):'✅ اتشال من المعتمدين');
+    const r=await api('PATCH',`/api/admin/users/${_adminSelected.id}`,{grade});
+    Object.assign(_adminSelected, {grade:r.data.grade, approverTlId:r.data.approverTlId, approverCmId:r.data.approverCmId, approverPmId:r.data.approverPmId});
+    await loadAprLevelsAdmin(); // الدرجة اتغيرت → قوائم المعتمدين المتاحة اتغيرت كمان
+    adminFillGradeAndApprovers();
+    showToast('✅ اتحفظت الدرجة: '+gradeLabel(grade));
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
-async function adminSaveAprLevelNames(){
-  const raw=document.getElementById('aprlevels-input').value.split('|').map(s=>s.trim()).filter(Boolean);
-  if(!raw.length){ showToast('⚠ اكتب مستوى واحد على الأقل', true); return; }
+async function adminSaveApprover(field){
+  if(!_adminSelected) return;
+  const v=document.getElementById('apr-sel-'+field).value;
   try{
-    const r=await api('PUT','/api/admin/approval-levels',{levels:raw});
-    _aprLevelsAdmin=r.data;
-    if(_adminSelected) adminFillAprLevels(_adminSelected.approvalLevel||'');
-    showToast('✅ اتحفظت المستويات بالترتيب: '+r.data.join(' → '));
+    const r=await api('PATCH',`/api/admin/users/${_adminSelected.id}`,{[field]: v||null});
+    Object.assign(_adminSelected, {approverTlId:r.data.approverTlId, approverCmId:r.data.approverCmId, approverPmId:r.data.approverPmId});
+    adminFillGradeAndApprovers();
+    showToast(v?'✅ اتحفظ المعتمد':'✅ اتشال الإسناد — المستوى هيتخطى');
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
 async function adminSaveSite(){
@@ -2666,7 +2711,7 @@ function sheetTimeline(s){
 }
 /* ═══════════ اعتمادات المديرين (وحدة approvals — أونلاين فقط) ═══════════
    سلسلة مراجعة داخل التطبيق قبل ما الكشف ينزل جوجل شيت. */
-let _aprLevels=[], _aprActiveLevels=[], _aprMyLevel=null, _aprRows=[];
+let _aprLevels=[], _aprMyLevel=null, _aprRows=[];
 const APR_TIPS={
   APPROVED:['اعتماد','معتمد بدون ملاحظات — الكشف يفتح للمعتمد اللي بعده في السلسلة.'],
   APPROVED_NOTES:['اعتماد بملاحظات','معتمد مع ملاحظة — بيكمل للمعتمد اللي بعده برضو. الملاحظة بتتسجل، مش بترجع للمهندس.'],
@@ -2678,10 +2723,11 @@ async function renderApprovals(){
   try{
     const [lv, q]=await Promise.all([api('GET','/api/approvals/levels'), api('GET','/api/approvals/queue')]);
     _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel;
-    // المستويات النشطة (اللي ليها معتمد فعلًا) — "آخر معتمد" بيتحسب عليها، لأن المستوى من غير معتمد بيتخطى
-    _aprActiveLevels=Array.isArray(q.activeLevels)?q.activeLevels:_aprLevels;
     const roleEl=document.getElementById('apr-myrole');
-    if(roleEl) roleEl.innerHTML = _aprMyLevel ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b>') : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى':'مالكش مستوى اعتماد محدد');
+    const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
+    if(roleEl) roleEl.innerHTML = isApprover
+      ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b> — بتشوف كشوف المهندسين المسندين لك')
+      : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'مالكش دور اعتماد');
     aprBuildTable();
   }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
 }
@@ -2737,9 +2783,12 @@ function aprLevelCell(r, level){
     return '<span class="apr-pill apr-ok">✅ معتمد</span>';
   }
   if(r.reviewState==='IN_REVIEW' && r.currentLevel===level) return '<span class="apr-pill apr-wait">⏳ '+(r.canAct?'دورك':'منتظر')+'</span>';
+  // مستوى مش في سلسلة صاحب الكشف أصلًا (درجته مش محتاجاه، أو مفيش معتمد مسند له)
+  const chain=Array.isArray(r.chain)?r.chain:_aprLevels;
+  if(chain.indexOf(level)===-1) return '<span class="apr-pill apr-lock" title="مش مطلوب في سلسلة المهندس ده">·</span>';
   // مستوى لسه ما وصلوش
-  const li=_aprLevels.indexOf(level), ci=_aprLevels.indexOf(r.currentLevel);
-  if(r.reviewState==='IN_REVIEW' && li>ci) return '<span class="apr-pill apr-lock">🔒 مقفول</span>';
+  const li=chain.indexOf(level), ci=chain.indexOf(r.currentLevel);
+  if(r.reviewState==='IN_REVIEW' && ci>=0 && li>ci) return '<span class="apr-pill apr-lock">🔒 مقفول</span>';
   return '<span class="apr-pill apr-lock">—</span>';
 }
 // زرار الأدمن "إخفاء من الجدول": بيخفي الصف من طابور الاعتمادات بس — الكشف وسجل المراجعات و"تسليماتي" والشيت زي ما هم.
@@ -2865,12 +2914,12 @@ let _aprPending=null;
 function aprAsk(id, decision){
   const r=_aprRows.find(x=>String(x.id)===String(id)); if(!r) return;
   _aprPending={id, decision};
-  // "آخر معتمد" بيتحسب على المستويات النشطة (اللي ليها معتمد) — المستوى الفاضي بيتخطى فمايتحسبش
-  const ai=_aprActiveLevels.indexOf(r.currentLevel);
-  const isStuck=ai===-1; // المستوى الحالي مش من النشطة (اتعاد تسميته) — الأدمن بس يقدر يحرّكه
-  const isLast=!isStuck && ai===_aprActiveLevels.length-1;
+  // "آخر معتمد" و"معلّق" بيتحسبوا في السيرفر لكل كشف على حدة (سلسلة صاحب الكشف مش سلسلة عامة)
+  const chain=Array.isArray(r.chain)?r.chain:[];
+  const isStuck=!!r.isStuck; // المستوى الحالي خرج من سلسلة صاحب الكشف — الأدمن بس يقدر يحرّكه
+  const isLast=!!r.isLast;
   if(decision==='APPROVED'){
-    if(isStuck) aprOpenModal('#8A6D1D','⚠ الكشف واقف عند مستوى مش موجود في السلسلة','المستوى "'+(r.currentLevel||'')+'" اتعدّل اسمه أو اتشال. الاعتماد هيحرّك الكشف '+(_aprActiveLevels.length?('لأول مستوى نشط ("'+_aprActiveLevels[0]+'").'):'ويبعته لجوجل شيت لأنه مفيش معتمدين مضبوطين.'),'💾 تحريك الكشف','var(--gold)', false, '#1A2640');
+    if(isStuck) aprOpenModal('#8A6D1D','⚠ الكشف واقف عند مستوى خرج من سلسلته','المستوى "'+(r.currentLevel||'')+'" مابقاش في سلسلة اعتماد المهندس ده (درجته أو المعتمدين المسندين له اتغيّروا). الاعتماد هيحرّك الكشف '+(chain.length?('لأول مستوى في سلسلته الحالية ("'+esc(chain[0])+'").'):'ويبعته لجوجل شيت لأنه مفيش معتمدين مسندين له.'),'💾 تحريك الكشف','var(--gold)', false, '#1A2640');
     else if(isLast) aprOpenModal('#1B5E20','✅ إرسال للاعتماد والتوقيع؟','ده آخر اعتماد. الكشف هيتبعت لجوجل شيت للتوقيع النهائي والـ PDF. تأكيد؟','💾 إرسال للتوقيع','#2E7D32');
     else aprOpenModal('#1B5E20','✅ تأكيد الاعتماد؟','الكشف هيتعتمد ويفتح للمعتمد اللي بعده في السلسلة.','💾 اعتماد','#2E7D32');
   }

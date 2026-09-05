@@ -212,12 +212,16 @@
       <button class="btn btn-navy btn-inline" onclick="adminSaveSite()">💾 حفظ الموقع</button>
     </div>
     <p class="hint" style="margin-top:4px">كل موقع ليه جوجل شيت واعتمادات مديرين مختلفة — كشوف المهندس بتروح لشيت موقعه.</p>
-    <div class="subhead" style="margin-top:8px">🖋️ مستوى الاعتماد (اعتمادات المديرين)</div>
+    <div class="subhead" style="margin-top:8px">🎖️ الدرجة (بتحدد مين يعتمد له)</div>
     <div class="add-row" style="margin-top:2px">
-      <select id="admin-user-aprlevel"><option value="">مش معتمد</option></select>
-      <button class="btn btn-navy btn-inline" onclick="adminSaveAprLevel()">💾 حفظ</button>
+      <select id="admin-user-grade"></select>
+      <button class="btn btn-navy btn-inline" onclick="adminSaveGrade()">💾 حفظ الدرجة</button>
     </div>
-    <p class="hint" style="margin-top:4px">لو خليته معتمد، فعّل له كمان وحدة "اعتمادات المديرين" من القائمة تحت عشان التاب يظهرله. رتّب المستويات من كارت "مستويات الاعتماد".</p>
+    <p class="hint" id="admin-grade-hint" style="margin-top:4px"></p>
+
+    <div class="subhead" style="margin-top:8px">🖋️ المعتمدون لهذا الحساب</div>
+    <div id="admin-user-approvers"></div>
+    <p class="hint" style="margin-top:4px">لو الحساب درجته من درجات الاعتماد، فعّل له كمان وحدة "اعتمادات المديرين" من القائمة تحت عشان التاب يظهرله.</p>
 
     <div class="subhead">🧩 الوحدات الظاهرة لهذا الحساب</div>
     <div id="admin-user-modules"></div>
@@ -309,10 +313,9 @@
   </div>
 
   <div class="card">
-    <div class="card-title"><span>🖋️</span> مستويات الاعتماد</div>
-    <p class="hint" style="margin-top:0">مستويات اعتماد المديرين بالترتيب (الأول يراجع أولًا). افصل بينها بعلامة | — مثال: team leader | construction manager | project manager</p>
-    <input type="text" id="aprlevels-input" placeholder="team leader | construction manager | project manager" style="width:100%">
-    <button class="btn btn-navy btn-inline mt8" onclick="adminSaveAprLevelNames()">💾 حفظ المستويات</button>
+    <div class="card-title"><span>🖋️</span> سلسلة الاعتماد حسب الدرجة</div>
+    <p class="hint" style="margin-top:0">الدرجات ثابتة، والاعتماد بيمشي بالترتيب ده. الشخص نفسه في كل مستوى بيتحدد لكل حساب على حدة من كارت الحساب فوق.</p>
+    <div id="apr-matrix"></div>
   </div>
 
   <div class="card">

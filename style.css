@@ -682,3 +682,10 @@ body.dark-mode .xl-wrap { background:#fff; }
 .inv-addbtn { position:sticky; bottom:76px; z-index:5; width:100%; min-height:50px; border:none; border-radius:var(--radius-sm); background:linear-gradient(135deg,#8A6D1D,var(--gold)); color:#fff; font-size:14.5px; font-weight:900; font-family:inherit; box-shadow:0 6px 18px rgba(201,168,76,.4); cursor:pointer; margin-top:6px; }
 .inv-f label { display:block; font-size:11.5px; font-weight:800; color:var(--muted); margin-bottom:4px; margin-top:10px; }
 .inv-row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+/* سلسلة الاعتماد حسب الدرجة (شاشة الإدارة) + تحذير المعتمد الناقص في كارت الحساب */
+.apr-mx-row { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; padding:6px 0; border-bottom:1px dashed var(--border); font-size:12px; }
+.apr-mx-row:last-child { border-bottom:none; }
+.apr-mx-row b { min-width:210px; color:var(--gold-text); }
+.apr-mx-row span { color:var(--muted); font-weight:700; }
+.apr-miss { font-size:11.5px; font-weight:800; color:var(--danger-fg); background:var(--danger-bg); border-radius:8px; padding:4px 8px; margin:4px 0 0; }
