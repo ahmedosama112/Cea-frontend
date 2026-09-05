@@ -3296,19 +3296,25 @@ function subRow(s, adminView){
     if(rej) rejBox='<div class="s" style="font-size:11.5px;color:var(--danger-fg);margin-top:2px;font-weight:700">❌ تم الرفض من '+esc(rej.level)+(rej.note?' — السبب: '+esc(rej.note):'')+'</div>';
   }
   else if(s.reviewState==='SENT'){ /* عدّى المديرين — نسيب حالة جوجل (DC) زي ما هي فوق */ }
+  // ملاحظات المعتمدين على النسخة الحالية (اعتماد بملاحظات): بتتسجل وبتكمل السلسلة — وبتظهر للمهندس هنا عشان يعرفها
+  const notes=(s.reviews||[]).filter(x=>x.revision===(s.revision||0) && x.decision==='APPROVED_NOTES' && x.note);
+  const notesBox = notes.length
+    ? '<div class="s" style="font-size:11.5px;margin-top:3px;padding:6px 8px;background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;line-height:1.7">'
+      + notes.map(x=>'📝 <b>'+esc(x.level)+'</b> اعتمد بملاحظة: '+esc(x.note)).join('<br>')+'</div>'
+    : '';
   const who = adminView ? '<div class="s">👤 '+esc(s.user?.email||'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
   return `<div class="setting-item" style="flex-direction:column;align-items:stretch;gap:6px">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
-      <div style="min-width:0;flex:1">
-        <div class="setting-name">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">
+      <div style="min-width:0;flex:1 1 240px">
+        <div class="setting-name" style="white-space:normal;line-height:1.5">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
         <div class="setting-sub">الأسبوع ${esc(s.weekStart)} → ${esc(s.weekEnd)} · ${s.recordsCount} سجل · ${fmt(s.total)} ج.م</div>
         ${who}
         <div class="s" style="font-size:11px;color:var(--muted)">أُرسل ${esc(new Date(s.createdAt).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}))}${s.engineerNote?' · 📝 '+esc(s.engineerNote):''}</div>
-        ${rejBox}
+        ${rejBox}${notesBox}
         ${s.reviewNote?'<div class="s" style="font-size:11.5px;color:var(--text);margin-top:2px">💬 رد المراجعة: '+esc(s.reviewNote)+'</div>':''}
         ${s.reviewState==='SENT'?sheetTimeline(s):''}
       </div>
-      <span class="pill" style="background:${st.bg};color:${st.c};font-size:10.5px;padding:3px 8px;border-radius:999px;white-space:nowrap;font-weight:800">${st.t}</span>
+      <span class="pill" style="background:${st.bg};color:${st.c};font-size:10.5px;padding:3px 8px;border-radius:999px;white-space:normal;max-width:100%;flex:0 1 auto;font-weight:800">${st.t}</span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
