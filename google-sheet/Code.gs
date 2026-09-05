@@ -158,6 +158,7 @@ const STATUS = {
 
 const SIG_CELL_EXEC = 'A16';
 const SIG_CELL_PM   = 'G16';
+const SIG_CELL_TL   = 'J16'; // كان بلوك "توقيع العامل" — بقى توقيع رئيس الفريق (بيوصل مختوم من التطبيق)
 
 /* =====================================================================
  * 🎨 التصميم — يُطبَّق مرة على الموجود (applyNewDesign) وتلقائيًا على كل صف جديد
@@ -409,6 +410,21 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
     // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق (لو جت — الفورم القديم ما بيبعتهاش)
     sealAdminApproval(sheet.getRange(row, COLS.APPROVE_PM));
     if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
+
+    // 🖋 (سبتمبر 2026) الملف بيوصل **موقّعًا بالكامل** من التطبيق: توقيع كل معتمد اتختم على
+    // الإكسيل قبل الإرسال (signStamp.ts)، والتحويل بيحافظ على الصور. فما بقاش فيه خطوة DC:
+    // الـ PDF بيتولّد هنا على طول والصف بيبقى "معتمد بالكامل".
+    // (زرار "اعتماد DC" كان حيلة عشان التوقيعات والـ PDF ينزلوا — onEditHandler بقى للصفوف القديمة بس.)
+    try {
+      const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+      const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
+      setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+      sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
+    } catch (err) {
+      // فشل توليد الـ PDF مايضيّعش الصف — الملف المحوّل موجود ويتولّد منه PDF يدويًا
+      Logger.log('توليد PDF: ' + err);
+      sheet.getRange(row, COLS.STATUS).setValue('⚠ اتحوّل بس الـ PDF فشل — جرّب تاني');
+    }
     styleNewRow(sheet, row);
     // سلسلة الاعتماد بتيجي سطر لكل اعتماد → الصف ياخد ارتفاعه الطبيعي بدل ما السطور تتقطع عند 42px
     if (approvalSummary) fitApprovalChainRow(sheet, row);
@@ -418,7 +434,12 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary) {
 }
 
 /* =====================================================================
- * 2) الاعتماد (onEdit) — نفس المنطق القديم بالظبط مع القيم العربية
+ * 2) الاعتماد (onEdit) — ⚠ للصفوف القديمة فقط (سبتمبر 2026)
+ *    الصفوف الجديدة بتوصل موقّعة بالكامل وحالتها "معتمد بالكامل ✅" فورًا،
+ *    والدالة دي بتخرج من غير ما تعمل حاجة على أي صف حالته DONE.
+ *    فبتشتغل بس على الصفوف اللي كانت واقفة "بانتظار DC" قبل التحديث.
+ *    تتشال هي وتوابعها (دوال إدراج التوقيعات و getSignatureRowNumbers و execSignatureIdFor
+ *    ومفاتيح التوقيعات في CONFIG) بعد ما ما يفضلش أي صف قديم معلّق.
  * ===================================================================== */
 function onEditHandler(e) {
   const sheet = e.range.getSheet();
@@ -521,6 +542,7 @@ function prepareApprovalSlots(sheetId) {
   SpreadsheetApp.openById(sheetId).getSheets().forEach(ws => {
     try { ws.getRange(SIG_CELL_EXEC).setValue(''); } catch (e) {}
     try { ws.getRange(SIG_CELL_PM).setValue(''); } catch (e) {}
+    try { ws.getRange(SIG_CELL_TL).setValue(''); } catch (e) {}
   });
 }
 
@@ -549,7 +571,7 @@ function fixTextWrapping(sheetId) {
 }
 function getSignatureRowNumbers(ws) {
   const rows = new Set();
-  [SIG_CELL_EXEC, SIG_CELL_PM].forEach(a1 => {
+  [SIG_CELL_EXEC, SIG_CELL_PM, SIG_CELL_TL].forEach(a1 => {
     try {
       let range = ws.getRange(a1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
       for (let r = range.getRow(); r < range.getRow() + range.getNumRows(); r++) rows.add(r);
