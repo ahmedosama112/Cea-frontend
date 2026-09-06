@@ -1152,6 +1152,7 @@ function renderRecords(){
         <span class="badge">⚒ ${esc(r.qty)} ${esc(r.qtyType||'')} × ${fmt(r.price)}</span>
         ${r.discount>0?`<span class="badge badge-warn">خصم ${fmt(r.discount)}</span>`:''}
       </div>
+      ${r.syncError?`<div class="record-notes" style="background:var(--danger-bg);color:var(--danger-fg);font-weight:800">⚠ السجل ده ما اترفعش للسيرفر — ${esc(r.syncError)}. عدّله بالقلم ✏️ وهيترفع لوحده.</div>`:''}
       ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
       ${da.length?`<div class="deduct-box"><b>🔴 بالخصم على: ${esc(da.join(' ، '))}</b>${r.deductNote?`<br><span class="note">📌 ${esc(r.deductNote)}</span>`:''}</div>`:''}
       <div class="done-toggle exclude-toggle ${r.done?'on':''}" onclick="toggleDone(${r.id})"><div class="box">${r.done?'✗':''}</div><span>${r.done?'مش هيتسجل في شيت الإكسيل المعتمد':'عايز تحذف السجل من شيت الإكسيل المعتمد؟'}</span></div>
@@ -4595,7 +4596,7 @@ async function api(method, path, body, _retried, _rlTries){
   try{ data=await res.json(); }catch(e){ /* استجابة غير JSON */ }
   if(!res.ok){
     const err=new Error((data&&data.message)||('HTTP '+res.status));
-    err.status=res.status; err.code=data&&data.code;
+    err.status=res.status; err.code=data&&data.code; err.details=data&&data.details;
     throw err;
   }
   return data;
@@ -4842,6 +4843,7 @@ const SERVER_TO_LOCAL={
   '/api/daily-records': r=>({id:Number(r.id), date:ymdOf(r.date), day:r.day, contractor:r.contractor||'', spec:r.spec||'', work:r.work||'', place:r.place||'', photoFileId:r.photoFileId?Number(r.photoFileId):null}),
 };
 
+const SYNC_FIELD_AR={day:'اليوم',date:'التاريخ',contractor:'المقاول',spec:'المهنة',qty:'الكمية',qtyType:'نوع الكمية',price:'السعر',discount:'الخصم',place:'المكان',notes:'الملاحظات',deductOn:'بالخصم على',deductNote:'ملاحظة الخصم'};
 async function mirrorPushById(entity, arr, base, bodyFn){
   const snap=snapOf(entity);
   const newSnap={};
@@ -4867,9 +4869,11 @@ async function mirrorPushById(entity, arr, base, bodyFn){
           usedServerIds.add(item.id);
           newSnap[item.id]=h;
         }
+        delete item.syncError;
       } else if(snap[item.id]!==h){
         await api('PUT', base+'/'+item.id, b);
         newSnap[item.id]=h;
+        delete item.syncError;
       } else {
         newSnap[item.id]=h;
       }
@@ -4879,6 +4883,12 @@ async function mirrorPushById(entity, arr, base, bodyFn){
         staleIds.add(String(item.id));
       } else {
         errors++; if(!isLocalId(item.id)) newSnap[item.id]=snap[item.id];
+        // السيرفر رفض البيانات نفسها (400): السبب يتخزن على السجل ويظهر على كارته — بدل ما يفضل
+        // "لسه ما اترفعش" من غير ما المهندس يعرف ليه (كان بيتعاد كل 20 ثانية للأبد بصمت)
+        if(e.status===400){
+          const d=Array.isArray(e.details)&&e.details.length ? e.details.slice(0,2).map(x=>SYNC_FIELD_AR[x.path]||x.path?(SYNC_FIELD_AR[x.path]||x.path)+': '+x.message:x.message).join(' · ') : e.message;
+          item.syncError=d;
+        }
       }
     }
   }
