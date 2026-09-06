@@ -1476,6 +1476,7 @@ async function adminOpenUser(id){
   document.getElementById('admin-user-site').value=String(_adminSelected.site||1);
   adminFillGradeAndApprovers();
   adminLoadUserSubs();
+  adminLoadActivity();
   adminDeleteCancel();
   // حذف/تغيير صلاحية حسابي أنا مش متاح من هنا
   const isMe=_adminSelected.email===getCurrentUserEmail();
@@ -3420,6 +3421,32 @@ async function adminLoadUserSubs(){
       +'<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+r.id+'\')">🗑 حذف</button></div>').join('');
   }catch(e){ box.innerHTML='<div class="hint">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
 }
+// سجل نشاط الحساب — دخول/مزامنة/أخطاء، عشان الأدمن يعرف مصدر المشكلة (السيرفر ولا جهاز المهندس)
+const ACT_LABEL={
+  LOGIN_OK:['✅','تسجيل دخول ناجح'],
+  LOGIN_FAIL:['⛔','محاولة دخول فاشلة'],
+  SYNC:['🔄','مزامنة'],
+  API_ERR:['⚠️','خطأ في طلب'],
+};
+async function adminLoadActivity(){
+  const box=document.getElementById('admin-user-activity'); if(!box||!_adminSelected) return;
+  box.innerHTML='<div class="hint">⏳ ...</div>';
+  try{
+    const rows=(await api('GET','/api/admin/activity?userId='+_adminSelected.id+'&limit=60')).data;
+    if(!rows.length){ box.innerHTML='<div class="hint">مفيش نشاط مسجّل (السجل بيحتفظ بآخر 14 يوم).</div>'; return; }
+    box.innerHTML=rows.map(r=>{
+      const [ic,lbl]=ACT_LABEL[r.event]||['•',r.event];
+      const when=new Date(r.createdAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
+      const bad=r.event==='LOGIN_FAIL'||r.event==='API_ERR';
+      return '<div class="list-item" style="padding:6px 8px">'
+        +'<div style="font-size:12px;font-weight:800;color:'+(bad?'var(--danger-fg)':'var(--text)')+'">'+ic+' '+esc(lbl)
+        +(r.status?' <span class="apr-rev">'+r.status+'</span>':'')+'</div>'
+        +(r.detail?'<div style="font-size:11.5px;color:var(--muted)">'+esc(r.detail)+'</div>':'')
+        +'<div style="font-size:10.5px;color:var(--muted)">'+esc(when)+(r.path?' · '+esc(r.path):'')+(r.device?' · '+esc(r.device):'')+'</div>'
+        +'</div>';
+    }).join('');
+  }catch(e){ box.innerHTML='<div class="hint">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
 async function adminDeleteSubmission(id){
   if(!confirm('حذف الكشف ده نهائيًا من التطبيق؟\n\nهيتمسح من سجل المهندس ومن طابور الاعتمادات مع سجل مراجعاته. لو كان وصل جوجل شيت، الصف هناك بيفضل زي ما هو.')) return;
   try{ await api('DELETE','/api/submissions/'+id); showToast('🗑 اتحذف'); adminLoadUserSubs(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions(); }
@@ -5064,15 +5091,19 @@ async function pullAll(opts){
   const cutoff=isoDateMonthsAgo(SYNC_WINDOW_MONTHS);
 
   // السجلات: نافذة آخر شهرين (أو الكل)، مع pagination
-  let rows=[], page=1, total=Infinity;
-  while(rows.length<total){
-    const res=await api('GET','/api/records?'+(fullHistory?'':'date_from='+cutoff+'&')+'limit=500&page='+page+'&sort=date&dir=desc');
-    total=res.data.total;
-    if(!res.data.rows.length) break;
-    rows=rows.concat(res.data.rows);
-    page++;
+  // الحسابات اللي مالهاش وحدة "السراكي" (المعتمدين مثلًا) السيرفر بيرجّع لها 403 —
+  // ما ينفعش نطلبها أصلًا، وإلا المزامنة كلها بتفشل وتظهر "تعذر الاتصال بالسيرفر" وهو مفيش مشكلة اتصال
+  if(moduleEnabled('records')){
+    let rows=[], page=1, total=Infinity;
+    while(rows.length<total){
+      const res=await api('GET','/api/records?'+(fullHistory?'':'date_from='+cutoff+'&')+'limit=500&page='+page+'&sort=date&dir=desc');
+      total=res.data.total;
+      if(!res.data.rows.length) break;
+      rows=rows.concat(res.data.rows);
+      page++;
+    }
+    records=rows.map(mapApiRecord);
   }
-  records=rows.map(mapApiRecord);
 
   // الموديولات المعطّلة للمستخدم بترجع 403 من السيرفر — ما ينفعش فشل موديول واحد يوقّع الاستعادة كلها.
   // نسحب كل كيان على حدة: المعطّل/الفاشل يرجع null ونسيب نسخته المحلية زي ما هي.
@@ -5145,9 +5176,13 @@ async function initialSync(){
       // أول مرة الجهاز ده يتصل بالسيرفر الجديد
       let serverHasData=false;
       try{
-        const probe=await api('GET','/api/records?limit=1');
-        serverHasData=probe.data.total>0 || (await api('GET','/api/contractors')).data.length>0;
-      }catch(e){ setSyncStatus('⚠ تعذر الاتصال بالسيرفر', '#C62828'); return; }
+        // نفس السبب: الحساب بلا وحدة السراكي بيرجّع 403 — نتخطى الفحص بدل ما نعتبره فشل اتصال
+        const probe=moduleEnabled('records') ? await api('GET','/api/records?limit=1') : null;
+        serverHasData=(probe && probe.data.total>0) || (await api('GET','/api/contractors')).data.length>0;
+      }catch(e){
+        if(e.status===403){ setSyncStatus('✅ متزامن — الحساب ده مالوش سراكي', '#2E7D32'); return; }
+        setSyncStatus('⚠ تعذر الاتصال بالسيرفر', '#C62828'); return;
+      }
       if(serverHasData && localHasData){
         // بيانات هنا وهناك ومفيش snapshot (حالة الترحيل من النسخة القديمة):
         // السيرفر فيه نسختك المستوردة الكاملة — الاستعادة منه هي الأأمن
