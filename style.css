@@ -697,3 +697,9 @@ body.dark-mode .xl-wrap { background:#fff; }
 .act-table th:first-child { z-index:2; background:var(--navy); }
 .act-table td:first-child { background:var(--card); }
 .act-table .apr-pill { font-size:10px; padding:3px 7px; }
+
+/* الجدول ما ياخدش مساحة كبيرة في شاشة الإدارة: يظهر ~3 حسابات والباقي تمرير رأسي،
+   والترويسة لاصقة فوق (وعمود الحساب لاصق يمين) فالأعمدة تفضل مفهومة أثناء التمرير */
+.act-scroll { max-height:282px; overflow-y:auto; }
+.act-table thead th { position:sticky; top:0; z-index:3; }
+.act-table th:first-child { top:0; z-index:4; }
