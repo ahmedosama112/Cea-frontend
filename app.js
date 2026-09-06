@@ -1234,6 +1234,8 @@ const ALL_FEATURES=[
   // الاعتمادات — زرار Google Form لكل موقع (الاسم بيتحدث تلقائيًا من أسماء المواقع)
   {key:'gform_site1',       label:'زرار Google Form — الموقع الأول', group:'الاعتمادات'},
   {key:'gform_site2',       label:'زرار Google Form — الموقع الثاني', group:'الاعتمادات'},
+  // سراكي المعدات — كارت الإعدادات (المقاول الثابت + الموقع في راس الكشف) مش في الافتراضي: الأدمن يظهره ليظبط ثم يخفيه
+  {key:'equipment_settings', label:'إعدادات السركي الشهري (المقاول الثابت + الموقع)', group:'سراكي المعدات'},
   {key:'set_appearance',    label:'المظهر (الوضع الداكن)',       group:'الإعدادات'},
   {key:'set_contractors',   label:'إدارة المقاولين',            group:'الإعدادات'},
   {key:'set_places',        label:'إدارة أماكن الأعمال',        group:'الإعدادات'},
@@ -1249,7 +1251,7 @@ const ALL_FEATURES=[
   {key:'set_danger',        label:'منطقة الخطر (حذف/تهيئة)',    group:'الإعدادات'},
 ];
 const FEATURE_KEYS=ALL_FEATURES.map(f=>f.key);
-const DEFAULT_FEATURES=FEATURE_KEYS.filter(k=>!['set_danger','set_records_import','set_items_import','gform_site2'].includes(k));
+const DEFAULT_FEATURES=FEATURE_KEYS.filter(k=>!['set_danger','set_records_import','set_items_import','gform_site2','equipment_settings'].includes(k));
 // قوايم قديمة متحفوظة بالمفتاح الموحّد 'records_filters' (قبل فصله لبحث/ترتيب/تصدير معتمد) — بنترجمها للمفاتيح الجديدة
 function migrateFeatureList(list){
   if(!Array.isArray(list)||!list.includes('records_filters')) return list;

@@ -783,9 +783,9 @@
     <button class="btn btn-navy" style="flex:1" onclick="exportEquipmentExcel()">📄 تنزيل Excel</button>
   </div>
 
-  <!-- إعدادات السركي الشهري (محلية على الجهاز): المقاول الثابت + الموقع اللي بيتكتب في راس الكشف -->
-  <details class="card" id="eq-settings" style="margin-top:12px">
-    <summary style="cursor:pointer;font-weight:900;font-size:13.5px">⚙️ إعدادات السركي الشهري</summary>
+  <!-- إعدادات السركي الشهري (محلية على الجهاز) — كارت مستقل بفيتشر equipment_settings: الأدمن يظهره عشان يظبط الإعدادات على جهاز المهندس ثم يخفيه -->
+  <div class="card" id="eq-settings" data-feature="equipment_settings" style="margin-top:12px">
+    <div class="card-title"><span>⚙️</span> إعدادات السركي الشهري</div>
     <div class="field" style="margin-top:10px">
       <label>👷 المقاول / المورد الثابت</label>
       <select id="eq-fixed-contractor" onchange="eqSaveFixedContractor()"><option value="">— بدون (اختار كل مرة) —</option></select>
@@ -801,7 +801,7 @@
       <button class="btn btn-navy btn-inline" onclick="eqAddSite()">➕ إضافة</button>
     </div>
     <div id="eq-site-chips" class="chips"></div>
-  </details>
+  </div>
 </div>
 
 <!-- ══ IR ══ -->
