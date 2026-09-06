@@ -430,6 +430,7 @@ function populateDropdowns() {
   fillSelect('f-contractor','<option value="">-- اختر المقاول --</option>',contractorOpts());
   ['f-place','ir-place','todo-place','eq-place'].forEach(id=>fillSelect(id,'<option value="">-- اختر المكان --</option>',placeOpts()));
   fillSelect('eq-contractor','<option value="">-- اختر المقاول / المورد --</option>',contractorOpts());
+  fillSelect('eq-deduct-on-select','<option value="">-- اختر مقاول --</option>',contractorOpts());
   fillSelect('search-place','<option value="">📍 كل الأماكن</option>',placeOpts());
   fillSelect('search-contractor-filter','<option value="">👷 كل المقاولين</option>',contractorOpts());
   fillSelect('f-deduct-on-select','<option value="">-- اختر مقاول --</option>',contractorOpts());
@@ -2754,6 +2755,23 @@ async function confirmSubmitApproved(){
    مفيش فلوس — كشف تشغيل (ساعات). الكشف الشهري: ملف Excel واحد، ورقة لكل 5 أيام تقويمية
    بنفس هوية الكشف الأسبوعي وبنفس أماكن بلوكات التوقيع (الصف 16/17) عشان يعدّي على اعتمادات المديرين وختم التوقيعات. */
 let eqMonthOffset = 0;
+let eqShowAll = false; // "كل الشهور": القائمة بتعرض كل السجلات — الكشف بيفضل على الشهر المعروض في المتصفح
+// بالخصم على (شيبس) — نفس فكرة السركي الأسبوعي
+let eqDeductChips=[];
+function eqRenderDeductChips(){
+  const wrap=document.getElementById('eq-deduct-chips'); if(!wrap) return;
+  wrap.innerHTML=eqDeductChips.map(n=>'<span class="chip">'+esc(n)+' <button type="button" onclick="eqRemoveDeductChip('+jsArg(n)+')" title="إزالة">✕</button></span>').join('');
+  const nw=document.getElementById('eq-deduct-note-wrap'); if(nw) nw.style.display = eqDeductChips.length ? '' : 'none';
+}
+function eqAddDeductChip(){ const sel=document.getElementById('eq-deduct-on-select'); if(!sel||!sel.value) return; if(!eqDeductChips.includes(sel.value)) eqDeductChips.push(sel.value); sel.value=''; eqRenderDeductChips(); }
+function eqRemoveDeductChip(n){ eqDeductChips=eqDeductChips.filter(x=>x!==n); eqRenderDeductChips(); }
+function eqSetDeductChips(arr){ eqDeductChips=Array.isArray(arr)?[...arr]:[]; eqRenderDeductChips(); }
+function syncEqShowAllUI(){
+  const btn=document.getElementById('eq-show-all-btn'), nav=document.getElementById('eq-month-nav');
+  if(btn){ btn.classList.toggle('on', eqShowAll); btn.textContent = eqShowAll ? '✅ كل الشهور' : '📋 كل الشهور'; }
+  if(nav) nav.classList.toggle('all-mode', eqShowAll);
+}
+function toggleEqShowAll(){ eqShowAll=!eqShowAll; syncEqShowAllUI(); renderEquipment(); }
 const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 // حدود "شهر المعدات": من 20 الشهر لـ 19 اللي بعده. اليوم < 20 → إحنا لسه في شهر بدأ الشهر اللي فات
 function getEqMonthBounds(offset){
@@ -2851,21 +2869,22 @@ function renderEqMonthNav(){
   if(lbl) lbl.textContent = eqMonthOffset===0 ? '📅 الشهر الحالي' : eqMonthOffset===-1 ? '📅 الشهر الماضي' : eqMonthOffset<0 ? `📅 قبل ${Math.abs(eqMonthOffset)} شهور` : `📅 بعد ${eqMonthOffset} شهور`;
   if(rng) rng.textContent = eqMonthLabel(b);
 }
-function shiftEqMonth(dir){ eqMonthOffset+=dir; renderEqMonthNav(); renderEquipment(); }
-function resetEqMonth(){ eqMonthOffset=0; renderEqMonthNav(); renderEquipment(); }
+function shiftEqMonth(dir){ eqShowAll=false; syncEqShowAllUI(); eqMonthOffset+=dir; renderEqMonthNav(); renderEquipment(); }
+function resetEqMonth(){ eqShowAll=false; syncEqShowAllUI(); eqMonthOffset=0; renderEqMonthNav(); renderEquipment(); }
 
 function saveEquipment(){
   const date=document.getElementById('eq-date').value, contractor=document.getElementById('eq-contractor').value.trim(),
         equipment=document.getElementById('eq-equipment').value.trim(), place=document.getElementById('eq-place').value.trim(),
         timeFrom=document.getElementById('eq-from').value, timeTo=document.getElementById('eq-to').value,
-        works=document.getElementById('eq-works').value.trim(), notes=document.getElementById('eq-notes').value.trim();
+        works=document.getElementById('eq-works').value.trim(), notes=document.getElementById('eq-notes').value.trim(),
+        deductOn=[...eqDeductChips], deductNote=eqDeductChips.length ? document.getElementById('eq-deduct-note').value.trim() : '';
   if(!date){showToast('⚠ اختر التاريخ',true);return;}
   if(!contractor){showToast('⚠ اختر المقاول / المورد',true);return;}
   if(!equipment){showToast('⚠ المقاول ده مالوش تخصص (نوع المعدة) — حدده من إدارة المقاولين في الإعدادات',true);return;}
   if(!place){showToast('⚠ اختر المكان',true);return;}
   if(!timeFrom||!timeTo){showToast('⚠ حدد الوقت من وإلى',true);return;}
   const day=dayNameOf(date), minutes=eqMinutes(timeFrom,timeTo);
-  const data={date,day,contractor,equipment,place,timeFrom,timeTo,minutes,works,notes};
+  const data={date,day,contractor,equipment,place,timeFrom,timeTo,minutes,works,notes,deductOn,deductNote};
   if(eqEditingId!==null){
     const idx=equipmentRecords.findIndex(r=>r.id===eqEditingId);
     if(idx!==-1) equipmentRecords[idx]={...equipmentRecords[idx],...data};
@@ -2886,6 +2905,7 @@ function clearEqForm(keepHeader){
   document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD());
   document.getElementById('eq-place').value=''; document.getElementById('eq-from').value=''; document.getElementById('eq-to').value='';
   document.getElementById('eq-works').value=''; document.getElementById('eq-notes').value=''; eqCalcDuration();
+  eqSetDeductChips([]); document.getElementById('eq-deduct-note').value='';
   eqApplyFixedContractor();
 }
 function editEquipment(id){
@@ -2895,6 +2915,7 @@ function editEquipment(id){
   document.getElementById('eq-contractor').value=r.contractor; document.getElementById('eq-equipment').value=r.equipment;
   document.getElementById('eq-place').value=r.place; document.getElementById('eq-from').value=r.timeFrom; document.getElementById('eq-to').value=r.timeTo;
   document.getElementById('eq-works').value=r.works||''; document.getElementById('eq-notes').value=r.notes||''; eqCalcDuration();
+  eqSetDeductChips(r.deductOn||[]); document.getElementById('eq-deduct-note').value=r.deductNote||'';
   document.getElementById('eq-edit-banner').classList.add('show'); document.getElementById('eq-save-btn').textContent='💾 حفظ التعديل';
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -2911,29 +2932,31 @@ function eqRepeatLast(){
   document.getElementById('eq-contractor').value=last.contractor; eqFillEquipment(); if(!document.getElementById('eq-equipment').value) document.getElementById('eq-equipment').value=last.equipment;
   document.getElementById('eq-place').value=last.place; document.getElementById('eq-from').value=last.timeFrom; document.getElementById('eq-to').value=last.timeTo;
   document.getElementById('eq-works').value=last.works||''; document.getElementById('eq-notes').value='';
+  eqSetDeductChips(last.deductOn||[]); document.getElementById('eq-deduct-note').value=last.deductNote||'';
   document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD()); eqCalcDuration();
   showToast('🔁 اتنسخ آخر يوم — راجع التاريخ والوقت واضغط تسجيل');
 }
 // السجلات في الشهر المعروض (وبالمعدة المختارة لو فيه فلتر)
-function eqMonthRecords(){
+// سجلات الشهر المعروض (للكشف دايمًا)، أو كل السجلات لو "كل الشهور" مفعّل (للقائمة بس)
+function eqMonthRecords(forSheet){
   const {start,end}=getEqMonthBounds(eqMonthOffset); const s=toYMD(start), e=toYMD(end);
-  const eqf=(document.getElementById('eq-filter-equipment')?.value||'');
-  return equipmentRecords.filter(r=>r.date>=s && r.date<=e && (!eqf || r.equipment===eqf)).sort((a,b)=>a.date.localeCompare(b.date)||String(a.timeFrom).localeCompare(String(b.timeFrom)));
+  const all = eqShowAll && !forSheet;
+  return equipmentRecords.filter(r=> all || (r.date>=s && r.date<=e)).sort((a,b)=>a.date.localeCompare(b.date)||String(a.timeFrom).localeCompare(String(b.timeFrom)));
 }
 function eqSheetsCount(b){ const days=Math.round((b.end-b.start)/86400000)+1; return Math.ceil(days/5); }
 function renderEquipment(){
   const list=document.getElementById('eq-list'); if(!list) return;
   renderEqMonthNav(); renderEqSettings(); eqLoadSiteNames();
-  // فلتر المعدات في الشهر (من كل الأسماء المستخدمة)
-  const names=[...new Set(equipmentRecords.map(r=>r.equipment).filter(Boolean))].sort();
-  const fsel=document.getElementById('eq-filter-equipment');
-  if(fsel){ const cur=fsel.value; fsel.innerHTML='<option value="">🚜 كل المعدات</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join(''); }
+  syncEqShowAllUI();
   const b=getEqMonthBounds(eqMonthOffset);
   const rows=eqMonthRecords();
   const days=new Set(rows.map(r=>r.date)).size, mins=rows.reduce((a,r)=>a+(Number(r.minutes)||0),0);
   const totalDays=Math.round((b.end-b.start)/86400000)+1;
+  const eqCount=new Set(rows.map(r=>r.equipment)).size;
   const sum=document.getElementById('eq-summary');
-  if(sum) sum.innerHTML=`<div><b>${days} / ${totalDays}</b><small>يوم تشغيل</small></div><div><b>${fmtMinutes(mins)}</b><small>إجمالي الساعات</small></div><div><b>${eqSheetsCount(b)}</b><small>ورقات (5 أيام)</small></div>`;
+  if(sum) sum.innerHTML = eqShowAll
+    ? `<div><b>${days}</b><small>يوم تشغيل (كل الشهور)</small></div><div><b>${fmtMinutes(mins)}</b><small>إجمالي الساعات</small></div><div><b>${eqCount}</b><small>معدة</small></div>`
+    : `<div><b>${days} / ${totalDays}</b><small>يوم تشغيل</small></div><div><b>${fmtMinutes(mins)}</b><small>إجمالي الساعات</small></div><div><b>${eqSheetsCount(b)*Math.max(1,eqCount)}</b><small>ورقات (5 أيام${eqCount>1?' × '+eqCount+' معدة':''})</small></div>`;
   const cnt=document.getElementById('eq-count'); if(cnt) cnt.textContent=rows.length+' سطر';
   if(!rows.length){ list.innerHTML=`<div class="empty-state"><div class="icon">🚜</div><p>${equipmentRecords.length?'مفيش تشغيل مسجّل في الشهر ده':'لسه مفيش أيام تشغيل — سجّل أول يوم من الفورم فوق'}</p></div>`; return; }
   list.innerHTML=[...rows].reverse().map(r=>`<div class="record-card eq-card">
@@ -2946,6 +2969,7 @@ function renderEquipment(){
         </div>
       </div>
       <div class="record-meta"><span class="badge">⏰ ${esc(r.timeFrom)} → ${esc(r.timeTo)}</span>${r.works?'<span class="badge">🧱 '+esc(r.works)+'</span>':''}</div>
+      ${(r.deductOn&&r.deductOn.length)?`<div class="record-notes">💸 بالخصم على: ${esc(r.deductOn.join('، '))}${r.deductNote?' — '+esc(r.deductNote):''}</div>`:''}
       ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
     </div>`).join('');
 }
@@ -2956,7 +2980,7 @@ function renderEquipment(){
 function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStart, dayEnd, sigImgId, equipmentName, contractorName, monthMinutes, monthDays, siteLabel){
   const ws = workbook.addWorksheet((pageIdx+1)+'- '+String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,26), {
     pageSetup:{paperSize:9, orientation:'landscape', fitToPage:true}, views:[{rightToLeft:true}] });
-  ws.columns=[{width:16},{width:9},{width:9},{width:9},{width:9},{width:9},{width:9},{width:8},{width:8},{width:14},{width:8},{width:12},{width:10}];
+  ws.columns=[{width:14},{width:13},{width:8},{width:8},{width:8},{width:8},{width:9},{width:8},{width:8},{width:13},{width:8},{width:12},{width:10}];
   const thin={style:'thin', color:{argb:'FF999999'}}, allBorders={top:thin,left:thin,right:thin,bottom:thin};
   const centerWrap={vertical:'middle', horizontal:'center', wrapText:true, readingOrder:'rtl'};
   const navy='FF1F3864', gold='FFC9A84C';
@@ -2991,7 +3015,7 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
   ws.getRow(5).height=20;
 
   const headerRow=7;
-  [[13,13,'التاريخ'],[12,12,'اليوم'],[10,11,'المكان'],[8,9,'الوقت (من – إلى)'],[7,7,'المدة'],[2,6,'بيان الأعمال'],[1,1,'ملاحظات']].forEach(([c1,c2,label])=>{
+  [[13,13,'التاريخ'],[12,12,'اليوم'],[10,11,'المكان'],[8,9,'الوقت (من – إلى)'],[7,7,'المدة'],[3,6,'بيان الأعمال'],[2,2,'بالخصم على'],[1,1,'ملاحظات']].forEach(([c1,c2,label])=>{
     if(c1!==c2) ws.mergeCells(headerRow,c1,headerRow,c2); ws.getCell(headerRow,c1).value=label; });
   styleRange(headerRow,1,headerRow,13,{font:{bold:true,size:10,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy}); ws.getRow(headerRow).height=22;
 
@@ -2999,7 +3023,7 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
   for(let i=0;i<5;i++){
     const row=headerRow+1+i;
     const d=new Date(dayStart); d.setDate(dayStart.getDate()+i);
-    ws.mergeCells(row,10,row,11); ws.mergeCells(row,8,row,9); ws.mergeCells(row,2,row,6);
+    ws.mergeCells(row,10,row,11); ws.mergeCells(row,8,row,9); ws.mergeCells(row,3,row,6);
     if(d<=dayEnd){
       const ymd=toYMD(d), recs=exp.filter(r=>r.date===ymd);
       ws.getCell(row,13).value=ymd; ws.getCell(row,12).value=dayNameOf(ymd);
@@ -3009,7 +3033,9 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
         ws.getCell(row,8).value=recs.map(r=>RLM+r.timeFrom+' – '+r.timeTo).join('\n');
         const m=recs.reduce((a,r)=>a+(Number(r.minutes)||0),0); pageMinutes+=m;
         ws.getCell(row,7).value=RLM+fmtMinutes(m);
-        ws.getCell(row,2).value=recs.map(r=>r.works).filter(Boolean).join(' / ');
+        ws.getCell(row,3).value=recs.map(r=>r.works).filter(Boolean).join(' / ');
+        const dOn=[...new Set(recs.flatMap(r=>Array.isArray(r.deductOn)?r.deductOn:[]))], dNotes=[...new Set(recs.map(r=>r.deductNote).filter(Boolean))].join(' / ');
+        ws.getCell(row,2).value=[dOn.join(' ، '), dNotes].filter(Boolean).join('\n');
         ws.getCell(row,1).value=recs.map(r=>r.notes).filter(Boolean).join(' / ');
       }
     }
@@ -3036,42 +3062,45 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
   }
   return pageMinutes;
 }
-async function buildEquipmentWorkbook(exp, bounds, equipmentName){
+// ملف واحد للشهر: لكل معدة في الشهر مجموعة ورقات (ورقة لكل 5 أيام) ورا بعض — زي كشف المقاولين المتعددين الأسبوعي
+async function buildEquipmentWorkbook(exp, bounds){
   try{
     const workbook=new ExcelJS.Workbook();
     let sigImgId=null;
     if(engineerSignature){ const m=engineerSignature.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/); if(m) sigImgId=workbook.addImage({base64:m[2], extension:m[1]==='jpg'?'jpeg':m[1]}); }
-    const contractorNames=[...new Set(exp.map(r=>r.contractor).filter(Boolean))];
-    const contractorName=contractorNames.join('، ');
-    const monthMinutes=exp.reduce((a,r)=>a+(Number(r.minutes)||0),0), monthDays=new Set(exp.map(r=>r.date)).size;
     const siteLabel=eqCurrentSite();
     const pages=eqSheetsCount(bounds);
-    for(let p=0;p<pages;p++){
-      const ds=new Date(bounds.start); ds.setDate(bounds.start.getDate()+p*5);
-      const de=new Date(ds); de.setDate(ds.getDate()+4); if(de>bounds.end) de.setTime(bounds.end.getTime());
-      buildEquipmentSheet(workbook, exp, bounds, p, pages, ds, de, sigImgId, equipmentName, contractorName, monthMinutes, monthDays, siteLabel);
-    }
+    const equipmentNames=[...new Set(exp.map(r=>r.equipment).filter(Boolean))].sort();
+    const contractorNames=[...new Set(exp.map(r=>r.contractor).filter(Boolean))];
+    let sheetsCount=0;
+    equipmentNames.forEach(eqName=>{
+      const grp=exp.filter(r=>r.equipment===eqName);
+      const contractorName=[...new Set(grp.map(r=>r.contractor).filter(Boolean))].join('، ');
+      const monthMinutes=grp.reduce((a,r)=>a+(Number(r.minutes)||0),0), monthDays=new Set(grp.map(r=>r.date)).size;
+      for(let p=0;p<pages;p++){
+        const ds=new Date(bounds.start); ds.setDate(bounds.start.getDate()+p*5);
+        const de=new Date(ds); de.setDate(ds.getDate()+4); if(de>bounds.end) de.setTime(bounds.end.getTime());
+        buildEquipmentSheet(workbook, grp, bounds, p, pages, ds, de, sigImgId, eqName, contractorName, monthMinutes, monthDays, siteLabel);
+        sheetsCount++;
+      }
+    });
     const buffer=await workbook.xlsx.writeBuffer();
     const wkStart=toYMD(bounds.start), wkEnd=toYMD(bounds.end);
-    const safe=String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').trim();
+    const monthMinutes=exp.reduce((a,r)=>a+(Number(r.minutes)||0),0), monthDays=new Set(exp.map(r=>r.date)).size;
+    const label = equipmentNames.length===1 ? equipmentNames[0] : equipmentNames.length+' معدات';
+    const safe=String(label||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').trim();
     const fileName=`سركي_معدات_${safe}_${wkStart}_${wkEnd}.xlsx`;
-    return { buffer, fileName, sheetsCount:pages, contractorNames:[contractorName], wkStart, wkEnd,
-      total: Math.round(monthMinutes/60*100)/100, recordsCount: monthDays, placesLabel: equipmentName, buildLabel: safe, workbook, kind:'equipment', monthMinutes, monthDays, siteLabel };
+    return { buffer, fileName, sheetsCount, contractorNames:[contractorNames.join('، ')], wkStart, wkEnd,
+      total: Math.round(monthMinutes/60*100)/100, recordsCount: monthDays, placesLabel: equipmentNames.join('، '), buildLabel: safe, workbook, kind:'equipment', monthMinutes, monthDays, siteLabel, equipmentNames };
   }catch(e){ showToast('⚠ خطأ في بناء الكشف: '+e.message,true); return null; }
 }
-// اختيار المعدة للكشف: الفلتر لو محدد، أو المعدة الوحيدة في الشهر، وإلا لازم يختار
+// الكشف = الشهر المعروض في المتصفح (حتى لو "كل الشهور" مفعّل للقائمة) — كل معدات الشهر في ملف واحد
 async function prepareEquipmentSheet(){
   await ensureExcelJS();
   const bounds=getEqMonthBounds(eqMonthOffset);
-  let rows=eqMonthRecords();
-  if(!rows.length){ showToast('⚠ مفيش أيام تشغيل مسجّلة في الشهر ده', true); return null; }
-  let eqName=document.getElementById('eq-filter-equipment')?.value||'';
-  if(!eqName){
-    const names=[...new Set(rows.map(r=>r.equipment))];
-    if(names.length>1){ showToast('⚠ فيه أكتر من معدة في الشهر ده — اختار المعدة من فلتر "🚜 كل المعدات" الأول', true); return null; }
-    eqName=names[0]; rows=rows.filter(r=>r.equipment===eqName);
-  }
-  const built=await buildEquipmentWorkbook(rows, bounds, eqName);
+  const rows=eqMonthRecords(true);
+  if(!rows.length){ showToast('⚠ مفيش أيام تشغيل مسجّلة في الشهر ده ('+eqMonthLabel(bounds)+')', true); return null; }
+  const built=await buildEquipmentWorkbook(rows, bounds);
   return built ? {built, rows} : null;
 }
 async function exportEquipmentExcel(){
@@ -3100,7 +3129,7 @@ function openEquipmentReview(b, exp, canSend){
           <div><strong>المعدة:</strong> ${esc(b.placesLabel||'')} · <strong>المقاول:</strong> ${esc(b.contractorNames.join('، '))}</div>
           <div><strong>الشهر:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)} · <strong>الموقع:</strong> ${esc(b.siteLabel||'')}</div>
           <div><strong>أيام التشغيل:</strong> ${b.monthDays} · <strong>إجمالي الساعات:</strong> ${fmtMinutes(b.monthMinutes)}</div>
-          <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(b.fileName)}</span> (${b.sheetsCount} ورقة — كل ورقة 5 أيام)</div>
+          <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(b.fileName)}</span> (${b.sheetsCount} ورقة — كل ورقة 5 أيام${(b.equipmentNames||[]).length>1?'، لكل معدة':''})</div>
         </div>
         <div class="subhead" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <span>📄 الكشف كما ${canSend?'هيتبعت':'هيطلع'} (${b.sheetsCount} ورقة)</span>
@@ -5189,11 +5218,13 @@ function irBody(r){
 // سركي المعدات — المدة (minutes) مش في الـ body: السيرفر بيحسبها من الوقت، والجهاز بيحسب نفس القيمة محليًا
 function eqBody(r){
   return { date:r.date||'', day:r.day||'', contractor:r.contractor||'', equipment:r.equipment||'', place:r.place||'',
-    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', works:r.works||'', notes:r.notes||'' };
+    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', works:r.works||'', notes:r.notes||'',
+    deductOn:Array.isArray(r.deductOn)?r.deductOn:[], deductNote:r.deductNote||'' };
 }
 function mapApiEquipment(r){
   return { id:Number(r.id), date:ymdOf(r.date), day:r.day||'', contractor:r.contractor||'', equipment:r.equipment||'', place:r.place||'',
-    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', minutes:Number(r.minutes)||0, works:r.works||'', notes:r.notes||'' };
+    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', minutes:Number(r.minutes)||0, works:r.works||'', notes:r.notes||'',
+    deductOn:Array.isArray(r.deductOn)?r.deductOn:[], deductNote:r.deductNote||'' };
 }
 function execBody(e){
   const stages=e.stages||[];

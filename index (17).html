@@ -722,7 +722,7 @@
     </div>
     <div class="week-nav-actions">
       <button class="pill gold" onclick="resetEqMonth()">📅 الشهر الحالي</button>
-      <select id="eq-filter-equipment" class="pill" style="text-align:center" onchange="renderEquipment()"><option value="">🚜 كل المعدات</option></select>
+      <button class="pill" onclick="toggleEqShowAll()" id="eq-show-all-btn">📋 كل الشهور</button>
     </div>
   </div>
   <div class="edit-banner" id="eq-edit-banner">
@@ -759,6 +759,15 @@
       <select id="eq-place"><option value="">-- اختر المكان --</option></select>
     </div>
     <div class="field"><label>بيان الأعمال</label><textarea id="eq-works" rows="2" placeholder="مثال: حفر أساسات + نقل ناتج الحفر للمقلب"></textarea></div>
+    <div class="field">
+      <label>بالخصم على</label>
+      <select id="eq-deduct-on-select" onchange="eqAddDeductChip()"><option value="">-- اختر مقاول --</option></select>
+      <div id="eq-deduct-chips" class="chips"></div>
+    </div>
+    <div class="field" id="eq-deduct-note-wrap" style="display:none">
+      <label>ملاحظة الخصم</label>
+      <input type="text" id="eq-deduct-note" placeholder="مثال: خصم بسبب تأخير..." maxlength="255">
+    </div>
     <div class="field"><label>ملاحظات</label><input type="text" id="eq-notes" placeholder="مثال: وقفت ساعة عطل هيدروليك" maxlength="500"></div>
   </div>
   <div class="actions-block" style="display:flex;gap:8px;flex-wrap:wrap">
