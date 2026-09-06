@@ -12,7 +12,7 @@
 > 7. **سجل نشاط الحسابات** — جدول `activity_logs` (دخول ناجح/فاشل، مزامنة، أخطاء API بهوية صاحب الطلب)، كارت "📊 نشاط الحسابات" بجدول كل الحسابات + قسم سجل في كارت الحساب، تنظيف بعد 14 يوم. التفاصيل في **قسم 14**.
 > 8. **إصلاحات من الاستخدام الحقيقي:** `'unsafe-eval'` في CSP (ExcelJS 4.3 بتحتاجه)، محمّل مكتبات يتحقق من الـ global ويتخطى كاش الـ SW ويرجع للـ CDN، الـ SW لا يكاش `lib/*.js` إلا لو رد JS حقيقي، المزامنة ما بتطلبش `/api/records` لحساب بلا وحدة السراكي (كانت بتطلع "تعذر الاتصال" بالغلط)، حذف الكشوف بقى للأدمن فقط، إحصاءات مزامنة الجهاز (`POST /api/account/sync-stats`)، معاينة الكشف بترتيب الأعمدة الطبيعي (A يسار) وبتوقيعات المديرين ظاهرة.
 > 9. **الواجهة بقت في git** — ريبو بجذر المشروع (بلا remote)، `.gitignore` بيستثني `backend/` (ريبو مستقل على GitHub) و`pwa-dist/` و`backups/` والـ `.bak`.
-> 10. **وحدة "🚜 سركي المعدات" (`equipment`) — مبنية ومختبرة محليًا مساء 2026-09-06، غير منشورة بعد:** كشف تشغيل شهري (20→19) لمعدة مؤجّرة، ورقة لكل 5 أيام، يعدّي على نفس دورة الاعتماد بـ `submissions.kind=equipment`. التفاصيل في **قسم 16** و[SESSION-LOG.md](SESSION-LOG.md) قسم 14.
+> 10. **وحدة "🚜 سركي المعدات" (`equipment`) — منشورة ليلة 2026-09-06 (backend `e6c38e3`، واجهة كاش `cea-202609061924`)، مخفية حتى يفعّلها الأدمن:** كشف تشغيل شهري (20→19) لمعدة مؤجّرة، ورقة لكل 5 أيام، يعدّي على نفس دورة الاعتماد بـ `submissions.kind=equipment`. التفاصيل في **قسم 16** و[SESSION-LOG.md](SESSION-LOG.md) قسم 14.
 
 > **تحديث 2026-09-01:** ملخص ما بعد 2026-08-26 (السرد الزمني الكامل في [SESSION-LOG.md](SESSION-LOG.md)):
 > 1. **إصلاحات جوهرية في محرك المزامنة** (`mirrorPushByName`/`pullManagedData`) — انظر التنبيه المضاف في قسم 5.28: الحذف من السيرفر مشروط بمعرفة الجهاز للاسم في snapshot، لا إحياء للمحذوف غير المعدّل محليًا، والمقاولون/الاستشاريون/البنود بيتسحبوا دوريًا للجميع (الأدمن كمان).
@@ -86,7 +86,7 @@ E:\fabel max cea project\
 └── backend/                              — الـ Backend (Node/TS/Express/Prisma/MySQL)
     ├── prisma/schema.prisma              — 26 جدول (انظر backend/README.md وقسم 9.1)
     ├── prisma/seed.ts                    — بيانات افتراضية + أول أدمن
-    ├── prisma/migrations/                — 21 migration (آخرها 20260906200000_equipment_records — غير منشورة بعد)
+    ├── prisma/migrations/                — 21 migration (آخرها 20260906200000_equipment_records)
     ├── scripts/
     │   ├── import-backup.ts              — استيراد نسخة التطبيق المحلية القديمة (صيغة CEA_backup_*)
     │   ├── restore-backup.ts             — ⭐ استعادة كاملة من الباك اب اليومي (كل الحسابات بنفس الأرقام) — مُختبر
@@ -278,7 +278,7 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت مح
 | القرار | `aprAsk` (يقرأ `isLast`/`isStuck`/`chain` من السيرفر لكل كشف), `aprOpenModal`/`aprCloseModal` (بيعيدوا تفعيل زرار التأكيد — كان بيفضل disabled), `aprConfirm` (`POST /api/approvals/:id/decide`), `aprTip` (`APR_TIPS`) |
 | تنظيف العرض (أدمن) | `aprHideBtn`, `aprHide` (`POST /api/approvals/:id/hide` — يخفي الصف من الطابور فقط، للكشوف `SENT`/`RETURNED`) |
 
-### 5.32 سركي المعدات (وحدة `equipment`) — بعد `resendSubmission` (نسخة 2026-09-06 مساءً) — **جديدة، غير منشورة**
+### 5.32 سركي المعدات (وحدة `equipment`) — بعد `resendSubmission` (نسخة 2026-09-06 مساءً) — **جديدة (منشورة ليلة 2026-09-06)**
 تاب "🚜 سركي المعدات": كشف تشغيل شهري (الشهر من 20 لـ 19) لمعدة مؤجّرة، أوفلاين-أولًا زي السراكي (`equipmentRecords` في `cea_equipment`). التصميم في **قسم 16**.
 
 | المجموعة | الدوال |
@@ -437,9 +437,9 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت مح
 يستبدل Supabase بالكامل؛ الواجهة لا تتحدث مع قاعدة البيانات مباشرة أبدًا، فقط عبر هذا الـ API الموثّق بـ JWT.
 
 ### 9.1 نموذج البيانات (Prisma — 26 جدول)
-`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2]، lastSeenAt، **`grade`** [junior/senior/team leader/construction manager/project manager — NOT NULL افتراضي junior]، **`approverTlId/approverCmId/approverPmId`** [المعتمد المسند بالاسم لكل مستوى، FK بـ SET NULL]، **`syncLocalRecords/syncUnsynced/syncReportedAt`** [إبلاغ الجهاز])، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures`)، `Contractor`، `Place` (+note)، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction`، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord`، `File`، `AppConfig` (key/value — أسماء المواقع، وحدات/فئات المخازن، **`approvalMatrix`**؛ `value` اتوسّع لـ 1000 حرف)، `Submission` (site، gsheetRow، **`kind`** labor/equipment [غير منشور بعد]، **`revision`**، **`reviewState`** IN_REVIEW/RETURNED/SENT، **`currentLevel`**، **`currentApproverId`** [null = كشف قديم: أي معتمد بدرجة المستوى]، **`queueHiddenAt`**)، **`SubmissionReview`** (level، decision APPROVED/APPROVED_NOTES/REJECTED، note، revision، byUserId — سجل تدقيق كامل)، **`EquipmentRecord`** (contractor، equipment، place، day، date، timeFrom/timeTo، minutes [من السيرفر]، works، notes — غير منشور بعد)، **`ActivityLog`** (userId/email/event/detail/status/path/ip/device)، وجداول المخازن الخمسة (`InventoryItem`، `StockMove`، `IssueRequest`+`IssueRequestLine`، `PurchaseRequest`).
+`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2]، lastSeenAt، **`grade`** [junior/senior/team leader/construction manager/project manager — NOT NULL افتراضي junior]، **`approverTlId/approverCmId/approverPmId`** [المعتمد المسند بالاسم لكل مستوى، FK بـ SET NULL]، **`syncLocalRecords/syncUnsynced/syncReportedAt`** [إبلاغ الجهاز])، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures`)، `Contractor`، `Place` (+note)، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction`، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord`، `File`، `AppConfig` (key/value — أسماء المواقع، وحدات/فئات المخازن، **`approvalMatrix`**؛ `value` اتوسّع لـ 1000 حرف)، `Submission` (site، gsheetRow، **`kind`** labor/equipment، **`revision`**، **`reviewState`** IN_REVIEW/RETURNED/SENT، **`currentLevel`**، **`currentApproverId`** [null = كشف قديم: أي معتمد بدرجة المستوى]، **`queueHiddenAt`**)، **`SubmissionReview`** (level، decision APPROVED/APPROVED_NOTES/REJECTED، note، revision، byUserId — سجل تدقيق كامل)، **`EquipmentRecord`** (contractor، equipment، place، day، date، timeFrom/timeTo، minutes [من السيرفر]، works، notes)، **`ActivityLog`** (userId/email/event/detail/status/path/ip/device)، وجداول المخازن الخمسة (`InventoryItem`، `StockMove`، `IssueRequest`+`IssueRequestLine`، `PurchaseRequest`).
 
-Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `20260903120000_manager_approvals` · `20260903150000_backfill_review_state` (حرجة: الكشوف القديمة → `SENT`) · `20260905000000_user_sync_stats` · `20260905010000_submission_queue_hidden` · `20260905120000_grade_and_assigned_approvers` · `20260906150000_activity_log` · `20260906170000_appconfig_wider_value` · **`20260906200000_equipment_records`** (محلي فقط — تُطبَّق مع أول نشر للـ backend بعد `4950666`).
+Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `20260903120000_manager_approvals` · `20260903150000_backfill_review_state` (حرجة: الكشوف القديمة → `SENT`) · `20260905000000_user_sync_stats` · `20260905010000_submission_queue_hidden` · `20260905120000_grade_and_assigned_approvers` · `20260906150000_activity_log` · `20260906170000_appconfig_wider_value` · **`20260906200000_equipment_records`** (منشورة ليلة 2026-09-06).
 
 ### 9.2 أهم نقاط النهاية (Endpoints)
 - **Auth**: register/login/refresh/logout/me/change-password — **مسارا `password-reset/*` مُعطَّلان عمدًا منذ 2026-08-21** (كانا يعيدان التوكن في الاستجابة بدون مصادقة = استيلاء على أي حساب — انظر C1 في `SECURITY_REPORT.md`؛ البديل الآمن: `POST /api/admin/users/:userId/reset-password`) — JWT (15 دقيقة access + 30 يوم refresh دوّار مع كشف إعادة استخدام يُلغي كل الجلسات)، bcrypt 12 rounds. **مهلة سماح (grace window)** — env: `REFRESH_REUSE_GRACE_SEC` (افتراضي 120 ثانية): إعادة استخدام توكن أُلغي بسبب تدوير عادي (`rotated=true` في جدول `refresh_tokens`) داخل المهلة تُقبل وتصدر توكنات جديدة بدل اعتبارها سرقة — يمنع خروج المستخدم القسري عند سباق تبويبين أو انقطاع حفظ التوكن الجديد. التوكنات الملغاة أمنيًا (logout/تغيير كلمة سر) لا تستفيد من المهلة أبدًا.
@@ -448,7 +448,7 @@ Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `2026090312
 - **`/api/approvals/*`** (خلف `requireModule('approvals')`): `GET /levels`، `GET /queue` (مفلتر بالشخص: كشوف المهندسين المسندين له + المسندة له + اللي اعتمدها خلال 7 أيام + الكشوف القديمة `currentApproverId=null` عند مستوى درجته؛ الأدمن يشوف الكل؛ كل صف بيرجع `chain`/`isLast`/`isStuck`/`canAct`)، `GET /:id/file` (لأي حساب عنده الوحدة — الأصل أثناء المراجعة والنسخة **الموقّعة** بعد `SENT`)، `POST /:id/decide` (APPROVED/APPROVED_NOTES/REJECTED — الرفض بملاحظة إلزامية)، `POST /:id/hide` (أدمن: إخفاء من الطابور فقط).
 - **`/api/submissions/*`**: `POST /` (multipart) → يُخزَّن ويبدأ `startChain` قبل الرد (لو مفيش مستويات مطلوبة لدرجته → يتبعت للشيت فورًا)؛ `POST /:id/resend` (للمرفوض فقط، rev++ والسلسلة من أولها)؛ `GET /mine` (بحالة السلسلة + `reviews` + حالة الشيت الحية)؛ `GET /` للأدمن (+ فلتر `?userId=` و`status`)؛ `GET /:id/file` (المالك أو الأدمن)؛ `PATCH /:id/review` (قديم، بلا استخدام من الواجهة)؛ `POST /:id/gsync` (إعادة الدفع عبر `approvalChain` — بيختم التوقيعات كمان)؛ **`DELETE /:id` أدمن فقط لأي حالة** (منذ 2026-09-05 — cascade على `submission_reviews`؛ صف الشيت لو وصل بيفضل).
 - **`/api/account/*`**: `GET/PUT /settings` (الكتابة أدمن فقط)، **`POST /sync-stats`** (الجهاز بيبلّغ عدد السراكي المحلية واللي لسه ما اترفعش — بيتسجل كمان كحدث `SYNC` في سجل النشاط).
-- **`/api/equipment-records`** (خلف `requireModule('equipment')` — غير منشور بعد): CRUD عبر `crudRouter` مقيّد بالملكية؛ `minutes` تُحسب على السيرفر من `timeFrom/timeTo` وأي قيمة مُرسلة تُتجاهل. و`POST /api/submissions` بيقبل `kind` (labor|equipment).
+- **`/api/equipment-records`** (خلف `requireModule('equipment')`): CRUD عبر `crudRouter` مقيّد بالملكية؛ `minutes` تُحسب على السيرفر من `timeFrom/timeTo` وأي قيمة مُرسلة تُتجاهل. و`POST /api/submissions` بيقبل `kind` (labor|equipment).
 - `requireModule` middleware يفرض نفس تقييد الموديولات على مستوى السيرفر لمسارات records/submissions/ir/todo/exec/daily/inventory/approvals/equipment.
 
 ### 9.3 الخدمات (Services)
@@ -588,7 +588,7 @@ Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص �
 
 ---
 
-## 16. سركي المعدات (وحدة `equipment`) — إيجار معدات شهري — مبنية محليًا 2026-09-06، غير منشورة بعد 🚧
+## 16. سركي المعدات (وحدة `equipment`) — إيجار معدات شهري — منشورة ليلة 2026-09-06 ✅ (مخفية حتى التفعيل)
 
 **الورقة الأصلية:** كشف ورقي شهري للمعدة المؤجّرة، كل ورقة 5 أيام (التاريخ · اليوم · المكان · الوقت من/إلى · المدة · بيان الأعمال · ملاحظات) وتحتها 3 توقيعات. **مفيش فلوس** — كشف تشغيل بالساعات، والحساب خارج التطبيق.
 
@@ -598,4 +598,4 @@ Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص �
 - **التوقيعات (الصف 16، العناوين 17):** `A..E` = توقيع مدير المشروع · `G..I` = توقيع مهندس التنفيذ · `J..M` = توقيع **المشرف المسئول** (= توقيع المهندس المسجّل، بيتحط من التطبيق وقت البناء). `signStamp.ts` بيختم مدير المشروع ومدير التنفيذ من حسابات المعتمدين، ومدير الفريق (لو في السلسلة) بيعتمد بلا بلوك فيتخطى.
 - **الإرسال:** نفس دورة الاعتماد بالظبط — `POST /api/submissions` بـ `kind=equipment` (`contractorName` = المقاول، `placeName` = المعدة، `total` = الساعات، `recordsCount` = أيام التشغيل) → سلسلة المديرين → ختم → جوجل شيت (نفس الشيت، الملف متعدد الورقات بيتحوّل والـ PDF بكل الورقات — `Code.gs` بلا تعديل). "تسليماتي" وتاب الاعتمادات بيميّزوا الكشف بـ "🚜 كشف معدات".
 - **الظهور:** وحدة `equipment` مش في الافتراضي — الأدمن يفعّلها حسابًا بحساب من "الوحدات الظاهرة له" (وبتتفرض على السيرفر بـ `requireModule`).
-- **النشر:** backend `e6c38e3` (migration تلقائية) + واجهة `68a4325` — الخطوات في [DEPLOY-NEXT-RELEASE.md](DEPLOY-NEXT-RELEASE.md).
+- **النشر:** اتنشر ليلة 2026-09-06 — backend `e6c38e3` (deployment `58c2b74d`) + واجهة `68a4325` (كاش `cea-202609061924`). المتبقي: تفعيل الوحدة للحسابات من إدارة الحسابات.
