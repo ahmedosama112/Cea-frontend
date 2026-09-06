@@ -106,6 +106,7 @@
     <button class="drawer-item" data-tab="site"     onclick="switchTab('site')"><span class="ico">🏗</span><span>الموقف التنفيذي</span></button>
     <button class="drawer-item" data-tab="todo"     onclick="switchTab('todo')"><span class="ico">✅</span><span>المهام</span></button>
     <button class="drawer-item" data-tab="inventory" onclick="switchTab('inventory')"><span class="ico">📦</span><span>المخازن</span></button>
+    <button class="drawer-item" data-tab="equipment" onclick="switchTab('equipment')"><span class="ico">🚜</span><span>سركي المعدات</span></button>
     <button class="drawer-item" data-tab="summary"  onclick="switchTab('summary')"><span class="ico">📊</span><span>الملخص</span></button>
     <div class="drawer-sep"></div>
     <button class="drawer-item" data-tab="settings" onclick="switchTab('settings')"><span class="ico">⚙️</span><span>الإعدادات</span></button>
@@ -705,6 +706,82 @@
     </div>
   </div>
 
+</div>
+
+<!-- ══ EQUIPMENT — سركي المعدات (إيجار معدات شهري 20→19 — وحدة قابلة للتفعيل) ══ -->
+<div id="tab-equipment" class="panel">
+  <div class="edit-banner" id="eq-edit-banner">
+    <span>✏️ تعديل يوم تشغيل</span>
+    <button onclick="cancelEqEdit()">✕</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>🚜</span> تسجيل يوم تشغيل معدة</div>
+    <div class="field">
+      <label>المقاول / المورد <span class="req">*</span></label>
+      <input type="search" class="select-search" id="eq-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('eq-contractor-search','eq-contractor')">
+      <div class="select-search-empty" id="eq-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
+      <select id="eq-contractor"><option value="">-- اختر المقاول / المورد --</option></select>
+    </div>
+    <div class="field">
+      <label>المعدة <span class="req">*</span></label>
+      <input type="text" id="eq-equipment" list="eq-equipment-list" placeholder="مثال: لودر كاتربيلر 950" maxlength="190">
+      <datalist id="eq-equipment-list"></datalist>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>التاريخ <span class="req">*</span></label><input type="date" id="eq-date" onchange="eqSetDay(this.value)"></div>
+      <div class="field" style="flex:1"><label>اليوم</label><input type="text" id="eq-day" class="auto-field" readonly placeholder="يتحدد تلقائياً"></div>
+    </div>
+    <div class="field">
+      <label>المكان <span class="req">*</span></label>
+      <input type="search" class="select-search" id="eq-place-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('eq-place-search','eq-place')">
+      <div class="select-search-empty" id="eq-place-search-empty">لا يوجد مكان بهذا الاسم</div>
+      <select id="eq-place"><option value="">-- اختر المكان --</option></select>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من <span class="req">*</span></label><input type="time" id="eq-from" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
+      <div class="field" style="flex:1"><label>إلى <span class="req">*</span></label><input type="time" id="eq-to" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
+      <div class="field" style="flex:1"><label>المدة</label><input type="text" id="eq-duration" class="auto-field" readonly placeholder="—"></div>
+    </div>
+    <div class="field"><label>بيان الأعمال</label><textarea id="eq-works" rows="2" placeholder="مثال: حفر أساسات + نقل ناتج الحفر للمقلب"></textarea></div>
+    <div class="field"><label>ملاحظات</label><input type="text" id="eq-notes" placeholder="مثال: وقفت ساعة عطل هيدروليك" maxlength="500"></div>
+  </div>
+  <div class="actions-block" style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-primary" id="eq-save-btn" style="flex:2" onclick="saveEquipment()">✅ تسجيل يوم التشغيل</button>
+    <button class="btn btn-ghost" style="flex:1" onclick="eqRepeatLast()" title="ينسخ آخر يوم اتسجل بتاريخ النهاردة">🔁 كرّر آخر يوم</button>
+  </div>
+
+  <!-- متصفح الشهر (20 → 19) -->
+  <div id="eq-month-nav" class="week-nav">
+    <div class="week-nav-row">
+      <button class="wk-arrow" onclick="shiftEqMonth(-1)" aria-label="الشهر السابق">‹</button>
+      <div class="week-nav-mid">
+        <div id="eq-month-label"></div>
+        <div id="eq-month-range"></div>
+      </div>
+      <button class="wk-arrow" onclick="shiftEqMonth(1)" aria-label="الشهر التالي">›</button>
+    </div>
+    <div class="week-nav-actions">
+      <button class="pill gold" onclick="resetEqMonth()">📅 الشهر الحالي</button>
+      <select id="eq-filter-equipment" class="pill" style="text-align:center" onchange="renderEquipment()"><option value="">🚜 كل المعدات</option></select>
+    </div>
+  </div>
+  <div class="eq-sum" id="eq-summary"></div>
+  <div class="records-header">
+    <div class="rh-title">أيام التشغيل</div>
+    <div class="records-count" id="eq-count">0 سطر</div>
+  </div>
+  <div id="eq-list"></div>
+
+  <div data-module="submissions">
+    <div class="section-title"><span>📤</span> الكشف الشهري</div>
+    <button class="btn btn-gold" onclick="submitEquipmentForReview()">📤 مراجعة وإرسال الكشف الشهري للاعتماد</button>
+    <p class="hint" style="margin-top:6px">بيبني كشف الشهر المعروض للمعدة المختارة (ورقة لكل 5 أيام، الأيام الفاضية بتفضل فاضية)، تراجعه وتوافق، ويدخل سلسلة اعتمادات المديرين زي السركي الأسبوعي.</p>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:10px">
+    <button class="btn btn-ghost" style="flex:1" onclick="previewEquipmentSheet()">👁 معاينة الكشف</button>
+    <button class="btn btn-navy" style="flex:1" onclick="exportEquipmentExcel()">📄 تنزيل Excel</button>
+  </div>
 </div>
 
 <!-- ══ IR ══ -->

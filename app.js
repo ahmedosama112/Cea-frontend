@@ -336,6 +336,9 @@ function saveRecordsLoadState(){
   else localStorage.removeItem('cea_records_oldest_loaded');
 }
 let irRecords   = JSON.parse(localStorage.getItem('saraki_ir')          || '[]');
+// سركي المعدات (إيجار معدات شهري 20→19) — سطر لكل يوم تشغيل، وحدة `equipment`
+let equipmentRecords = JSON.parse(localStorage.getItem('cea_equipment') || '[]');
+let eqEditingId = null;
 let todos       = JSON.parse(localStorage.getItem('saraki_todos')       || '[]');
 let contractors = JSON.parse(localStorage.getItem('saraki_contractors') || 'null') || [];
 let places      = JSON.parse(localStorage.getItem('saraki_places')      || 'null') || [];
@@ -354,6 +357,7 @@ function saveAll() {
   try{
     localStorage.setItem('saraki_records',     JSON.stringify(records));
     localStorage.setItem('saraki_ir',          JSON.stringify(irRecords));
+    localStorage.setItem('cea_equipment',      JSON.stringify(equipmentRecords));
     localStorage.setItem('saraki_todos',       JSON.stringify(todos));
     localStorage.setItem('saraki_contractors', JSON.stringify(contractors));
     localStorage.setItem('saraki_places',      JSON.stringify(places));
@@ -424,7 +428,8 @@ function filterSelectOptions(inputId, selectId){
 }
 function populateDropdowns() {
   fillSelect('f-contractor','<option value="">-- اختر المقاول --</option>',contractorOpts());
-  ['f-place','ir-place','todo-place'].forEach(id=>fillSelect(id,'<option value="">-- اختر المكان --</option>',placeOpts()));
+  ['f-place','ir-place','todo-place','eq-place'].forEach(id=>fillSelect(id,'<option value="">-- اختر المكان --</option>',placeOpts()));
+  fillSelect('eq-contractor','<option value="">-- اختر المقاول / المورد --</option>',contractorOpts());
   fillSelect('search-place','<option value="">📍 كل الأماكن</option>',placeOpts());
   fillSelect('search-contractor-filter','<option value="">👷 كل المقاولين</option>',contractorOpts());
   fillSelect('f-deduct-on-select','<option value="">-- اختر مقاول --</option>',contractorOpts());
@@ -1205,10 +1210,10 @@ function renderSummary(){
 
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
-const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)'};
+const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment'];
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سركي المعدات (إيجار معدات شهري 20→19)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
-const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals'};
+const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
 function setEnabledModules(list){
   enabledModules=Array.isArray(list)?list.filter(m=>ALL_MODULES.includes(m)):[];
@@ -1290,7 +1295,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', settings:'الإعدادات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سركي المعدات', settings:'الإعدادات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1308,6 +1313,7 @@ function switchTab(name){
   if(name==='submissions'&&typeof renderMySubmissions==='function')renderMySubmissions();
   if(name==='inventory')renderInventory();
   if(name==='approvals')renderApprovals();
+  if(name==='equipment'){populateDropdowns();renderEquipment();}
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
   if(name==='settings')renderSettings();
   if(name==='todo'){populateDropdowns();renderTodo();}
@@ -2622,8 +2628,9 @@ function colLetterToNum(l){ let n=0; for(const ch of l) n=n*26+(ch.charCodeAt(0)
 let _pendingSubmission=null;
 // إعادة إرسال كشف مرفوض: يوجّه المهندس يعدّل السركي ويعيد الإرسال كنسخة جديدة على نفس الكشف
 let _resendTargetId=null;
-function resendSubmission(id){
+function resendSubmission(id, kind){
   _resendTargetId=id;
+  if(kind==='equipment'){ switchTab('equipment'); showToast('✍️ عدّل أيام التشغيل واضغط "مراجعة وإرسال الكشف الشهري" — هيتبعت كنسخة جديدة (rev++)', false); return; }
   switchTab('records');
   showToast('✍️ عدّل السركي، اختار المقاول في الفلتر الذهبي، واضغط "مراجعة وإرسال الكشف" — هيتبعت كنسخة جديدة (rev++)', false);
 }
@@ -2723,6 +2730,7 @@ async function confirmSubmitApproved(){
     fd.append('weekStart', b.wkStart); fd.append('weekEnd', b.wkEnd);
     fd.append('total', String(b.total)); fd.append('recordsCount', String(b.recordsCount));
     fd.append('engineerNote', (document.getElementById('submit-note')?.value||'').trim());
+    if(b.kind) fd.append('kind', b.kind); // equipment = كشف معدات (placeName = المعدة، total = الساعات)
     // لو ده إعادة إرسال لكشف مرفوض → يروح على /resend بنسخة جديدة بدل ما يعمل كشف جديد
     const url = _resendTargetId ? (API_URL+'/api/submissions/'+_resendTargetId+'/resend') : (API_URL+'/api/submissions');
     const res=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+getAccessToken()},body:fd});
@@ -2737,6 +2745,322 @@ async function confirmSubmitApproved(){
     if(btn){ btn.disabled=false; btn.textContent='✅ موافق — إرسال للاعتماد'; }
   }
 }
+
+
+/* ═══════════ سركي المعدات (وحدة equipment) — إيجار معدات شهري ═══════════
+   الشهر من يوم 20 ليوم 19 اللي بعده. سطر لكل يوم تشغيل (ممكن أكتر من سطر في نفس اليوم).
+   مفيش فلوس — كشف تشغيل (ساعات). الكشف الشهري: ملف Excel واحد، ورقة لكل 5 أيام تقويمية
+   بنفس هوية الكشف الأسبوعي وبنفس أماكن بلوكات التوقيع (الصف 16/17) عشان يعدّي على اعتمادات المديرين وختم التوقيعات. */
+let eqMonthOffset = 0;
+const AR_MONTHS = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+// حدود "شهر المعدات": من 20 الشهر لـ 19 اللي بعده. اليوم < 20 → إحنا لسه في شهر بدأ الشهر اللي فات
+function getEqMonthBounds(offset){
+  const today=new Date(); today.setHours(0,0,0,0);
+  let y=today.getFullYear(), m=today.getMonth();
+  if(today.getDate()<20) m-=1;
+  const start=new Date(y, m+offset, 20), end=new Date(y, m+offset+1, 19);
+  return {start, end};
+}
+function getEqMonthBoundsForDate(ymd){
+  const [y,m,d]=String(ymd).split('-').map(Number);
+  const mm = d>=20 ? m-1 : m-2;
+  return {start:new Date(y, mm, 20), end:new Date(y, mm+1, 19)};
+}
+function eqMonthLabel(b){
+  const s=b.start, e=b.end;
+  return `20 ${AR_MONTHS[s.getMonth()]}${s.getFullYear()!==e.getFullYear()?' '+s.getFullYear():''}  ←  19 ${AR_MONTHS[e.getMonth()]} ${e.getFullYear()}`;
+}
+function fmtMinutes(m){ m=Math.max(0, Math.round(Number(m)||0)); return Math.floor(m/60)+':'+String(m%60).padStart(2,'0'); }
+function eqMinutes(from, to){
+  if(!/^\d{2}:\d{2}$/.test(from||'') || !/^\d{2}:\d{2}$/.test(to||'')) return 0;
+  const [fh,fm]=from.split(':').map(Number), [th,tm]=to.split(':').map(Number);
+  let d=th*60+tm-(fh*60+fm); if(d<0) d+=24*60; // عدّى نص الليل
+  return d;
+}
+function eqCalcDuration(){
+  const m=eqMinutes(document.getElementById('eq-from').value, document.getElementById('eq-to').value);
+  const el=document.getElementById('eq-duration'); if(el) el.value = m ? fmtMinutes(m)+' ساعة' : '—';
+}
+function eqSetDay(ymd){ const el=document.getElementById('eq-day'); if(el) el.value=dayNameOf(ymd)||''; }
+function renderEqMonthNav(){
+  const b=getEqMonthBounds(eqMonthOffset);
+  const lbl=document.getElementById('eq-month-label'), rng=document.getElementById('eq-month-range');
+  if(lbl) lbl.textContent = eqMonthOffset===0 ? '📅 الشهر الحالي' : eqMonthOffset===-1 ? '📅 الشهر الماضي' : eqMonthOffset<0 ? `📅 قبل ${Math.abs(eqMonthOffset)} شهور` : `📅 بعد ${eqMonthOffset} شهور`;
+  if(rng) rng.textContent = eqMonthLabel(b);
+}
+function shiftEqMonth(dir){ eqMonthOffset+=dir; renderEqMonthNav(); renderEquipment(); }
+function resetEqMonth(){ eqMonthOffset=0; renderEqMonthNav(); renderEquipment(); }
+
+function saveEquipment(){
+  const date=document.getElementById('eq-date').value, contractor=document.getElementById('eq-contractor').value.trim(),
+        equipment=document.getElementById('eq-equipment').value.trim(), place=document.getElementById('eq-place').value.trim(),
+        timeFrom=document.getElementById('eq-from').value, timeTo=document.getElementById('eq-to').value,
+        works=document.getElementById('eq-works').value.trim(), notes=document.getElementById('eq-notes').value.trim();
+  if(!date){showToast('⚠ اختر التاريخ',true);return;}
+  if(!contractor){showToast('⚠ اختر المقاول / المورد',true);return;}
+  if(!equipment){showToast('⚠ اكتب اسم المعدة',true);return;}
+  if(!place){showToast('⚠ اختر المكان',true);return;}
+  if(!timeFrom||!timeTo){showToast('⚠ حدد الوقت من وإلى',true);return;}
+  const day=dayNameOf(date), minutes=eqMinutes(timeFrom,timeTo);
+  const data={date,day,contractor,equipment,place,timeFrom,timeTo,minutes,works,notes};
+  if(eqEditingId!==null){
+    const idx=equipmentRecords.findIndex(r=>r.id===eqEditingId);
+    if(idx!==-1) equipmentRecords[idx]={...equipmentRecords[idx],...data};
+    showToast('✅ تم حفظ التعديل');
+  } else {
+    equipmentRecords.push({id:Date.now(), ...data});
+    showToast('✅ تم تسجيل يوم التشغيل');
+  }
+  if(!saveAll()) return;
+  cancelEqEdit();
+  // الشهر المعروض يتبع تاريخ اليوم اللي اتسجل — عشان المعاينة تتحدث فورًا
+  const b=getEqMonthBoundsForDate(date), cur=getEqMonthBounds(0);
+  eqMonthOffset = (b.start.getFullYear()-cur.start.getFullYear())*12 + (b.start.getMonth()-cur.start.getMonth());
+  renderEqMonthNav(); renderEquipment();
+}
+function clearEqForm(keepHeader){
+  if(!keepHeader){ document.getElementById('eq-contractor').value=''; document.getElementById('eq-equipment').value=''; }
+  document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD());
+  document.getElementById('eq-place').value=''; document.getElementById('eq-from').value=''; document.getElementById('eq-to').value='';
+  document.getElementById('eq-works').value=''; document.getElementById('eq-notes').value=''; eqCalcDuration();
+}
+function editEquipment(id){
+  const r=equipmentRecords.find(x=>x.id===id); if(!r) return;
+  eqEditingId=id;
+  document.getElementById('eq-date').value=r.date; eqSetDay(r.date);
+  document.getElementById('eq-contractor').value=r.contractor; document.getElementById('eq-equipment').value=r.equipment;
+  document.getElementById('eq-place').value=r.place; document.getElementById('eq-from').value=r.timeFrom; document.getElementById('eq-to').value=r.timeTo;
+  document.getElementById('eq-works').value=r.works||''; document.getElementById('eq-notes').value=r.notes||''; eqCalcDuration();
+  document.getElementById('eq-edit-banner').classList.add('show'); document.getElementById('eq-save-btn').textContent='💾 حفظ التعديل';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function cancelEqEdit(){
+  eqEditingId=null; document.getElementById('eq-edit-banner').classList.remove('show'); document.getElementById('eq-save-btn').textContent='✅ تسجيل يوم التشغيل';
+  clearEqForm(true);
+}
+function deleteEquipment(id){ if(!confirm('حذف يوم التشغيل ده؟')) return; equipmentRecords=equipmentRecords.filter(r=>r.id!==id); saveAll(); renderEquipment(); showToast('🗑 تم الحذف'); }
+// تكرار آخر يوم اتسجل (نفس المعدة/المقاول/المكان/الوقت) بتاريخ النهاردة — الأيام بتتشابه كتير
+function eqRepeatLast(){
+  const last=[...equipmentRecords].sort((a,b)=>(b.date+String(b.id)).localeCompare(a.date+String(a.id)))[0];
+  if(!last){ showToast('⚠ مفيش يوم سابق يتكرر', true); return; }
+  eqEditingId=null; document.getElementById('eq-edit-banner').classList.remove('show'); document.getElementById('eq-save-btn').textContent='✅ تسجيل يوم التشغيل';
+  document.getElementById('eq-contractor').value=last.contractor; document.getElementById('eq-equipment').value=last.equipment;
+  document.getElementById('eq-place').value=last.place; document.getElementById('eq-from').value=last.timeFrom; document.getElementById('eq-to').value=last.timeTo;
+  document.getElementById('eq-works').value=last.works||''; document.getElementById('eq-notes').value='';
+  document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD()); eqCalcDuration();
+  showToast('🔁 اتنسخ آخر يوم — راجع التاريخ والوقت واضغط تسجيل');
+}
+// السجلات في الشهر المعروض (وبالمعدة المختارة لو فيه فلتر)
+function eqMonthRecords(){
+  const {start,end}=getEqMonthBounds(eqMonthOffset); const s=toYMD(start), e=toYMD(end);
+  const eqf=(document.getElementById('eq-filter-equipment')?.value||'');
+  return equipmentRecords.filter(r=>r.date>=s && r.date<=e && (!eqf || r.equipment===eqf)).sort((a,b)=>a.date.localeCompare(b.date)||String(a.timeFrom).localeCompare(String(b.timeFrom)));
+}
+function eqSheetsCount(b){ const days=Math.round((b.end-b.start)/86400000)+1; return Math.ceil(days/5); }
+function renderEquipment(){
+  const list=document.getElementById('eq-list'); if(!list) return;
+  renderEqMonthNav();
+  // قوائم المعدات: فلتر الشهر + datalist الفورم (من كل الأسماء المستخدمة)
+  const names=[...new Set(equipmentRecords.map(r=>r.equipment).filter(Boolean))].sort();
+  const dl=document.getElementById('eq-equipment-list'); if(dl) dl.innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
+  const fsel=document.getElementById('eq-filter-equipment');
+  if(fsel){ const cur=fsel.value; fsel.innerHTML='<option value="">🚜 كل المعدات</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join(''); }
+  const b=getEqMonthBounds(eqMonthOffset);
+  const rows=eqMonthRecords();
+  const days=new Set(rows.map(r=>r.date)).size, mins=rows.reduce((a,r)=>a+(Number(r.minutes)||0),0);
+  const totalDays=Math.round((b.end-b.start)/86400000)+1;
+  const sum=document.getElementById('eq-summary');
+  if(sum) sum.innerHTML=`<div><b>${days} / ${totalDays}</b><small>يوم تشغيل</small></div><div><b>${fmtMinutes(mins)}</b><small>إجمالي الساعات</small></div><div><b>${eqSheetsCount(b)}</b><small>ورقات (5 أيام)</small></div>`;
+  const cnt=document.getElementById('eq-count'); if(cnt) cnt.textContent=rows.length+' سطر';
+  if(!rows.length){ list.innerHTML=`<div class="empty-state"><div class="icon">🚜</div><p>${equipmentRecords.length?'مفيش تشغيل مسجّل في الشهر ده':'لسه مفيش أيام تشغيل — سجّل أول يوم من الفورم فوق'}</p></div>`; return; }
+  list.innerHTML=[...rows].reverse().map(r=>`<div class="record-card eq-card">
+      <div class="record-head">
+        <div class="record-title"><div class="record-name" style="font-size:13px">${esc(r.day)} ${esc(r.date)} · ${esc(r.place)}</div><div class="record-spec">🚜 ${esc(r.equipment)} · 👷 ${esc(r.contractor)}</div></div>
+        <div class="record-side"><span class="badge" style="background:var(--ok-bg);color:var(--ok-fg)">⏱ ${fmtMinutes(r.minutes)} س</span></div>
+        <div class="record-actions">
+          <button class="icon-btn edit" onclick="editEquipment(${r.id})" title="تعديل">✏️</button>
+          <button class="icon-btn del"  onclick="deleteEquipment(${r.id})" title="حذف">✕</button>
+        </div>
+      </div>
+      <div class="record-meta"><span class="badge">⏰ ${esc(r.timeFrom)} → ${esc(r.timeTo)}</span>${r.works?'<span class="badge">🧱 '+esc(r.works)+'</span>':''}</div>
+      ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
+    </div>`).join('');
+}
+
+// ── الكشف الشهري (Excel) — ورقة لكل 5 أيام تقويمية من 20 لـ 19 ──
+// نفس شبكة الأعمدة الـ 13 بتاعة الكشف الأسبوعي عشان بلوكات التوقيع تقع في نفس الأعمدة (A..E / G..I / J..M)
+// وفي الصف 16 وعناوينها في 17 — signStamp.ts في السيرفر بيختم عليها من غير أي تعديل.
+function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStart, dayEnd, sigImgId, equipmentName, contractorName, monthMinutes, monthDays){
+  const ws = workbook.addWorksheet((pageIdx+1)+'- '+String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,26), {
+    pageSetup:{paperSize:9, orientation:'landscape', fitToPage:true}, views:[{rightToLeft:true}] });
+  ws.columns=[{width:16},{width:9},{width:9},{width:9},{width:9},{width:9},{width:9},{width:8},{width:8},{width:14},{width:8},{width:12},{width:10}];
+  const thin={style:'thin', color:{argb:'FF999999'}}, allBorders={top:thin,left:thin,right:thin,bottom:thin};
+  const centerWrap={vertical:'middle', horizontal:'center', wrapText:true, readingOrder:'rtl'};
+  const navy='FF1F3864', gold='FFC9A84C';
+  function styleRange(r1,c1,r2,c2,opts){ for(let r=r1;r<=r2;r++) for(let cc=c1;cc<=c2;cc++){ const cell=ws.getCell(r,cc); cell.border=allBorders; cell.alignment=centerWrap; if(opts&&opts.font) cell.font=opts.font; if(opts&&opts.fill) cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:opts.fill}}; } }
+  const lbl={bold:true,size:10,name:'Arial',color:{argb:navy}};
+
+  ws.mergeCells(1,1,1,13); ws.getCell(1,1).value='شركة هوم جيت للمقاولات ش م م';
+  styleRange(1,1,1,13,{font:{bold:true,size:14,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy}); ws.getRow(1).height=24;
+  ws.mergeCells(2,1,2,13); ws.getCell(2,1).value=`كومبوند جريني افينيو  —  سركي / إيجار معدات (${equipmentName||''})`;
+  styleRange(2,1,2,13,{font:{bold:true,size:11,color:{argb:navy},name:'Arial'}, fill:gold}); ws.getRow(2).height=20;
+
+  ws.mergeCells(3,11,3,13); ws.getCell(3,13).value='إسم المقاول :';
+  ws.mergeCells(3,8,3,10);  ws.getCell(3,10).value=contractorName||'';
+  ws.mergeCells(3,5,3,7);   ws.getCell(3,7).value='المعدة :';
+  ws.mergeCells(3,1,3,4);   ws.getCell(3,4).value=equipmentName||'';
+  styleRange(3,1,3,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(3,cc).font=lbl;});
+
+  const places=[...new Set(exp.map(r=>r.place).filter(Boolean))].join(' ، ');
+  ws.mergeCells(4,11,4,13); ws.getCell(4,13).value='الموقع :';
+  ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value=places;
+  ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value='المشروع :';
+  ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value='كومبوند جريني افينيو';
+  styleRange(4,1,4,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(4,cc).font=lbl;});
+
+  ws.mergeCells(5,11,5,13); ws.getCell(5,13).value='الفترة من :';
+  ws.mergeCells(5,9,5,10);  ws.getCell(5,10).value=toYMD(dayStart);
+  ws.getCell(5,8).value='إلى :';
+  ws.mergeCells(5,6,5,7);   ws.getCell(5,7).value=toYMD(dayEnd);
+  ws.mergeCells(5,1,5,5);   ws.getCell(5,5).value=`ورقة ${pageIdx+1} من ${pagesTotal}  —  شهر ${toYMD(bounds.start)} ← ${toYMD(bounds.end)}`;
+  styleRange(5,1,5,13,{font:{size:10,name:'Arial'}}); [13,8].forEach(cc=>{ws.getCell(5,cc).font=lbl;});
+  [10,7].forEach(cc=>{ ws.getCell(5,cc).alignment={vertical:'middle',horizontal:'center',wrapText:false,readingOrder:'rtl'}; });
+  ws.getRow(5).height=20;
+
+  const headerRow=7;
+  [[13,13,'التاريخ'],[12,12,'اليوم'],[10,11,'المكان'],[8,9,'الوقت (من – إلى)'],[7,7,'المدة'],[2,6,'بيان الأعمال'],[1,1,'ملاحظات']].forEach(([c1,c2,label])=>{
+    if(c1!==c2) ws.mergeCells(headerRow,c1,headerRow,c2); ws.getCell(headerRow,c1).value=label; });
+  styleRange(headerRow,1,headerRow,13,{font:{bold:true,size:10,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy}); ws.getRow(headerRow).height=22;
+
+  let pageMinutes=0;
+  for(let i=0;i<5;i++){
+    const row=headerRow+1+i;
+    const d=new Date(dayStart); d.setDate(dayStart.getDate()+i);
+    ws.mergeCells(row,10,row,11); ws.mergeCells(row,8,row,9); ws.mergeCells(row,2,row,6);
+    if(d<=dayEnd){
+      const ymd=toYMD(d), recs=exp.filter(r=>r.date===ymd);
+      ws.getCell(row,13).value=ymd; ws.getCell(row,12).value=dayNameOf(ymd);
+      if(recs.length){
+        const RLM='\u200F';
+        ws.getCell(row,10).value=[...new Set(recs.map(r=>r.place))].join('\n');
+        ws.getCell(row,8).value=recs.map(r=>RLM+r.timeFrom+' – '+r.timeTo).join('\n');
+        const m=recs.reduce((a,r)=>a+(Number(r.minutes)||0),0); pageMinutes+=m;
+        ws.getCell(row,7).value=RLM+fmtMinutes(m);
+        ws.getCell(row,2).value=recs.map(r=>r.works).filter(Boolean).join(' / ');
+        ws.getCell(row,1).value=recs.map(r=>r.notes).filter(Boolean).join(' / ');
+      }
+    }
+    styleRange(row,1,row,13,{font:{size:10,name:'Arial'}}); ws.getRow(row).height=30;
+  }
+  const totalRow=headerRow+6; // 13
+  ws.mergeCells(totalRow,8,totalRow,13); ws.getCell(totalRow,13).value='إجمالي ساعات الورقة';
+  ws.getCell(totalRow,7).value='\u200F'+fmtMinutes(pageMinutes);
+  ws.mergeCells(totalRow,1,totalRow,6); ws.getCell(totalRow,6).value=`إجمالي الشهر: ${fmtMinutes(monthMinutes)} ساعة (${monthDays} يوم تشغيل)`;
+  styleRange(totalRow,1,totalRow,13,{font:{bold:true,size:11,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy}); ws.getRow(totalRow).height=22;
+  ws.getRow(14).height=8; ws.getRow(15).height=8;
+
+  // بلوكات التوقيع (الصف 16 + عناوين 17): J..M = المشرف المسئول (توقيع المهندس من التطبيق) · G..I = مهندس التنفيذ · A..E = مدير المشروع
+  const sigRow=16, sigCapRow=17;
+  ws.mergeCells(sigRow,10,sigRow,13); ws.mergeCells(sigRow,7,sigRow,9); ws.mergeCells(sigRow,1,sigRow,5);
+  styleRange(sigRow,1,sigRow,13,{font:{size:10,name:'Arial'}}); ws.getRow(sigRow).height=55;
+  ws.mergeCells(sigCapRow,10,sigCapRow,13); ws.getCell(sigCapRow,13).value='توقيع المشرف المسئول';
+  ws.mergeCells(sigCapRow,7,sigCapRow,9);   ws.getCell(sigCapRow,7).value='توقيع مهندس التنفيذ';
+  ws.mergeCells(sigCapRow,1,sigCapRow,5);   ws.getCell(sigCapRow,5).value='توقيع مدير المشروع';
+  styleRange(sigCapRow,1,sigCapRow,13,{font:{bold:true,size:9,color:{argb:navy},name:'Arial'}});
+  if(sigImgId!==null){
+    // مرساة بنقطتين جوّه بلوك J..M (أعمدة 9..12 صفرية) — نفس درس الكشف الأسبوعي (المرساة بنقطة واحدة بتختفي في Excel الصارم)
+    ws.addImage(sigImgId, { tl:{col:9.15, row:(sigRow-1)+0.08}, br:{col:12.85, row:(sigRow-1)+0.92}, editAs:'oneCell' });
+  }
+  return pageMinutes;
+}
+async function buildEquipmentWorkbook(exp, bounds, equipmentName){
+  try{
+    const workbook=new ExcelJS.Workbook();
+    let sigImgId=null;
+    if(engineerSignature){ const m=engineerSignature.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/); if(m) sigImgId=workbook.addImage({base64:m[2], extension:m[1]==='jpg'?'jpeg':m[1]}); }
+    const contractorNames=[...new Set(exp.map(r=>r.contractor).filter(Boolean))];
+    const contractorName=contractorNames.join('، ');
+    const monthMinutes=exp.reduce((a,r)=>a+(Number(r.minutes)||0),0), monthDays=new Set(exp.map(r=>r.date)).size;
+    const pages=eqSheetsCount(bounds);
+    for(let p=0;p<pages;p++){
+      const ds=new Date(bounds.start); ds.setDate(bounds.start.getDate()+p*5);
+      const de=new Date(ds); de.setDate(ds.getDate()+4); if(de>bounds.end) de.setTime(bounds.end.getTime());
+      buildEquipmentSheet(workbook, exp, bounds, p, pages, ds, de, sigImgId, equipmentName, contractorName, monthMinutes, monthDays);
+    }
+    const buffer=await workbook.xlsx.writeBuffer();
+    const wkStart=toYMD(bounds.start), wkEnd=toYMD(bounds.end);
+    const safe=String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').trim();
+    const fileName=`سركي_معدات_${safe}_${wkStart}_${wkEnd}.xlsx`;
+    return { buffer, fileName, sheetsCount:pages, contractorNames:[contractorName], wkStart, wkEnd,
+      total: Math.round(monthMinutes/60*100)/100, recordsCount: monthDays, placesLabel: equipmentName, buildLabel: safe, workbook, kind:'equipment', monthMinutes, monthDays };
+  }catch(e){ showToast('⚠ خطأ في بناء الكشف: '+e.message,true); return null; }
+}
+// اختيار المعدة للكشف: الفلتر لو محدد، أو المعدة الوحيدة في الشهر، وإلا لازم يختار
+async function prepareEquipmentSheet(){
+  await ensureExcelJS();
+  const bounds=getEqMonthBounds(eqMonthOffset);
+  let rows=eqMonthRecords();
+  if(!rows.length){ showToast('⚠ مفيش أيام تشغيل مسجّلة في الشهر ده', true); return null; }
+  let eqName=document.getElementById('eq-filter-equipment')?.value||'';
+  if(!eqName){
+    const names=[...new Set(rows.map(r=>r.equipment))];
+    if(names.length>1){ showToast('⚠ فيه أكتر من معدة في الشهر ده — اختار المعدة من فلتر "🚜 كل المعدات" الأول', true); return null; }
+    eqName=names[0]; rows=rows.filter(r=>r.equipment===eqName);
+  }
+  const built=await buildEquipmentWorkbook(rows, bounds, eqName);
+  return built ? {built, rows} : null;
+}
+async function exportEquipmentExcel(){
+  const p=await prepareEquipmentSheet(); if(!p) return;
+  const blob=new Blob([p.built.buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=p.built.fileName; a.click(); URL.revokeObjectURL(url);
+  showToast('📄 اتنزل الكشف الشهري ('+p.built.sheetsCount+' ورقة)');
+}
+async function previewEquipmentSheet(){ const p=await prepareEquipmentSheet(); if(!p) return; _pendingSubmission=null; openEquipmentReview(p.built, p.rows, false); }
+async function submitEquipmentForReview(){
+  const p=await prepareEquipmentSheet(); if(!p) return;
+  _pendingSubmission={built:p.built, exp:p.rows};
+  openEquipmentReview(p.built, p.rows, true);
+}
+// نفس مودال مراجعة الكشف الأسبوعي (نفس محرك المعاينة والزوم) — بيانات المعدات بدل الفلوس
+function openEquipmentReview(b, exp, canSend){
+  let ov=document.getElementById('submit-review-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='submit-review-overlay'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  const title=localStorage.getItem('cea_user_title')||'';
+  ov.innerHTML=`
+    <div class="modal-box wide" role="dialog" aria-modal="true">
+      <div class="modal-head">${canSend?'📤 مراجعة الكشف الشهري قبل الإرسال':'👁 معاينة الكشف الشهري'}</div>
+      <div class="modal-body">
+        <div class="hint-box" style="margin-bottom:10px">
+          <div><strong>المهندس:</strong> ${esc(getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
+          <div><strong>المعدة:</strong> ${esc(b.placesLabel||'')} · <strong>المقاول:</strong> ${esc(b.contractorNames.join('، '))}</div>
+          <div><strong>الشهر:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)}</div>
+          <div><strong>أيام التشغيل:</strong> ${b.monthDays} · <strong>إجمالي الساعات:</strong> ${fmtMinutes(b.monthMinutes)}</div>
+          <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(b.fileName)}</span> (${b.sheetsCount} ورقة — كل ورقة 5 أيام)</div>
+        </div>
+        <div class="subhead" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span>📄 الكشف كما ${canSend?'هيتبعت':'هيطلع'} (${b.sheetsCount} ورقة)</span>
+          <span class="xl-tools">
+            <button type="button" class="xl-tool" onclick="sheetZoom(-0.15)" aria-label="تصغير">➖</button>
+            <button type="button" class="xl-tool" id="xl-zoom-label" onclick="sheetZoomReset()">100%</button>
+            <button type="button" class="xl-tool" onclick="sheetZoom(0.15)" aria-label="تكبير">➕</button>
+            <button type="button" class="xl-tool" onclick="toggleSheetFull()" aria-label="ملء الشاشة">⛶</button>
+          </span>
+        </div>
+        <div class="xl-wrap"><div id="xl-zoom">${b.workbook.worksheets.map(ws=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, b.workbook)).join('')}</div></div>
+        ${canSend?`<div class="subhead">ملاحظة للمعتمد (اختياري)</div>
+        <input type="text" id="submit-note" placeholder="مثال: المعدة وقفت يومين عطل" maxlength="500">
+        <p class="hint" style="margin-top:8px">بالضغط على "موافق — إرسال" الكشف هيدخل سلسلة اعتمادات المديرين زي السركي الأسبوعي، وبعد اكتمالها يوصل جوجل شيت موقّعًا.</p>`:''}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-inline" onclick="closeSubmitReview()">${canSend?'تعديل / إلغاء':'إغلاق'}</button>
+        ${canSend?'<button class="btn btn-gold btn-inline" id="submit-confirm-btn" onclick="confirmSubmitApproved()">✅ موافق — إرسال للاعتماد</button>':''}
+      </div>
+    </div>`;
+  ov.style.display='flex'; document.body.classList.add('modal-open');
+  _sheetZoom=1; sheetZoom(0);
+}
+document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('eq-date')){ clearEqForm(); renderEqMonthNav(); } });
 
 // ── تسليماتي (المهندس) ──
 // خط سير الاعتماد في جوجل شيت (بيظهر لو التسليم متربط بصف في الشيت)
@@ -2884,7 +3208,7 @@ function aprBuildTable(){
     const mine=r.canAct?' class="mine"':'';
     return '<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
-      +'<td class="apr-eng">'+esc(r.user?.email?.split('@')[0]||'')+'<small>'+esc(r.user?.title||'مهندس')+'</small></td>'
+      +'<td class="apr-eng">'+esc(r.user?.email?.split('@')[0]||'')+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
       +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button></td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span></td>'
@@ -3411,7 +3735,7 @@ function subRow(s, adminView){
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">
       <div style="min-width:0;flex:1 1 240px">
         <div class="setting-name" style="white-space:normal;line-height:1.5">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
-        <div class="setting-sub">الأسبوع ${esc(s.weekStart)} → ${esc(s.weekEnd)} · ${s.recordsCount} سجل · ${fmt(s.total)} ج.م</div>
+        <div class="setting-sub">${s.kind==='equipment' ? '🚜 كشف معدات · الشهر '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' يوم تشغيل · '+fmtMinutes(Math.round(Number(s.total)*60))+' ساعة' : 'الأسبوع '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' سجل · '+fmt(s.total)+' ج.م'}</div>
         ${who}
         <div class="s" style="font-size:11px;color:var(--muted)">أُرسل ${esc(new Date(s.createdAt).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}))}${s.engineerNote?' · 📝 '+esc(s.engineerNote):''}</div>
         ${rejBox}${notesBox}
@@ -3422,7 +3746,7 @@ function subRow(s, adminView){
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
-      ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
+      ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
       ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
       ${adminView && isAdmin() ? '<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+s.id+'\')" title="حذف نهائي من التطبيق (الأدمن فقط)">🗑 حذف</button>' : ''}
     </div>
@@ -4537,18 +4861,18 @@ function clearSession(){
 }
 // كل مفاتيح بيانات التطبيق على الجهاز (بدون مفاتيح الجلسة) — تُمسح عند الخروج أو تبديل الحساب
 // عشان بيانات مهندس ما تتدمجش في حساب مهندس تاني على نفس الهاتف
-const APP_DATA_KEYS=['saraki_records','saraki_ir','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
+const APP_DATA_KEYS=['saraki_records','saraki_ir','cea_equipment','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
   'cea_daily','cea_exec','saraki_signature','cea_records_fully_loaded','cea_records_oldest_loaded','cea_place_notes',
   'cea_sync_snapshot','cea_pin_hash','cea_user_title','cea_enabled_modules','cea_enabled_features'];
 function wipeLocalAppData(){
   APP_DATA_KEYS.forEach(k=>localStorage.removeItem(k));
-  records=[]; irRecords=[]; todos=[]; contractors=[]; places=[]; inspectors=[]; items=[]; placeNotes={};
+  records=[]; irRecords=[]; equipmentRecords=[]; todos=[]; contractors=[]; places=[]; inspectors=[]; items=[]; placeNotes={};
   dailyRecords=[]; execRecords=[]; engineerSignature=null; _syncSnap={};
   recordsFullyLoaded=true; recordsOldestLoaded=null;
 }
 function hasUnsyncedLocalData(){
   const loc=a=>a.some(x=>isLocalId(x.id));
-  return loc(records)||loc(irRecords)||loc(todos)||loc(execRecords)||loc(dailyRecords);
+  return loc(records)||loc(irRecords)||loc(equipmentRecords)||loc(todos)||loc(execRecords)||loc(dailyRecords);
 }
 function showLoginScreen(msg){
   const scr=document.getElementById('login-screen');
@@ -4798,6 +5122,15 @@ function irBody(r){
   return { date:r.date||'', item:r.item||'', place:r.place||'', inspector:r.inspector||'',
     status:r.status||'—', notes:r.notes||'' };
 }
+// سركي المعدات — المدة (minutes) مش في الـ body: السيرفر بيحسبها من الوقت، والجهاز بيحسب نفس القيمة محليًا
+function eqBody(r){
+  return { date:r.date||'', day:r.day||'', contractor:r.contractor||'', equipment:r.equipment||'', place:r.place||'',
+    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', works:r.works||'', notes:r.notes||'' };
+}
+function mapApiEquipment(r){
+  return { id:Number(r.id), date:ymdOf(r.date), day:r.day||'', contractor:r.contractor||'', equipment:r.equipment||'', place:r.place||'',
+    timeFrom:r.timeFrom||'', timeTo:r.timeTo||'', minutes:Number(r.minutes)||0, works:r.works||'', notes:r.notes||'' };
+}
 function execBody(e){
   const stages=e.stages||[];
   return { item:e.item||'', place:e.place||'', pct:Number(e.pct)||0, notes:e.notes||'',
@@ -4838,6 +5171,7 @@ async function fetchServerHashIndex(base, bodyFn, serverToLocal){
 const SERVER_TO_LOCAL={
   '/api/records': r=>mapApiRecord(r),
   '/api/ir-records': r=>({id:Number(r.id), date:ymdOf(r.date), item:r.item, place:r.place, inspector:r.inspector, status:r.status, notes:r.notes||''}),
+  '/api/equipment-records': r=>mapApiEquipment(r),
   '/api/todos': r=>({id:Number(r.id), date:ymdOf(r.date), notes:r.notes, place:r.place||'', priority:r.priority, done:!!r.done}),
   '/api/exec-records': r=>({id:Number(r.id), item:r.item, place:r.place, pct:Number(r.pct), notes:r.notes||'', stages:r.stages||[], stageDone:r.stageDone||[]}),
   '/api/daily-records': r=>({id:Number(r.id), date:ymdOf(r.date), day:r.day, contractor:r.contractor||'', spec:r.spec||'', work:r.work||'', place:r.place||'', photoFileId:r.photoFileId?Number(r.photoFileId):null}),
@@ -5173,6 +5507,7 @@ async function syncNow(){
     // كل موديول على حسب تفعيله للمستخدم (المعطّل بيرجع 403 من السيرفر — ما نضربوش أصلًا)
     if(moduleEnabled('records'))    errors+=await mirrorPushById('records', records, '/api/records', recordBody);
     if(moduleEnabled('ir'))         errors+=await mirrorPushById('ir', irRecords, '/api/ir-records', irBody);
+    if(moduleEnabled('equipment'))  errors+=await mirrorPushById('equipment', equipmentRecords, '/api/equipment-records', eqBody);
     if(moduleEnabled('todo'))       errors+=await mirrorPushById('todos', todos, '/api/todos', todoBody);
     if(moduleEnabled('site_exec'))  errors+=await mirrorPushById('exec', execRecords, '/api/exec-records', execBody);
     if(moduleEnabled('site_daily')) errors+=await pushDailyRecords();
@@ -5181,6 +5516,7 @@ async function syncNow(){
     const tryPull=async fn=>{ try{ pulled+=await fn(); }catch(e){ /* هيتحاول في الدورة الجاية */ } };
     if(moduleEnabled('records'))   await tryPull(()=>mergePullById('records', records, '/api/records', recordBody, mapApiRecord, {recordsWindow:true}));
     if(moduleEnabled('ir'))        await tryPull(()=>mergePullById('ir', irRecords, '/api/ir-records', irBody, r=>({id:Number(r.id), date:ymdOf(r.date), item:r.item, place:r.place, inspector:r.inspector, status:r.status, notes:r.notes||''})));
+    if(moduleEnabled('equipment')) await tryPull(()=>mergePullById('equipment', equipmentRecords, '/api/equipment-records', eqBody, mapApiEquipment));
     if(moduleEnabled('todo'))      await tryPull(()=>mergePullById('todos', todos, '/api/todos', todoBody, t=>({id:Number(t.id), date:ymdOf(t.date), notes:t.notes, place:t.place||'', priority:t.priority, done:!!t.done})));
     if(moduleEnabled('site_exec')) await tryPull(()=>mergePullById('exec', execRecords, '/api/exec-records', execBody, e=>({id:Number(e.id), item:e.item, place:e.place, pct:Number(e.pct), notes:e.notes||'', stages:e.stages||[], stageDone:e.stageDone||[], updated:e.updated})));
     await pullManagedData();
@@ -5188,7 +5524,7 @@ async function syncNow(){
     _suppressAutoSync=true; saveAll(); _suppressAutoSync=false;
     populateDropdowns();
     if(pulled>0){
-      renderRecords(); renderIR(); renderTodo(); renderExec(); renderHome();
+      renderRecords(); renderIR(); renderTodo(); renderExec(); renderHome(); renderEquipment();
       if(typeof renderDashboard==='function') renderDashboard();
     }
     refreshServerOldest(); // يحدّث ظهور زرار "تحميل سجلات أقدم" حسب واقع السيرفر
@@ -5250,11 +5586,12 @@ async function pullAll(opts){
     try{ return await api('GET',path); }
     catch(e){ if(e.status===403) return null; throw e; }
   };
-  const [ctr, insp, its, irs, tds, exs, dls]=await Promise.all([
+  const [ctr, insp, its, irs, tds, exs, dls, eqs]=await Promise.all([
     getOpt('/api/contractors'), getOpt('/api/inspectors'), getOpt('/api/items'),
     getOpt('/api/ir-records','ir'), getOpt('/api/todos','todo'), getOpt('/api/exec-records','site_exec'),
-    getOpt('/api/daily-records','site_daily')
+    getOpt('/api/daily-records','site_daily'), getOpt('/api/equipment-records','equipment')
   ]);
+  if(eqs) equipmentRecords=eqs.data.map(mapApiEquipment);
   if(ctr) contractors=ctr.data.map(c=>({name:c.name, spec:c.spec||'—', rate:c.rate!=null?String(Number(c.rate)):'', rateType:c.rateType||'يومية'}));
   if(insp) inspectors=insp.data.map(i=>i.name);
   if(its) items=its.data.map(it=>({cat:it.cat, name:it.name, stages:it.stages||[]}));
@@ -5274,6 +5611,7 @@ async function pullAll(opts){
   };
   fill('records', records, recordBody, x=>x.id);
   fill('ir', irRecords, irBody, x=>x.id);
+  fill('equipment', equipmentRecords, eqBody, x=>x.id);
   fill('todos', todos, todoBody, x=>x.id);
   fill('exec', execRecords, execBody, x=>x.id);
   fill('daily', dailyRecords, dailyBody, x=>x.id);
@@ -5288,7 +5626,7 @@ async function pullAll(opts){
   saveRecordsLoadState();
 
   _suppressAutoSync=true; saveAll(); _suppressAutoSync=false;
-  populateDropdowns(); renderRecords(); renderExec(); renderIR(); renderTodo(); renderDaily&&renderDaily(); renderHome();
+  populateDropdowns(); renderRecords(); renderExec(); renderIR(); renderTodo(); renderEquipment(); renderDaily&&renderDaily(); renderHome();
   if(typeof renderSettings==='function') renderSettings();
   if(typeof renderDashboard==='function') renderDashboard();
   updateLoadOlderUI();
@@ -5547,6 +5885,7 @@ function backupData() {
     date: new Date().toISOString(),
     records,
     irRecords,
+    equipmentRecords,
     todos,
     contractors,
     places,
@@ -5610,6 +5949,7 @@ function applyRestoreData(jsonStr){
           N=Array.isArray(data.inspectors)?data.inspectors.map(str):null, IT=arr(data.items), D=arr(data.dailyRecords), E=arr(data.execRecords);
     if(R)  records      = R.map(x=>withId({...x, qty:num(x.qty,0), price:num(x.price,0), discount:num(x.discount,0), total:num(x.total,0), done:!!x.done}));
     if(I)  irRecords    = I.map(withId);
+    const Q=arr(data.equipmentRecords); if(Q) equipmentRecords = Q.map(x=>withId({...x, minutes:num(x.minutes,0)}));
     if(T)  todos        = T.map(x=>withId({...x, done:!!x.done}));
     if(C)  contractors  = C.map(c=>({name:str(c.name), spec:str(c.spec)||'—', rate:str(c.rate), rateType:str(c.rateType)||'يومية'}));
     if(P)  places       = P;
