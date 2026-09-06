@@ -12,6 +12,7 @@
 > 7. **سجل نشاط الحسابات** — جدول `activity_logs` (دخول ناجح/فاشل، مزامنة، أخطاء API بهوية صاحب الطلب)، كارت "📊 نشاط الحسابات" بجدول كل الحسابات + قسم سجل في كارت الحساب، تنظيف بعد 14 يوم. التفاصيل في **قسم 14**.
 > 8. **إصلاحات من الاستخدام الحقيقي:** `'unsafe-eval'` في CSP (ExcelJS 4.3 بتحتاجه)، محمّل مكتبات يتحقق من الـ global ويتخطى كاش الـ SW ويرجع للـ CDN، الـ SW لا يكاش `lib/*.js` إلا لو رد JS حقيقي، المزامنة ما بتطلبش `/api/records` لحساب بلا وحدة السراكي (كانت بتطلع "تعذر الاتصال" بالغلط)، حذف الكشوف بقى للأدمن فقط، إحصاءات مزامنة الجهاز (`POST /api/account/sync-stats`)، معاينة الكشف بترتيب الأعمدة الطبيعي (A يسار) وبتوقيعات المديرين ظاهرة.
 > 9. **الواجهة بقت في git** — ريبو بجذر المشروع (بلا remote)، `.gitignore` بيستثني `backend/` (ريبو مستقل على GitHub) و`pwa-dist/` و`backups/` والـ `.bak`.
+> 10. **وحدة "🚜 سركي المعدات" (`equipment`) — مبنية ومختبرة محليًا مساء 2026-09-06، غير منشورة بعد:** كشف تشغيل شهري (20→19) لمعدة مؤجّرة، ورقة لكل 5 أيام، يعدّي على نفس دورة الاعتماد بـ `submissions.kind=equipment`. التفاصيل في **قسم 16** و[SESSION-LOG.md](SESSION-LOG.md) قسم 14.
 
 > **تحديث 2026-09-01:** ملخص ما بعد 2026-08-26 (السرد الزمني الكامل في [SESSION-LOG.md](SESSION-LOG.md)):
 > 1. **إصلاحات جوهرية في محرك المزامنة** (`mirrorPushByName`/`pullManagedData`) — انظر التنبيه المضاف في قسم 5.28: الحذف من السيرفر مشروط بمعرفة الجهاز للاسم في snapshot، لا إحياء للمحذوف غير المعدّل محليًا، والمقاولون/الاستشاريون/البنود بيتسحبوا دوريًا للجميع (الأدمن كمان).
@@ -85,7 +86,7 @@ E:\fabel max cea project\
 └── backend/                              — الـ Backend (Node/TS/Express/Prisma/MySQL)
     ├── prisma/schema.prisma              — 26 جدول (انظر backend/README.md وقسم 9.1)
     ├── prisma/seed.ts                    — بيانات افتراضية + أول أدمن
-    ├── prisma/migrations/                — 20 migration (آخرها 20260906170000_appconfig_wider_value)
+    ├── prisma/migrations/                — 21 migration (آخرها 20260906200000_equipment_records — غير منشورة بعد)
     ├── scripts/
     │   ├── import-backup.ts              — استيراد نسخة التطبيق المحلية القديمة (صيغة CEA_backup_*)
     │   ├── restore-backup.ts             — ⭐ استعادة كاملة من الباك اب اليومي (كل الحسابات بنفس الأرقام) — مُختبر
@@ -100,7 +101,7 @@ E:\fabel max cea project\
     │   ├── routes/ (auth, account, admin, approvals, submissions, inventory, ...), controllers/, middlewares/, schema/ (Zod), utils/
     │   ├── services/                     — googleSheet, backup, storage, approvalChain (سلسلة الاعتماد + الدفع للشيت), signStamp (ختم التوقيعات), activityLog
     │   └── dist/                         — ناتج compile (ليس مصدر)
-    ├── tests/                            — vitest + supertest — 10 ملفات (auth, entities, modules, records, submissions, inventory, approvals, signStamp, activityLog, sync-stats) = 84 اختبار
+    ├── tests/                            — vitest + supertest — 11 ملف (auth, entities, modules, records, submissions, inventory, approvals, signStamp, activityLog, sync-stats, equipment) = 94 اختبار
     ├── Dockerfile, docker-compose.yml, railway.json — إعدادات نشر/تشغيل محلي
     └── README.md
 ```
@@ -147,7 +148,7 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت مح
 
 | العنصر | الوصف |
 |---|---|
-| `ALL_MODULES` | `['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals']` — الموديولات (تابات) القابلة للتفعيل/التعطيل لكل مستخدم (`inventory` و`approvals` مش في الافتراضي — مخفيتان حتى يفعّلهما الأدمن؛ الاتنين **أونلاين فقط**) |
+| `ALL_MODULES` | `['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment']` — الموديولات (تابات) القابلة للتفعيل/التعطيل لكل مستخدم (`inventory` و`approvals` و`equipment` مش في الافتراضي — مخفية حتى يفعّلها الأدمن؛ المخازن والاعتمادات **أونلاين فقط**، والمعدات أوفلاين-أولًا زي السراكي) |
 | `MODULE_LABELS`, `TAB_MODULE` | تسمية عربية لكل موديول + ربطه بمعرّف التاب في الـ DOM |
 | `enabledModules` / `enabledFeatures` | تُقرأ من `AccountSettings` عبر الـ API وتُخزَّن محليًا في `cea_enabled_modules` / `cea_enabled_features` |
 | `ALL_FEATURES` / `FEATURE_KEYS` / `DEFAULT_FEATURES` | فيتشرز أدق داخل كل تاب (مش كل التاب بالكامل) |
@@ -276,6 +277,17 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت مح
 | المراجعة داخل التطبيق | `aprReview` (`GET /api/approvals/:id/file` — الأصل أثناء المراجعة، والنسخة **الموقّعة** بعد `SENT`), `aprOpenPreview`, `aprZoom`/`aprZoomReset`, `aprClosePreview` |
 | القرار | `aprAsk` (يقرأ `isLast`/`isStuck`/`chain` من السيرفر لكل كشف), `aprOpenModal`/`aprCloseModal` (بيعيدوا تفعيل زرار التأكيد — كان بيفضل disabled), `aprConfirm` (`POST /api/approvals/:id/decide`), `aprTip` (`APR_TIPS`) |
 | تنظيف العرض (أدمن) | `aprHideBtn`, `aprHide` (`POST /api/approvals/:id/hide` — يخفي الصف من الطابور فقط، للكشوف `SENT`/`RETURNED`) |
+
+### 5.32 سركي المعدات (وحدة `equipment`) — بعد `resendSubmission` (نسخة 2026-09-06 مساءً) — **جديدة، غير منشورة**
+تاب "🚜 سركي المعدات": كشف تشغيل شهري (الشهر من 20 لـ 19) لمعدة مؤجّرة، أوفلاين-أولًا زي السراكي (`equipmentRecords` في `cea_equipment`). التصميم في **قسم 16**.
+
+| المجموعة | الدوال |
+|---|---|
+| الشهر 20→19 | `getEqMonthBounds(offset)`, `getEqMonthBoundsForDate`, `eqMonthLabel`, `renderEqMonthNav`, `shiftEqMonth`, `resetEqMonth`, `eqSheetsCount` |
+| الفورم/CRUD | `saveEquipment` (اليوم من التاريخ، المدة `eqMinutes` — لو "إلى" أصغر من "من" = عدّى نص الليل), `clearEqForm`, `editEquipment`, `cancelEqEdit`, `deleteEquipment`, `eqRepeatLast`, `eqCalcDuration`, `eqSetDay`, `fmtMinutes` |
+| السجل | `renderEquipment` (فلتر الشهر + المعدة `#eq-filter-equipment`، datalist الأسماء، ملخص أيام/ساعات/ورقات، كروت), `eqMonthRecords` |
+| الكشف | `buildEquipmentWorkbook`, `buildEquipmentSheet` (ورقة لكل 5 أيام تقويمية، نفس شبكة الـ 13 عمود وبلوكات التوقيع في الصف 16/17), `prepareEquipmentSheet` (المعدة من الفلتر أو الوحيدة في الشهر), `previewEquipmentSheet`, `exportEquipmentExcel`, `submitEquipmentForReview`, `openEquipmentReview` (نفس مودال المراجعة) — الإرسال عبر `confirmSubmitApproved` مع `kind='equipment'` |
+| المزامنة | `eqBody`, `mapApiEquipment` — `mirrorPushById('equipment', …, '/api/equipment-records')` في `syncNow`، سحب في `pullAll`، `SERVER_TO_LOCAL`، النسخة الاحتياطية/الاستعادة |
 
 ### 5.20 تصدير IR — أسطر 2432-2456
 `exportIRExcel`.
@@ -425,9 +437,9 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت مح
 يستبدل Supabase بالكامل؛ الواجهة لا تتحدث مع قاعدة البيانات مباشرة أبدًا، فقط عبر هذا الـ API الموثّق بـ JWT.
 
 ### 9.1 نموذج البيانات (Prisma — 26 جدول)
-`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2]، lastSeenAt، **`grade`** [junior/senior/team leader/construction manager/project manager — NOT NULL افتراضي junior]، **`approverTlId/approverCmId/approverPmId`** [المعتمد المسند بالاسم لكل مستوى، FK بـ SET NULL]، **`syncLocalRecords/syncUnsynced/syncReportedAt`** [إبلاغ الجهاز])، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures`)، `Contractor`، `Place` (+note)، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction`، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord`، `File`، `AppConfig` (key/value — أسماء المواقع، وحدات/فئات المخازن، **`approvalMatrix`**؛ `value` اتوسّع لـ 1000 حرف)، `Submission` (site، gsheetRow، **`revision`**، **`reviewState`** IN_REVIEW/RETURNED/SENT، **`currentLevel`**، **`currentApproverId`** [null = كشف قديم: أي معتمد بدرجة المستوى]، **`queueHiddenAt`**)، **`SubmissionReview`** (level، decision APPROVED/APPROVED_NOTES/REJECTED، note، revision، byUserId — سجل تدقيق كامل)، **`ActivityLog`** (userId/email/event/detail/status/path/ip/device)، وجداول المخازن الخمسة (`InventoryItem`، `StockMove`، `IssueRequest`+`IssueRequestLine`، `PurchaseRequest`).
+`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2]، lastSeenAt، **`grade`** [junior/senior/team leader/construction manager/project manager — NOT NULL افتراضي junior]، **`approverTlId/approverCmId/approverPmId`** [المعتمد المسند بالاسم لكل مستوى، FK بـ SET NULL]، **`syncLocalRecords/syncUnsynced/syncReportedAt`** [إبلاغ الجهاز])، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures`)، `Contractor`، `Place` (+note)، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction`، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord`، `File`، `AppConfig` (key/value — أسماء المواقع، وحدات/فئات المخازن، **`approvalMatrix`**؛ `value` اتوسّع لـ 1000 حرف)، `Submission` (site، gsheetRow، **`kind`** labor/equipment [غير منشور بعد]، **`revision`**، **`reviewState`** IN_REVIEW/RETURNED/SENT، **`currentLevel`**، **`currentApproverId`** [null = كشف قديم: أي معتمد بدرجة المستوى]، **`queueHiddenAt`**)، **`SubmissionReview`** (level، decision APPROVED/APPROVED_NOTES/REJECTED، note، revision، byUserId — سجل تدقيق كامل)، **`EquipmentRecord`** (contractor، equipment، place، day، date، timeFrom/timeTo، minutes [من السيرفر]، works، notes — غير منشور بعد)، **`ActivityLog`** (userId/email/event/detail/status/path/ip/device)، وجداول المخازن الخمسة (`InventoryItem`، `StockMove`، `IssueRequest`+`IssueRequestLine`، `PurchaseRequest`).
 
-Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `20260903120000_manager_approvals` · `20260903150000_backfill_review_state` (حرجة: الكشوف القديمة → `SENT`) · `20260905000000_user_sync_stats` · `20260905010000_submission_queue_hidden` · `20260905120000_grade_and_assigned_approvers` · `20260906150000_activity_log` · `20260906170000_appconfig_wider_value`.
+Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `20260903120000_manager_approvals` · `20260903150000_backfill_review_state` (حرجة: الكشوف القديمة → `SENT`) · `20260905000000_user_sync_stats` · `20260905010000_submission_queue_hidden` · `20260905120000_grade_and_assigned_approvers` · `20260906150000_activity_log` · `20260906170000_appconfig_wider_value` · **`20260906200000_equipment_records`** (محلي فقط — تُطبَّق مع أول نشر للـ backend بعد `4950666`).
 
 ### 9.2 أهم نقاط النهاية (Endpoints)
 - **Auth**: register/login/refresh/logout/me/change-password — **مسارا `password-reset/*` مُعطَّلان عمدًا منذ 2026-08-21** (كانا يعيدان التوكن في الاستجابة بدون مصادقة = استيلاء على أي حساب — انظر C1 في `SECURITY_REPORT.md`؛ البديل الآمن: `POST /api/admin/users/:userId/reset-password`) — JWT (15 دقيقة access + 30 يوم refresh دوّار مع كشف إعادة استخدام يُلغي كل الجلسات)، bcrypt 12 rounds. **مهلة سماح (grace window)** — env: `REFRESH_REUSE_GRACE_SEC` (افتراضي 120 ثانية): إعادة استخدام توكن أُلغي بسبب تدوير عادي (`rotated=true` في جدول `refresh_tokens`) داخل المهلة تُقبل وتصدر توكنات جديدة بدل اعتبارها سرقة — يمنع خروج المستخدم القسري عند سباق تبويبين أو انقطاع حفظ التوكن الجديد. التوكنات الملغاة أمنيًا (logout/تغيير كلمة سر) لا تستفيد من المهلة أبدًا.
@@ -436,7 +448,8 @@ Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `2026090312
 - **`/api/approvals/*`** (خلف `requireModule('approvals')`): `GET /levels`، `GET /queue` (مفلتر بالشخص: كشوف المهندسين المسندين له + المسندة له + اللي اعتمدها خلال 7 أيام + الكشوف القديمة `currentApproverId=null` عند مستوى درجته؛ الأدمن يشوف الكل؛ كل صف بيرجع `chain`/`isLast`/`isStuck`/`canAct`)، `GET /:id/file` (لأي حساب عنده الوحدة — الأصل أثناء المراجعة والنسخة **الموقّعة** بعد `SENT`)، `POST /:id/decide` (APPROVED/APPROVED_NOTES/REJECTED — الرفض بملاحظة إلزامية)، `POST /:id/hide` (أدمن: إخفاء من الطابور فقط).
 - **`/api/submissions/*`**: `POST /` (multipart) → يُخزَّن ويبدأ `startChain` قبل الرد (لو مفيش مستويات مطلوبة لدرجته → يتبعت للشيت فورًا)؛ `POST /:id/resend` (للمرفوض فقط، rev++ والسلسلة من أولها)؛ `GET /mine` (بحالة السلسلة + `reviews` + حالة الشيت الحية)؛ `GET /` للأدمن (+ فلتر `?userId=` و`status`)؛ `GET /:id/file` (المالك أو الأدمن)؛ `PATCH /:id/review` (قديم، بلا استخدام من الواجهة)؛ `POST /:id/gsync` (إعادة الدفع عبر `approvalChain` — بيختم التوقيعات كمان)؛ **`DELETE /:id` أدمن فقط لأي حالة** (منذ 2026-09-05 — cascade على `submission_reviews`؛ صف الشيت لو وصل بيفضل).
 - **`/api/account/*`**: `GET/PUT /settings` (الكتابة أدمن فقط)، **`POST /sync-stats`** (الجهاز بيبلّغ عدد السراكي المحلية واللي لسه ما اترفعش — بيتسجل كمان كحدث `SYNC` في سجل النشاط).
-- `requireModule` middleware يفرض نفس تقييد الموديولات على مستوى السيرفر لمسارات records/submissions/ir/todo/exec/daily/inventory/approvals.
+- **`/api/equipment-records`** (خلف `requireModule('equipment')` — غير منشور بعد): CRUD عبر `crudRouter` مقيّد بالملكية؛ `minutes` تُحسب على السيرفر من `timeFrom/timeTo` وأي قيمة مُرسلة تُتجاهل. و`POST /api/submissions` بيقبل `kind` (labor|equipment).
+- `requireModule` middleware يفرض نفس تقييد الموديولات على مستوى السيرفر لمسارات records/submissions/ir/todo/exec/daily/inventory/approvals/equipment.
 
 ### 9.3 الخدمات (Services)
 | الخدمة | الدور |
@@ -445,7 +458,7 @@ Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `2026090312
 | `backup.ts` | يُصدّر قاعدة البيانات كاملة (كل الجداول شاملًا `app_config` والمخازن) كـ JSON إلى Google Drive، جدولة يومية بعد 3 صباحًا UTC + زر يدوي، وآخر نتيجة بتتسجل في `app_config` وتُقرأ من `GET /api/admin/backup-status`. **الاستعادة الكاملة:** `scripts/restore-backup.ts` (مُختبر end-to-end) |
 | `storage.ts` | تجريد تخزين ملفات محلي على القرص (`StorageAdapter` — جاهز للاستبدال بـ S3/R2)، أسماء عشوائية في فولدرات شهرية، محمي من path-traversal |
 | **`approvalChain.ts`** (2026-09-03→06) | سلسلة اعتمادات المديرين: `GRADES`/`APPROVING_GRADES`، المصفوفة (`loadApprovalMatrix` عند الإقلاع + كاش في الذاكرة، `setApprovalMatrix`، `normalizeChain` بيفرض ترتيب السلم)، `requiredLevelsFor`، `buildChain`/`resolveChainForUser` (سلسلة الكشف نفسه: مستوى + الشخص المسند، ومستوى بلا شخص يتخطى، `soleProjectManagerId` تلقائي)، `nextLevel` → `{next|done|stuck}`، `startChain`، `collectSignatures` (آخر اعتماد لكل مستوى في النسخة الحالية → توقيع صاحبه من `UserSettings.signatureFileId`)، `signedFileBuffer`، `approvalSummary` (سطر لكل قرار → عمود G في الشيت)، `pushSubmissionToSheet` (ختم ثم دفع — **فشل الختم مايوقفش الدفع**) |
-| **`signStamp.ts`** (2026-09-05) | exceljs 4.4: `stampSignatures(buffer, sigs)` بيلزق توقيع كل مستوى في بلوكه على **كل أوراق المصنّف**؛ `blocksForSheet` بيتعرّف على البلوك من نص عنوان الصف 17؛ `fitInBlock` بيحافظ على نسبة الصورة (≤50% عرض البلوك، ≤58% ارتفاع الصف، متوسّطة) ويكتب المرساة بصيغة `nativeCol/Off` بالـ EMU الصح (المرساة الكسرية في exceljs بتتحوّل غلط). الملف الأصلي في التخزين ما بيتغيرش — الموقّع نسخة عابرة |
+| **`signStamp.ts`** (2026-09-05) | exceljs 4.4: `stampSignatures(buffer, sigs)` بيلزق توقيع كل مستوى في بلوكه على **كل أوراق المصنّف**؛ `blocksForSheet` بيتعرّف على البلوك من نص عنوان الصف 17 (بيعرف كمان عناوين كشف المعدات: "مهندس التنفيذ" = construction manager، "المشرف المسئول" = بلوك المهندس فلا يُختم عليه، ومستوى بلا بلوك يُتخطى)؛ `fitInBlock` بيحافظ على نسبة الصورة (≤50% عرض البلوك، ≤58% ارتفاع الصف، متوسّطة) ويكتب المرساة بصيغة `nativeCol/Off` بالـ EMU الصح (المرساة الكسرية في exceljs بتتحوّل غلط). الملف الأصلي في التخزين ما بيتغيرش — الموقّع نسخة عابرة |
 | **`activityLog.ts`** (2026-09-06) | `logActivity` (مغلّفة بـ try/catch كامل — ممنوع تعطّل أي طلب) بتُستدعى من `auth.controller.login` (نجاح/فشل بالإيميل)، `errorHandler` (أي 4xx/5xx بهوية صاحب الطلب، مع فلتر ضوضاء 401 على refresh/login)، و`account/sync-stats`؛ `scheduleActivityCleanup` يحذف الأقدم من 14 يوم يوميًا |
 
 ### 9.4 الأمان
@@ -572,3 +585,17 @@ Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص �
 ## 15. خطة الاسترجاع لو السيرفر وقع — [RECOVERY-PLAN.md](RECOVERY-PLAN.md) (2026-09-05)
 
 الهدف: الشغل ما يقفش لو Railway وقع. التطبيق (Cloudflare) مستقل وبيفتح **أوفلاين** بنفس الجلسة والبيانات (`network_error` ما بيمسحش الجلسة). المسار: المهندس يطلّع "📄 تنزيل نسخة Excel معتمدة" من جهازه → يرفعها من زرار "📤 رفع ملف السركي على Google Form" (فيتشر `gform_site1/2`) → الصف يوصل الشيت "بانتظار DC" → الـ DC يعتمد من خانة D → توقيعات Drive (تنفيذ حسب سكني/تجاري + مدير المشروع) + PDF زي زمان (بلا توقيع مدير الفريق ولا سلسلة المديرين — مقبول كطوارئ). المسارين (تطبيق/فورم) شغالين جنب بعض في نفس الشيت بلا تعارض. لما السيرفر يرجع: المزامنة تلقائية، والكشوف اللي عدّت من الفورم مش في "تسليماتي" (طبيعي — ما تتعادش). الشروط اللي لازم تفضل: تريجرا `onFormSubmitHandler`/`onEditHandler`، صور التوقيع في Drive (`CONFIG`)، الفورم مربوط بالشيت، وزرار الفورم ظاهر للمهندسين. الملف فيه كمان أوامر تشخيص/إصلاح السيرفر (rollback، استعادة القاعدة من "CEA Backups" في Drive، ملفات الرفع غير الدائمة على Railway).
+
+---
+
+## 16. سركي المعدات (وحدة `equipment`) — إيجار معدات شهري — مبنية محليًا 2026-09-06، غير منشورة بعد 🚧
+
+**الورقة الأصلية:** كشف ورقي شهري للمعدة المؤجّرة، كل ورقة 5 أيام (التاريخ · اليوم · المكان · الوقت من/إلى · المدة · بيان الأعمال · ملاحظات) وتحتها 3 توقيعات. **مفيش فلوس** — كشف تشغيل بالساعات، والحساب خارج التطبيق.
+
+- **الشهر من يوم 20 ليوم 19 اللي بعده** (`getEqMonthBounds`)، بمتصفح شهري زي متصفح الأسابيع. التسجيل يومي عادي: سطر لكل يوم تشغيل (ممكن أكتر في اليوم لو اتنقلت مكان/فترة)، والمدة من السيرفر (`minutesBetween`؛ نص الليل محسوب).
+- **البيانات:** جدول `equipment_records` (قسم 9.1) — المقاول من قائمة المقاولين (snapshot نصي)، اسم المعدة نص حر بـ datalist، المكان من قائمة الأماكن. أوفلاين-أولًا بنفس محرك المزامنة (`mirrorPushById`/`mergePullById`).
+- **الكشف الشهري:** ملف Excel واحد، **ورقة لكل 5 أيام تقويمية** من 20 لـ 19 (7 ورقات لشهر 31 يوم، 6 لشهر 30) — الأيام كلها موجودة والفاضي صف فاضي. راس كل ورقة: شركة هوم جيت · "سركي / إيجار معدات (المعدة)" · إسم المقاول · المعدة · الموقع · المشروع · الفترة من/إلى حسب الورقة · "ورقة n من N — شهر …". صف 13 إجمالي ساعات الورقة + إجمالي الشهر (وأيام التشغيل). نفس شبكة الـ 13 عمود وهوية الكشف الأسبوعي.
+- **التوقيعات (الصف 16، العناوين 17):** `A..E` = توقيع مدير المشروع · `G..I` = توقيع مهندس التنفيذ · `J..M` = توقيع **المشرف المسئول** (= توقيع المهندس المسجّل، بيتحط من التطبيق وقت البناء). `signStamp.ts` بيختم مدير المشروع ومدير التنفيذ من حسابات المعتمدين، ومدير الفريق (لو في السلسلة) بيعتمد بلا بلوك فيتخطى.
+- **الإرسال:** نفس دورة الاعتماد بالظبط — `POST /api/submissions` بـ `kind=equipment` (`contractorName` = المقاول، `placeName` = المعدة، `total` = الساعات، `recordsCount` = أيام التشغيل) → سلسلة المديرين → ختم → جوجل شيت (نفس الشيت، الملف متعدد الورقات بيتحوّل والـ PDF بكل الورقات — `Code.gs` بلا تعديل). "تسليماتي" وتاب الاعتمادات بيميّزوا الكشف بـ "🚜 كشف معدات".
+- **الظهور:** وحدة `equipment` مش في الافتراضي — الأدمن يفعّلها حسابًا بحساب من "الوحدات الظاهرة له" (وبتتفرض على السيرفر بـ `requireModule`).
+- **النشر:** backend `e6c38e3` (migration تلقائية) + واجهة `68a4325` — الخطوات في [DEPLOY-NEXT-RELEASE.md](DEPLOY-NEXT-RELEASE.md).
