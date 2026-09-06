@@ -1,6 +1,17 @@
 # System Reference — مشروع CEA (متابعة السرايكي)
 
-مرجع تقني كامل لبنية المشروع، الملفات، والـ features الموجودة فعليًا في الكود — مُستخرج بالكامل من قراءة الكود المصدري (بدون افتراضات). آخر تحديث: 2026-09-01.
+مرجع تقني كامل لبنية المشروع، الملفات، والـ features الموجودة فعليًا في الكود — مُستخرج بالكامل من قراءة الكود المصدري (بدون افتراضات). آخر تحديث: 2026-09-06.
+
+> **تحديث 2026-09-06:** ملخص ما بعد 2026-09-01 (السرد الكامل في [SESSION-LOG.md](SESSION-LOG.md) أقسام 9–13). **كل ما يلي منشور في الإنتاج** (Railway backend حتى `291828d`، الواجهة على Cloudflare حتى `0f01ea1`، كاش `cea-202609061540`)، الاختبارات **84/84**:
+> 1. **باقة 2026-09-03 اتنشرت فعليًا** (المخازن + دفعة الأمان الثانية + اعتمادات المديرين، backend `be19004`) — وحدة المخازن (قسم 12) بقت على الإنتاج لكن مخفية حتى يفعّلها الأدمن حسابًا بحساب.
+> 2. **وحدة "اعتمادات المديرين"** (`approvals`) — سلسلة مراجعة داخل التطبيق قبل ما الكشف يوصل جوجل شيت: تاب جديد بجدول طابور، قرارات اعتماد/بملاحظات/رفض، إعادة إرسال بنسخة `rev++`، جدول `submission_reviews`، مسارات `/api/approvals/*`. التفاصيل في **قسم 13**.
+> 3. **الدرجات والمعتمدون المسندون** — `users.grade` (5 درجات ثابتة) بدل `approval_level`، ومعتمد بالاسم لكل حساب في كل مستوى (`approver_tl_id/cm_id/pm_id`)، ومصفوفة "مين يعتمد لمين" **قابلة للتعديل** من شاشة الإدارة (`app_config.approvalMatrix`).
+> 4. **التوقيعات جوّه التطبيق** — `backend/src/services/signStamp.ts` (exceljs) يختم توقيع كل معتمد فعلي على الكشف قبل الدفع لجوجل (A16 مدير المشروع · G16 مدير التنفيذ · J16 مدير الفريق — البلوك يُتعرَّف عليه من نص عنوانه في الصف 17)، فالملف يوصل الشيت موقّعًا والـ PDF يتولّد فورًا. "اعتماد DC" مابقاش خطوة موافقة.
+> 5. **`google-sheet/Code.gs` (الموقع الأول) اتعاد تعريف أعمدته:** D = اعتماد DC، E = ملاحظات DC، F = الاعتماد الإداري (يُختم تلقائيًا `✅ معتمد بالكامل` ويُقفل)، G = سلسلة الاعتماد؛ وبيدعم مسارين: من التطبيق (`signed=true` → PDF فورًا) ومن الفورم (`signed=false` → المسار القديم بالكامل كطوارئ). **اللصق في Apps Script يدوي ولسه معلّق.** `Code-site2.gs` لم يُلمس.
+> 6. **خطة استرجاع** لو السيرفر وقع — [RECOVERY-PLAN.md](RECOVERY-PLAN.md): الفورم + اعتماد DC من الشيت كمسار طوارئ بلا سيرفر (قسم 15).
+> 7. **سجل نشاط الحسابات** — جدول `activity_logs` (دخول ناجح/فاشل، مزامنة، أخطاء API بهوية صاحب الطلب)، كارت "📊 نشاط الحسابات" بجدول كل الحسابات + قسم سجل في كارت الحساب، تنظيف بعد 14 يوم. التفاصيل في **قسم 14**.
+> 8. **إصلاحات من الاستخدام الحقيقي:** `'unsafe-eval'` في CSP (ExcelJS 4.3 بتحتاجه)، محمّل مكتبات يتحقق من الـ global ويتخطى كاش الـ SW ويرجع للـ CDN، الـ SW لا يكاش `lib/*.js` إلا لو رد JS حقيقي، المزامنة ما بتطلبش `/api/records` لحساب بلا وحدة السراكي (كانت بتطلع "تعذر الاتصال" بالغلط)، حذف الكشوف بقى للأدمن فقط، إحصاءات مزامنة الجهاز (`POST /api/account/sync-stats`)، معاينة الكشف بترتيب الأعمدة الطبيعي (A يسار) وبتوقيعات المديرين ظاهرة.
+> 9. **الواجهة بقت في git** — ريبو بجذر المشروع (بلا remote)، `.gitignore` بيستثني `backend/` (ريبو مستقل على GitHub) و`pwa-dist/` و`backups/` والـ `.bak`.
 
 > **تحديث 2026-09-01:** ملخص ما بعد 2026-08-26 (السرد الزمني الكامل في [SESSION-LOG.md](SESSION-LOG.md)):
 > 1. **إصلاحات جوهرية في محرك المزامنة** (`mirrorPushByName`/`pullManagedData`) — انظر التنبيه المضاف في قسم 5.28: الحذف من السيرفر مشروط بمعرفة الجهاز للاسم في snapshot، لا إحياء للمحذوف غير المعدّل محليًا، والمقاولون/الاستشاريون/البنود بيتسحبوا دوريًا للجميع (الأدمن كمان).
@@ -38,11 +49,11 @@
 
 ```
 E:\fabel max cea project\
-├── app.js                        ~4,830 سطر — كل منطق الواجهة (state, rendering, sync, export, inventory)
+├── app.js                        ~5,660 سطر — كل منطق الواجهة (state, rendering, sync, export, inventory, approvals, admin activity)
 ├── app.js.pre-submit.bak                 — نسخة app.js قبل إضافة ميزة الاعتمادات (Submissions)
 ├── app.js.supabase.bak                   — نسخة app.js قبل الترحيل من Supabase إلى MySQL
-├── index (17).html               ~1,075 سطر — الواجهة (HTML) + استدعاء app.js وcapacitor.js
-├── style.css                     ~615 سطر — كل التنسيق (layout, tabs, dark mode, modals, drawer, inventory...)
+├── index (17).html               ~1,215 سطر — الواجهة (HTML) + استدعاء app.js وcapacitor.js
+├── style.css                     ~715 سطر — كل التنسيق (layout, tabs, dark mode, modals, drawer, inventory, approvals, activity table...)
 ├── manifest.webmanifest                  — PWA manifest (اسم، أيقونات، RTL، standalone)
 ├── sw.js                                 — Service Worker: تخزين مؤقت أوفلاين لهيكل التطبيق
 ├── build-pwa.js                          — يبني pwa-dist/ (النسخة الجاهزة للنشر) من الملفات المصدرية
@@ -52,7 +63,8 @@ E:\fabel max cea project\
 ├── SECURITY_REPORT.md                    — تقرير الفحص الأمني + حالة الإصلاحات (دفعتان)
 ├── SESSION-LOG.md                        — سجل جلسة العمل الكبرى (أواخر أغسطس → سبتمبر 2026) مضغوطًا
 ├── ROADMAP-INVENTORY.md                  — تصميم وحدة المخازن وقراراتها
-├── DEPLOY-NEXT-RELEASE.md                — خطوات نشر باقة المخازن+الأمان الجاهزة للتنفيذ الفوري
+├── DEPLOY-NEXT-RELEASE.md                — سجل النشرات الفعلية (3 و5 سبتمبر 2026) + خطوات/rollback مرجعية للنشرات الجاية
+├── RECOVERY-PLAN.md                      — 🆘 خطة الاسترجاع لو السيرفر وقع (الفورم + اعتماد DC من الشيت كمسار طوارئ)
 ├── MIGRATION-RAILWAY-TO-HOSTINGER.md     — دليل النقل الكامل لـ Hostinger
 ├── backups/                              — uploads-*.tgz (نسخة ملفات الرفع من Railway) + CEA_backup_2026-08-17.json (اتنقل هنا — بيانات حقيقية)
 ├── SYSTEM_REFERENCE.md                   — هذا الملف
@@ -63,34 +75,37 @@ E:\fabel max cea project\
 │   ├── xlsx.full.min.js          (~860 KB) — مكتبة SheetJS، قراءة/استيراد Excel (lazy load)
 │   └── exceljs.min.js            (~1.1 MB) — مكتبة ExcelJS، بناء Excel منسّق للتصدير (lazy load)
 ├── google-sheet/
-│   ├── Code.gs                           — Google Apps Script (شيت جريني): يستقبل الاعتمادات، يبني Sheet+PDF بتوقيعات، يتتبّع الحالة
-│   └── Code-site2.gs                     — نسخة أزاليا (فولدراتها متظبطة، التوقيعات placeholders — الاعتماد يكمل بدونها)
+│   ├── Code.gs                           — Google Apps Script (شيت جريني): يستقبل الكشف الموقّع من التطبيق → صف + شيت محوّل + PDF فورًا؛ ومسار الفورم القديم (بانتظار DC) للطوارئ — انظر قسم 10
+│   ├── Code -قديم.gs                     — نسخة ما قبل تحديثات سبتمبر 2026 (للرجوع فقط، لا تُنشر)
+│   └── Code-site2.gs                     — نسخة أزاليا (فولدراتها متظبطة، التوقيعات placeholders) — **لم تُحدَّث** بتغييرات سبتمبر عمدًا
 ├── pwa-dist/                             — ناتج build-pwa.js (حزمة جاهزة للنشر على Cloudflare Pages) — ليس مصدر
 ├── debug-x/                              — فولدر فاضي
 ├── .wrangler/                            — حالة Cloudflare Wrangler المحلية (أداة نشر، ليست كود)
 ├── .claude/                              — إعدادات Claude Code + skills (أداة تطوير، ليست جزء من التطبيق)
 └── backend/                              — الـ Backend (Node/TS/Express/Prisma/MySQL)
-    ├── prisma/schema.prisma              — 17 جدول (انظر backend/README.md)
+    ├── prisma/schema.prisma              — 26 جدول (انظر backend/README.md وقسم 9.1)
     ├── prisma/seed.ts                    — بيانات افتراضية + أول أدمن
-    ├── prisma/migrations/                — 6 migrations
+    ├── prisma/migrations/                — 20 migration (آخرها 20260906170000_appconfig_wider_value)
     ├── scripts/
     │   ├── import-backup.ts              — استيراد نسخة التطبيق المحلية القديمة (صيغة CEA_backup_*)
     │   ├── restore-backup.ts             — ⭐ استعادة كاملة من الباك اب اليومي (كل الحسابات بنفس الأرقام) — مُختبر
     │   ├── dump-to-file.ts               — توليد ملف باك اب يدوي بنفس صيغة اليومي
     │   ├── seed-inventory.ts             — جرد افتتاحي افتراضي للمخازن (25 صنف، كميات صفر)
+    │   ├── upsert-admin.ts               — إنشاء/تحديث حساب أدمن بإيميل وباسورد (استُخدم لإعادة بناء القاعدة المحلية)
     │   ├── dedupe-records.ts             — إزالة تكرار السجلات
     │   ├── docker-start.sh
     │   └── run-tests.js
     ├── src/
     │   ├── config/                       — env.ts, prisma.ts
-    │   ├── routes/, controllers/, services/, middlewares/, schema/ (Zod), utils/
+    │   ├── routes/ (auth, account, admin, approvals, submissions, inventory, ...), controllers/, middlewares/, schema/ (Zod), utils/
+    │   ├── services/                     — googleSheet, backup, storage, approvalChain (سلسلة الاعتماد + الدفع للشيت), signStamp (ختم التوقيعات), activityLog
     │   └── dist/                         — ناتج compile (ليس مصدر)
-    ├── tests/                            — vitest + supertest (auth, entities, modules, records, submissions)
+    ├── tests/                            — vitest + supertest — 10 ملفات (auth, entities, modules, records, submissions, inventory, approvals, signStamp, activityLog, sync-stats) = 84 اختبار
     ├── Dockerfile, docker-compose.yml, railway.json — إعدادات نشر/تشغيل محلي
     └── README.md
 ```
 
-> MySQL محلي حاليًا في `E:\mysql-8.0.46-winx64` (شغّال كعملية، مش service) — قواعد: `cea` (تطوير/بيانات حقيقية) و`cea_test` (اختبارات فقط).
+> MySQL محلي حاليًا في `E:\mysql-8.0.46-winx64` (شغّال كعملية، مش service) — قواعد: `cea` (تطوير) و`cea_test` (اختبارات فقط). ⚠ **(2026-09-03)** قاعدة `cea` المحلية اتمسحت بالغلط (تشغيل `npx vitest run` مباشرة بدل `npm test`) وبقت بيانات تجريبية بس — حسابات محلية `asepremong420@gmail.com` (أدمن)، `tl@test.com`، `pm@test.com`، `testeng@cea.com`، `admin@test.com` (باسورد `password123` إلا الأول). `tests/helpers.ts` بقى يرفض أي `DATABASE_URL` مش بينتهي بـ `/cea_test`. لو محتاج نسخة إنتاج محلية: `scripts/dump-to-file.ts` ثم `scripts/restore-backup.ts --wipe`.
 
 ### ملفات مُشار إليها في الكود لكن غير موجودة في هذا الفولدر
 
@@ -116,8 +131,8 @@ localStorage  ← [ المصدر الأساسي محليًا — يعمل أوف
 REST API (backend/ — Express + JWT + requireModule middleware)
         ↓
 MySQL (قاعدة cea عبر Prisma)
-        ↓ (اعتمادات فقط)
-Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + توقيعات
+        ↓ (الكشوف فقط — بعد اكتمال سلسلة اعتمادات المديرين داخل التطبيق وختم توقيعاتهم في signStamp.ts)
+Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + شيت محوّل + PDF فورًا (الملف بيوصل موقّعًا)
 ```
 
 الواجهة **لا تتصل بقاعدة البيانات مباشرة أبدًا** — كل شيء عبر الـ API بتوكن JWT، والصلاحيات (أدمن/مهندس + ownership + تفعيل موديول) مفروضة على مستوى السيرفر (`requireModule` middleware) وليس فقط في الواجهة. الواجهة نفسها لسه بدون build tool (HTML/JS/CSS خام)، لكن `build-pwa.js` يجهّز نسخة نشر منها.
@@ -132,7 +147,7 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 
 | العنصر | الوصف |
 |---|---|
-| `ALL_MODULES` | `['records','submissions','ir','site_daily','site_exec','todo','summary','inventory']` — الموديولات (تابات) القابلة للتفعيل/التعطيل لكل مستخدم (`inventory` مش في الافتراضي — مخفية حتى يفعّلها الأدمن) |
+| `ALL_MODULES` | `['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals']` — الموديولات (تابات) القابلة للتفعيل/التعطيل لكل مستخدم (`inventory` و`approvals` مش في الافتراضي — مخفيتان حتى يفعّلهما الأدمن؛ الاتنين **أونلاين فقط**) |
 | `MODULE_LABELS`, `TAB_MODULE` | تسمية عربية لكل موديول + ربطه بمعرّف التاب في الـ DOM |
 | `enabledModules` / `enabledFeatures` | تُقرأ من `AccountSettings` عبر الـ API وتُخزَّن محليًا في `cea_enabled_modules` / `cea_enabled_features` |
 | `ALL_FEATURES` / `FEATURE_KEYS` / `DEFAULT_FEATURES` | فيتشرز أدق داخل كل تاب (مش كل التاب بالكامل) |
@@ -143,16 +158,18 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 
 ---
 
-## 5. جرد الـ Features الكامل (app.js — 4,263 سطر)
+## 5. جرد الـ Features الكامل (app.js — ~5,660 سطر)
 
 مرتّبة حسب المجال الوظيفي بترتيب ظهورها في الملف، مع أرقام الأسطر التقريبية والدوال الرئيسية.
+
+> ⚠ أرقام الأسطر في 5.1–5.30 من نسخة 2026-08-21 (4,263 سطر) وبقت تقريبية جدًا بعد إضافات سبتمبر (المخازن + الاعتمادات + النشاط ≈ +1,400 سطر) — الدوال نفسها موجودة بنفس الأسماء والترتيب. القسم 5.31 بأرقام نسخة 2026-09-06.
 
 ### 5.1 الأدوات الأساسية (Utilities) — أسطر 1-68
 | Feature | الدوال | الوصف |
 |---|---|---|
 | HTML escaping / safe args | `esc`, `jsArg` | منع XSS عند حقن نصوص المستخدم في innerHTML |
 | UTF-8 Base64 helpers | `bytesToBase64`, `base64ToBytes`, `utf8ToBase64`, `base64ToUtf8` | ترميز/فك ترميز يدعم العربي والإيموجي بالكامل |
-| Lazy library loader | `ensureXLSX`, `ensureExcelJS` | حقن مكتبات Excel ديناميكيًا عند أول استخدام فعلي فقط |
+| Lazy library loader | `ensureXLSX`, `ensureExcelJS`, `_loadLib`, `_loadScriptOnce(src, globalName)` | حقن مكتبات Excel ديناميكيًا عند أول استخدام فعلي فقط. **(2026-09-03)** بيتحقق من وجود الـ global (`XLSX`/`ExcelJS`) بعد التحميل — `onload` بيتنفذ حتى لو الملف تالف أو HTML — والترتيب: `lib/` المحلية → نفسها بمعامل عشوائي (يتخطى كاش الـ SW) → CDN، مع toast واضح عند الفشل |
 
 ### 5.2 PIN Protection System — أسطر 88-303
 حماية UI محلية لعمليات حسّاسة (تعديل الأماكن، التوقيع). الدوال: `sha256Hex`, `getPinHash/setPinHash/hasPinSet`, `openPinModal`, `requirePin`, `changePin`.
@@ -211,6 +228,10 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 | بيانات الحساب | `adminSaveTitle`/`adminSaveProject`/`adminSaveRole` |
 | حذف حساب (تأكيد بخطوتين) | `adminDeleteCancel`, `adminDeleteStep1`, `adminDeleteStep2`, `adminDeleteFinal` |
 | إنشاء/إدارة | `adminResetPassword`, `adminCopyCreated`, `adminCreateUser` |
+| **الدرجة والمعتمدون المسندون** (2026-09-05) | `adminFillGradeAndApprovers`, `adminSaveGrade`, `adminSaveApprover`, `gradeLabel` (`GRADE_LABELS`, `APR_LEVEL_UI`) — دروب داون الدرجة + سطر يشرح سلسلة كشوفه + دروب داون معتمد لكل مستوى مطلوب (مفلتر بالدرجة، ممنوع الحساب يعتمد لنفسه) + تحذير أحمر `.apr-miss` للمستوى الناقص |
+| **مصفوفة "مين يعتمد لمين"** (2026-09-06) | `loadAprLevelsAdmin` (`_aprMeta`), `renderAprMatrix`, `aprMatrixToggle`, `aprMatrixSave` (بيحذّر بعدد الكشوف قيد المراجعة قبل الحفظ), `aprMatrixReset` — كارت "سلسلة الاعتماد حسب الدرجة" بخانات اختيار لكل درجة؛ المستوى اللي مش فوق الدرجة مقفول |
+| **نشاط الحسابات** (2026-09-06) | `renderActivityTable`, `setActDays` (24س/7/14 يوم), `actVerdict`, `actErrMeaning` (ترجمة الخطأ لمعناه حسب الحساب), `actWhen`, `adminLoadActivity` (سجل الحساب الواحد), `adminSyncLine` (عدد السراكي على السيرفر + آخر إبلاغ مزامنة من الجهاز) |
+| **كشوف الحساب + حذفها** (2026-09-05) | `adminLoadUserSubs`, `adminDeleteSubmission` — الحذف بقى للأدمن فقط (من كارت الحساب ومن تاب التسليمات بعرض الأدمن) |
 
 ### 5.15 تبويب الرئيسية (Home Dashboard) — أسطر 1559-1629 — **ميزة جديدة**
 `renderHome` — ويدجت نشاط حديث + ملخص مهام سريع، أول شاشة تظهر بعد تسجيل الدخول.
@@ -226,20 +247,35 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 |---|---|
 | بناء الشيت | `getWeekBoundsForDate`, `buildApprovedSheet`, `buildApprovedWorkbook` |
 | تصدير | `exportApprovedExcel` |
-| معاينة داخل التطبيق | `renderSheetHtml`, `argbToCss`, `colLetterToNum` — يعرض شكل ملف Excel كـ HTML قبل التصدير الفعلي |
+| معاينة داخل التطبيق | `renderSheetHtml`, `argbToCss`, `colLetterToNum` — يعرض شكل ملف Excel كـ HTML قبل التصدير الفعلي. **(سبتمبر 2026)** الجدول `dir="ltr"` (العمود A يسار) عشان يُقرأ عربي صح ويطابق الشيت/الـ PDF، وصورة مرساتها جوّه خلية مدموجة بتتنسب للخلية الرئيسية (وإلا توقيعات المديرين ما كانتش بتترسم) |
+| اختيار المقاول بدون chips | `syncExportChipsFromTopFilter`, `exportSelectionHint` — لو فيتشر `records_export_chips` معطّل للحساب، التصدير/الإرسال بياخد المقاول/المكان من الفلتر العلوي بدل ما يطلب حاجة مش ظاهرة |
 
-### 5.19 ورشة الاعتمادات (Submissions & Approval Workflow) — أسطر 2216-2431 — **ميزة جديدة بالكامل**
-المهندس يرسل كشف "السراكي المعتمد" للمراجعة، ويتبع حالته حتى الاعتماد النهائي عبر Google Sheets:
+> **بلوكات التوقيع في الكشف (الصف 16، عناوينها في الصف 17) — منذ 2026-09-05:** `A16` = توقيع مدير المشروع · `G16` = توقيع مدير التنفيذ · `J16` = توقيع مدير الفريق (كان "توقيع العامل"). السيرفر (`signStamp.ts`) بيتعرّف على البلوك من **نص العنوان** مش من ترتيب ثابت — فلو اتغيّر الترتيب هنا السيرفر بيتبعه، والملفات القديمة بتتختم صح برضو.
+
+### 5.19 ورشة الاعتمادات (Submissions) — أسطر 2216-2431 (نسخة أغسطس) — **اتغيّر مسارها في سبتمبر 2026**
+المهندس يرسل كشف "السراكي المعتمد" للمراجعة ويتبع حالته. **منذ 2026-09-03 الكشف بيعدّي أولًا على سلسلة "اعتمادات المديرين" داخل التطبيق (قسم 13)، وبس بعد اكتمالها بيتختم بتوقيعات المعتمدين ويتبعت لجوجل شيت.**
 
 | المجموعة | الدوال |
 |---|---|
-| إرسال للمراجعة | `submitApprovedForReview`, `openSubmitReview`, `confirmSubmitApproved` |
+| إرسال للمراجعة | `submitApprovedForReview`, `openSubmitReview`, `confirmSubmitApproved` (بيستخدم `_resendTargetId` لإعادة الإرسال على `/resend` بنسخة جديدة) |
 | معاينة داخل مودال (Zoom) | `sheetZoom`/`sheetZoomReset`, `toggleSheetFull`, `closeSubmitReview` |
-| Timeline الحالة | `sheetTimeline`, `subRow` |
-| قائمة اعتمادات المهندس | `renderMySubmissions`, `downloadSubmission`, `deleteMySubmission` (حذف مسموح فقط طالما لسه "مُرسَل") |
-| مراجعة الأدمن | `renderAdminSubmissions`, `setSubFilter`, `reviewSubmission` (اعتماد/رفض بملاحظة، قابل للتراجع لحالة "مُرسَل" مرة أخرى), `closeReviewModal` |
+| Timeline الحالة | `sheetTimeline` (بيقرأ حالة الشيت الحية: الاعتماد الإداري / DC / سلسلة الاعتماد), `subRow` (بيعرض حالة السلسلة، سبب الرفض، وملاحظات "معتمد بملاحظات" في صندوق أصفر) |
+| قائمة تسليمات المهندس | `renderMySubmissions`, `downloadSubmission(id, name, base)`, `resendSubmission` (بعد الرفض: يوجّه لتعديل السركي ثم إعادة الإرسال rev++), `resyncSubmission` ("☁️ إعادة الإرسال للشيت" لكشف `SENT` بلا `gsheetRow` → `/gsync`) |
+| عرض الأدمن | `renderAdminSubmissions`, `setSubFilter`, `adminDeleteSubmission` (حذف نهائي — أدمن فقط). **`reviewSubmission`/`closeReviewModal` القديمتان موجودتان بلا استخدام** — الاعتماد بقى حصريًا من تاب اعتمادات المديرين، و`deleteMySubmission` اتشالت |
 
-الحالات: `SUBMITTED` → `APPROVED` / `REJECTED`. كل عملية إرسال بتُدفع في الخلفية إلى Google Sheets (`google-sheet/Code.gs` عبر `backend/src/services/googleSheet.ts`) وتُقرأ حالتها الحية من هناك.
+حالات `Submission.reviewState`: `IN_REVIEW` (عند المعتمد `currentLevel`/`currentApproverId`) → `RETURNED` (مرفوض — يرجع للمهندس) أو `SENT` (اكتملت السلسلة → ختم التوقيعات → الدفع لجوجل شيت). الحالة الحية من الشيت ("✅ معتمد بالكامل") بتتقرأ بعد كده عبر `googleSheet.ts` كما كان.
+
+### 5.31 اعتمادات المديرين (وحدة `approvals`) — أسطر ~2775-3035 (نسخة 2026-09-06) — **جديدة**
+تاب "📋 اعتمادات المديرين" — أونلاين فقط، بيظهر للحساب اللي مفعّل له الأدمن الوحدة. التصميم والقواعد في **قسم 13**.
+
+| المجموعة | الدوال |
+|---|---|
+| الطابور والجدول | `renderApprovals` (`GET /api/approvals/levels` + `/queue`), `aprBuildTable` (يحفظ `scrollLeft` بين إعادات الرسم), `aprLevelCell` (✅/⏳ دورك/🔒 مقفول/`·` مش في سلسلته), `aprStatusCell` |
+| التحديث | `aprAutoRefresh` (كل 20 ث والتاب ظاهر + عند الرجوع للتطبيق، بيتخطى لو فيه قرار مفتوح), `aprHardRefresh` (زرار "🔄 تحديث" = إعادة تحميل التطبيق والرجوع لنفس التاب عبر `sessionStorage.cea_reopen_tab`) |
+| زوم الجدول (موبايل فقط ≤899px) | `aprTableZoom`, `aprTableZoomReset`, `aprTableApplyZoom` (CSS `zoom`، محفوظ في `cea_apr_zoom`) |
+| المراجعة داخل التطبيق | `aprReview` (`GET /api/approvals/:id/file` — الأصل أثناء المراجعة، والنسخة **الموقّعة** بعد `SENT`), `aprOpenPreview`, `aprZoom`/`aprZoomReset`, `aprClosePreview` |
+| القرار | `aprAsk` (يقرأ `isLast`/`isStuck`/`chain` من السيرفر لكل كشف), `aprOpenModal`/`aprCloseModal` (بيعيدوا تفعيل زرار التأكيد — كان بيفضل disabled), `aprConfirm` (`POST /api/approvals/:id/decide`), `aprTip` (`APR_TIPS`) |
+| تنظيف العرض (أدمن) | `aprHideBtn`, `aprHide` (`POST /api/approvals/:id/hide` — يخفي الصف من الطابور فقط، للكشوف `SENT`/`RETURNED`) |
 
 ### 5.20 تصدير IR — أسطر 2432-2456
 `exportIRExcel`.
@@ -286,6 +322,8 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 > 2. اسم محلي غير موجود على السيرفر وغير معدّل محليًا (بصمته تساوي الـ snapshot — مع قبول بصمة الشكل القديم `{name}`) = محذوف عن بُعد → يُحذف محليًا، **لا يُعاد رفعه**.
 > 3. المقاولون/الاستشاريون/البنود بيتسحبوا دوريًا في `pullManagedData` **للجميع بمن فيهم الأدمن** مع تحديث الـ snapshots (`refreshNameSnap`).
 
+> **(2026-09-06)** `pullAll` و`initialSync` ما بيطلبوش `/api/records` إلا لو `moduleEnabled('records')` — حساب معتمد بس (وحدة `approvals` فقط) كان بياخد 403 فتفشل المزامنة كلها برسالة "⚠ تعذر الاتصال بالسيرفر" المضللة؛ 403 بقى يعرض "✅ متزامن — الحساب ده مالوش سراكي". وبعد كل `syncNow` الجهاز بيبلّغ `POST /api/account/sync-stats` بعدد السراكي المحلية واللي لسه بمعرّف محلي — بتظهر للأدمن في كارت الحساب (`adminSyncLine`) وفي جدول النشاط.
+
 ### 5.29 دوال التوافق القديمة (Legacy Compat) — أسطر 4106-4146
 `pushPlacesToCloud`, `pushContractorsToCloud`, `pushSignatureToCloud`, `pushPinHashToCloud`, `autoSyncReferenceData` — نفس الأسماء القديمة (وقت Supabase) لكن بمنطق الـ Backend الجديد داخليًا.
 
@@ -294,12 +332,13 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 
 ---
 
-## 6. بنية الواجهة (`index (17).html` — 964 سطر)
+## 6. بنية الواجهة (`index (17).html` — ~1,215 سطر)
 
 ### السكربتات
 - سطر 16: كتلة inline تضبط `window.isCapacitor` وتطبّق كلاس `dark-boot` قبل أول رسم (منع وميض أبيض)
-- سطر 27: `capacitor.js` (خارجي، جزء من مشروع Android الأكبر)
-- سطر 962 (آخر السطور): `app.js`
+- سطر ~42: `capacitor.js` (خارجي، جزء من مشروع Android الأكبر)
+- سطر ~1211 (آخر السطور): `app.js`
+- كتلة inline بتضبط `window.CEA_API_URL` على localhost عشان الواجهة المحلية تكلم الـ Backend المحلي
 
 ### الشاشات/التابات الرئيسية (`<div id="...">`) — بترتيب الظهور في المستند
 
@@ -310,8 +349,9 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 | `#offline-banner` | تنبيه انقطاع الاتصال | |
 | `#drawer-scrim` + الـ Drawer | قائمة تنقل جانبية | **جديد** |
 | `#tab-home` | لوحة الرئيسية — `#home-recent`, `#home-todos` | **جديد** |
-| `#tab-admin` | لوحة الأدمن (أدمن فقط) — `#admin-submissions`, `#admin-users-list`, `#admin-user-modules`, `#admin-user-places`, `#admin-user-contractors`, `#admin-sig-preview`, `#admin-create-modules`, `#admin-created-box` | **جديد بالكامل** |
-| `#tab-submissions` | اعتمادات المهندس — `#my-submissions` | **جديد** |
+| `#tab-admin` | لوحة الأدمن (أدمن فقط) — `#admin-submissions`, `#admin-users-list`, كارت **"📊 نشاط الحسابات"** (`#act-table`, `#act-count`, أزرار `.act-days`), كارت الحساب (`#admin-user-grade`, `#admin-grade-hint`, `#admin-user-approvers`, `#admin-user-modules`, `#admin-user-subs`, `#admin-user-activity`, `#admin-user-places`, `#admin-user-contractors`, `#admin-sig-preview`), كارت **"🖋️ سلسلة الاعتماد حسب الدرجة"** (`#apr-matrix`, `#apr-matrix-save`), كارت أسماء المواقع, `#admin-create-modules`, `#admin-created-box` | اتوسّعت في سبتمبر 2026 |
+| `#tab-submissions` | تسليمات المهندس — `#my-submissions` | |
+| `#tab-approvals` | اعتمادات المديرين — `#apr-myrole`, `.apr-zoom-bar` (موبايل فقط), `#apr-scroll` > `#apr-table`, ومودالات `#apr-modal` (القرار + `#apr-note`) و`#apr-preview-ov` (المعاينة) | **جديد (2026-09-03)** |
 | شريط تابات سفلي (4 عناصر) | تنقل رئيسي سريع | **جديد** |
 | `#tab-form` | فورم "سراكي" جديد — `#f-deduct-chips` | |
 | `#tab-records` | قائمة السراكي — `#week-nav`, `#export-contractor-chips`, `#export-place-chips`, `#records-list` | |
@@ -325,7 +365,7 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 
 ---
 
-## 7. بنية `style.css` (599 سطر)
+## 7. بنية `style.css` (~713 سطر)
 
 | القسم | الأسطر تقريبًا |
 |---|---|
@@ -358,9 +398,12 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 | Collapsible chips summary | 571 |
 | **مودال عام (مراجعة الاعتمادات)** | 574 — **جديد** |
 | **معاينة شيت Excel داخل التطبيق** | 586 — **جديد** |
-| **أدوات تكبير/ملء الشاشة للمعاينة** | 594 — **جديد** |
+| **أدوات تكبير/ملء الشاشة للمعاينة** | 612 |
+| **اعتمادات المديرين** (`.apr-*`: الجدول، العمود الأخير sticky، شريط الزوم للموبايل، توسيع التاب لـ 1400px على الكمبيوتر، `.apr-hide`) | 619 — **جديد (سبتمبر 2026)** |
+| **المخازن** (`.inv-*` بروح Sortly) | 651 — **جديد** |
+| **مصفوفة السلسلة + تحذير المعتمد الناقص + جدول نشاط الحسابات** (`.apr-mx-*`, `.apr-miss`, `.act-table` بعمود أول sticky وترويسة لاصقة، `.act-scroll` بارتفاع ~3 حسابات) | 686 — **جديد (سبتمبر 2026)** |
 
-> نما الملف من 440 سطر إلى 599 سطر أساسًا لدعم الـ Drawer، شريط التابات السفلي، شاشة الرئيسية، ومودال معاينة/مراجعة الاعتمادات.
+> نما الملف من 440 سطر إلى ~713 سطر: الـ Drawer، شريط التابات السفلي، الرئيسية، مودال المعاينة، ثم المخازن واعتمادات المديرين وجدول النشاط. (أرقام الأسطر للأقسام القديمة أزيحت ~+15 عن الجدول الأصلي.)
 
 ---
 
@@ -369,10 +412,10 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 | الملف | الدور |
 |---|---|
 | `manifest.webmanifest` | اسم "CEA – Civil Engineer Assistant"، عربي/RTL، `display: standalone`، لون الثيم navy (#173058)، 3 أيقونات |
-| `sw.js` | Service Worker — cache باسم `cea-v1` يشمل HTML/JS/CSS/manifest/أيقونات/مكتبتي Excel. **استراتيجية مزدوجة (تحديث 2026-08-21):** ملفات الكود (index.html/app.js/style.css + أي طلب navigate) **network-first** عشان أي نشر جديد يوصل فورًا والكاش احتياط أوفلاين فقط؛ الأصول الثابتة (أيقونات/مكتبات) stale-while-revalidate؛ وتمرير مباشر (network-only) لأي طلب cross-origin (يعني طلبات الـ API لا تُكاش أبدًا) |
+| `sw.js` | Service Worker — cache باسم `cea-v1` يشمل HTML/JS/CSS/manifest/أيقونات/مكتبتي Excel. **استراتيجية مزدوجة (تحديث 2026-08-21):** ملفات الكود (index.html/app.js/style.css + أي طلب navigate) **network-first** عشان أي نشر جديد يوصل فورًا والكاش احتياط أوفلاين فقط؛ الأصول الثابتة (أيقونات/مكتبات) stale-while-revalidate؛ وتمرير مباشر (network-only) لأي طلب cross-origin (يعني طلبات الـ API لا تُكاش أبدًا). **(2026-09-03)** `lib/*.js` ما يتخزّنش في الكاش إلا لو رد الشبكة content-type جافاسكريبت حقيقي — قبل كده نسخة تالفة/HTML كانت بتفضل تتقدّم من الكاش وتطلع "ExcelJS is not defined" |
 | `icons/` | icon-192.png, icon-512.png, icon-maskable-512.png |
 | `make-icons.js` | يولّد الأيقونات الثلاث من الصفر (PNG encoder يدوي، بدون مكتبات) — دائرة navy بحلقة ذهبية وحرف "CEA" |
-| `build-pwa.js` | يبني `pwa-dist/`: ينسخ ويعيد تسمية `index (17).html` → `index.html`، ينسخ app.js/style.css/manifest/icons/lib، يضخ رقم إصدار cache جديد داخل `sw.js`، ويكتب ملف `_headers` لـ Cloudflare Pages (رؤوس أمان + منع cache على sw.js) |
+| `build-pwa.js` | يبني `pwa-dist/`: ينسخ ويعيد تسمية `index (17).html` → `index.html`، ينسخ app.js/style.css/manifest/icons/lib، يضخ رقم إصدار cache جديد داخل `sw.js`، ويكتب ملف `_headers` لـ Cloudflare Pages (رؤوس أمان + CSP + منع cache على sw.js). **CSP بيسمح بـ `'unsafe-eval'` في `script-src` منذ 2026-09-03** — ExcelJS 4.3 بتعمل eval عند التحميل ومن غيره التصدير المعتمد والإرسال بيفشلوا (حصل فعليًا بعد النشر) |
 | `dev-server.js` | سيرفر تطوير محلي (بورت 5173) يخدم `index (17).html` كجذر، مع live-reload عبر SSE عند تعديل الملفات، وendpoint تصحيح `/__save` يكتب `debug-out.xlsx` |
 
 ---
@@ -381,22 +424,29 @@ Google Apps Script Web App (google-sheet/Code.gs) → Google Sheet + PDF + تو�
 
 يستبدل Supabase بالكامل؛ الواجهة لا تتحدث مع قاعدة البيانات مباشرة أبدًا، فقط عبر هذا الـ API الموثّق بـ JWT.
 
-### 9.1 نموذج البيانات (Prisma — 17 جدول)
-`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2 — الموقع/المشروع المنفصل]، lastSeenAt)، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures` كـ JSON لكل مستخدم)، `Contractor`، `Place`، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction` (سجلات السراكي)، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord` (تقارير بالصور)، `File` (تجريد بيانات وصفية للملفات المرفوعة فوق تخزين محلي)، `Submission` (ورشة الاعتماد: SUBMITTED/APPROVED/REJECTED، مربوطة بـ Google Drive/Sheet).
+### 9.1 نموذج البيانات (Prisma — 26 جدول)
+`User` (role ADMIN/ENGINEER، title، project [سكني/تجاري]، site [1/2]، lastSeenAt، **`grade`** [junior/senior/team leader/construction manager/project manager — NOT NULL افتراضي junior]، **`approverTlId/approverCmId/approverPmId`** [المعتمد المسند بالاسم لكل مستوى، FK بـ SET NULL]، **`syncLocalRecords/syncUnsynced/syncReportedAt`** [إبلاغ الجهاز])، `RefreshToken`، `PasswordResetToken`، `AccountSettings` (PIN hash، ملف التوقيع، `enabledModules`/`enabledFeatures`)، `Contractor`، `Place` (+note)، `Inspector`، `Item`+`ItemStage`، `Record`+`RecordDeduction`، `IrRecord`، `Todo`، `ExecRecord`+`ExecRecordStage`، `DailyRecord`، `File`، `AppConfig` (key/value — أسماء المواقع، وحدات/فئات المخازن، **`approvalMatrix`**؛ `value` اتوسّع لـ 1000 حرف)، `Submission` (site، gsheetRow، **`revision`**، **`reviewState`** IN_REVIEW/RETURNED/SENT، **`currentLevel`**، **`currentApproverId`** [null = كشف قديم: أي معتمد بدرجة المستوى]، **`queueHiddenAt`**)، **`SubmissionReview`** (level، decision APPROVED/APPROVED_NOTES/REJECTED، note، revision، byUserId — سجل تدقيق كامل)، **`ActivityLog`** (userId/email/event/detail/status/path/ip/device)، وجداول المخازن الخمسة (`InventoryItem`، `StockMove`، `IssueRequest`+`IssueRequestLine`، `PurchaseRequest`).
+
+Migrations بعد 2026-09-01 (كلها مطبّقة إنتاجًا): `20260903120000_manager_approvals` · `20260903150000_backfill_review_state` (حرجة: الكشوف القديمة → `SENT`) · `20260905000000_user_sync_stats` · `20260905010000_submission_queue_hidden` · `20260905120000_grade_and_assigned_approvers` · `20260906150000_activity_log` · `20260906170000_appconfig_wider_value`.
 
 ### 9.2 أهم نقاط النهاية (Endpoints)
 - **Auth**: register/login/refresh/logout/me/change-password — **مسارا `password-reset/*` مُعطَّلان عمدًا منذ 2026-08-21** (كانا يعيدان التوكن في الاستجابة بدون مصادقة = استيلاء على أي حساب — انظر C1 في `SECURITY_REPORT.md`؛ البديل الآمن: `POST /api/admin/users/:userId/reset-password`) — JWT (15 دقيقة access + 30 يوم refresh دوّار مع كشف إعادة استخدام يُلغي كل الجلسات)، bcrypt 12 rounds. **مهلة سماح (grace window)** — env: `REFRESH_REUSE_GRACE_SEC` (افتراضي 120 ثانية): إعادة استخدام توكن أُلغي بسبب تدوير عادي (`rotated=true` في جدول `refresh_tokens`) داخل المهلة تُقبل وتصدر توكنات جديدة بدل اعتبارها سرقة — يمنع خروج المستخدم القسري عند سباق تبويبين أو انقطاع حفظ التوكن الجديد. التوكنات الملغاة أمنيًا (logout/تغيير كلمة سر) لا تستفيد من المهلة أبدًا.
 - **CRUD كيانات (مقيدة بالملكية)**: `/api/contractors`, `/api/places` (كتابة للأدمن فقط), `/api/inspectors`, `/api/items` (مع مراحل متداخلة), `/api/records` (صفحات، فلاتر، الإجمالي يُحسب على السيرفر), `/api/ir-records`, `/api/todos`, `/api/exec-records`, `/api/daily-records` (رفع صور), `/api/files`, `/api/account/settings` (PIN/توقيع — قراءة فقط للمهندس، كتابة للأدمن).
-- **`/api/admin/*`** (أدمن فقط): قائمة المستخدمين، إدارة أماكن/مقاولين لكل مستخدم + "نسخ مقاولي الأدمن"، إعدادات الحساب لكل مستخدم، تشغيل نسخة احتياطية يدوية DB→Drive، كتالوج الموديولات/الفيتشرز، إنشاء حساب مهندس، تعديل title/role/project/site، ملخص حساب قبل الحذف، حذف حساب (تأكيد إيميل + حماية عدم حذف نفسه/آخر أدمن)، إعادة تعيين كلمة السر.
-- **`/api/submissions/*`**: المهندس يرفع Excel معتمد (multipart) → يُخزَّن ويُدفع لـ Google Sheets في الخلفية؛ `/mine` يعرض اعتمادات المستخدم بحالة حية من الشيت؛ `/:id/file` تنزيل (المالك أو الأدمن)؛ الأدمن يعرض الكل + فلترة بالحالة؛ `/:id/review` (PATCH، اعتماد/رفض بملاحظة، قابل للتراجع)؛ `/:id/gsync` إعادة محاولة يدوية للدفع لجوجل؛ DELETE مسموح فقط أثناء SUBMITTED.
-- `requireModule` middleware يفرض نفس تقييد الموديولات على مستوى السيرفر لمسارات records/submissions/ir/todo/exec/daily.
+- **`/api/admin/*`** (أدمن فقط): `GET /users` (بيرجع كمان `recordsCount`، إحصاءات المزامنة، `missingApprovers`)، `POST /users` (إنشاء بـ site/project)، `PATCH /users/:userId` (title/role/project/site + **`grade`** + **`approverTlId/CmId/PmId`** مع تحقق: المعتمد لازم درجته = المستوى وممنوع يعتمد لنفسه)، `GET /users/:userId/summary`، `DELETE /users/:userId`، `POST /users/:userId/reset-password`، أماكن/مقاولين لكل مستخدم + `copy-mine` للاتنين، `GET/PUT /users/:userId/settings`، `GET/PATCH /config` (أسماء المواقع)، `GET /modules`، `GET /backup-status` + `POST /backup-now`، **`GET /approval-levels`** (`{grades, levels, matrix, approvers, solePmId}`)، **`GET/PUT /approval-matrix`** (الـ GET بيرجع `inReview` للتحذير قبل الحفظ)، **`GET /activity?userId=|email=`** و**`GET /activity/summary?days=`** (كل الحسابات في استعلامين مجمّعين).
+- **`/api/approvals/*`** (خلف `requireModule('approvals')`): `GET /levels`، `GET /queue` (مفلتر بالشخص: كشوف المهندسين المسندين له + المسندة له + اللي اعتمدها خلال 7 أيام + الكشوف القديمة `currentApproverId=null` عند مستوى درجته؛ الأدمن يشوف الكل؛ كل صف بيرجع `chain`/`isLast`/`isStuck`/`canAct`)، `GET /:id/file` (لأي حساب عنده الوحدة — الأصل أثناء المراجعة والنسخة **الموقّعة** بعد `SENT`)، `POST /:id/decide` (APPROVED/APPROVED_NOTES/REJECTED — الرفض بملاحظة إلزامية)، `POST /:id/hide` (أدمن: إخفاء من الطابور فقط).
+- **`/api/submissions/*`**: `POST /` (multipart) → يُخزَّن ويبدأ `startChain` قبل الرد (لو مفيش مستويات مطلوبة لدرجته → يتبعت للشيت فورًا)؛ `POST /:id/resend` (للمرفوض فقط، rev++ والسلسلة من أولها)؛ `GET /mine` (بحالة السلسلة + `reviews` + حالة الشيت الحية)؛ `GET /` للأدمن (+ فلتر `?userId=` و`status`)؛ `GET /:id/file` (المالك أو الأدمن)؛ `PATCH /:id/review` (قديم، بلا استخدام من الواجهة)؛ `POST /:id/gsync` (إعادة الدفع عبر `approvalChain` — بيختم التوقيعات كمان)؛ **`DELETE /:id` أدمن فقط لأي حالة** (منذ 2026-09-05 — cascade على `submission_reviews`؛ صف الشيت لو وصل بيفضل).
+- **`/api/account/*`**: `GET/PUT /settings` (الكتابة أدمن فقط)، **`POST /sync-stats`** (الجهاز بيبلّغ عدد السراكي المحلية واللي لسه ما اترفعش — بيتسجل كمان كحدث `SYNC` في سجل النشاط).
+- `requireModule` middleware يفرض نفس تقييد الموديولات على مستوى السيرفر لمسارات records/submissions/ir/todo/exec/daily/inventory/approvals.
 
 ### 9.3 الخدمات (Services)
 | الخدمة | الدور |
 |---|---|
-| `googleSheet.ts` | يستدعي Google Apps Script Web App لدفع الاعتمادات وجلب حالتها الحية — **بيدعم موقعين**: الموقع 1 عبر `GOOGLE_WEBAPP_URL`/`GOOGLE_WEBAPP_SECRET` والموقع 2 عبر `GOOGLE_WEBAPP_URL_2`/`GOOGLE_WEBAPP_SECRET_2`؛ الميزة تُعطَّل تلقائيًا لكل موقع غير مضبوط. التوجيه حسب `Submission.site` (المُثبَّت من `User.site` وقت الإنشاء) |
+| `googleSheet.ts` | يستدعي Google Apps Script Web App لدفع الكشوف (الملف الموقّع + اسم المهندس + نوع المشروع + `approvalSummary`) وجلب حالتها الحية — **بيدعم موقعين**: الموقع 1 عبر `GOOGLE_WEBAPP_URL`/`GOOGLE_WEBAPP_SECRET` والموقع 2 عبر `GOOGLE_WEBAPP_URL_2`/`GOOGLE_WEBAPP_SECRET_2`؛ الميزة تُعطَّل تلقائيًا لكل موقع غير مضبوط. التوجيه حسب `Submission.site` (المُثبَّت من `User.site` وقت الإنشاء) |
 | `backup.ts` | يُصدّر قاعدة البيانات كاملة (كل الجداول شاملًا `app_config` والمخازن) كـ JSON إلى Google Drive، جدولة يومية بعد 3 صباحًا UTC + زر يدوي، وآخر نتيجة بتتسجل في `app_config` وتُقرأ من `GET /api/admin/backup-status`. **الاستعادة الكاملة:** `scripts/restore-backup.ts` (مُختبر end-to-end) |
 | `storage.ts` | تجريد تخزين ملفات محلي على القرص (`StorageAdapter` — جاهز للاستبدال بـ S3/R2)، أسماء عشوائية في فولدرات شهرية، محمي من path-traversal |
+| **`approvalChain.ts`** (2026-09-03→06) | سلسلة اعتمادات المديرين: `GRADES`/`APPROVING_GRADES`، المصفوفة (`loadApprovalMatrix` عند الإقلاع + كاش في الذاكرة، `setApprovalMatrix`، `normalizeChain` بيفرض ترتيب السلم)، `requiredLevelsFor`، `buildChain`/`resolveChainForUser` (سلسلة الكشف نفسه: مستوى + الشخص المسند، ومستوى بلا شخص يتخطى، `soleProjectManagerId` تلقائي)، `nextLevel` → `{next|done|stuck}`، `startChain`، `collectSignatures` (آخر اعتماد لكل مستوى في النسخة الحالية → توقيع صاحبه من `UserSettings.signatureFileId`)، `signedFileBuffer`، `approvalSummary` (سطر لكل قرار → عمود G في الشيت)، `pushSubmissionToSheet` (ختم ثم دفع — **فشل الختم مايوقفش الدفع**) |
+| **`signStamp.ts`** (2026-09-05) | exceljs 4.4: `stampSignatures(buffer, sigs)` بيلزق توقيع كل مستوى في بلوكه على **كل أوراق المصنّف**؛ `blocksForSheet` بيتعرّف على البلوك من نص عنوان الصف 17؛ `fitInBlock` بيحافظ على نسبة الصورة (≤50% عرض البلوك، ≤58% ارتفاع الصف، متوسّطة) ويكتب المرساة بصيغة `nativeCol/Off` بالـ EMU الصح (المرساة الكسرية في exceljs بتتحوّل غلط). الملف الأصلي في التخزين ما بيتغيرش — الموقّع نسخة عابرة |
+| **`activityLog.ts`** (2026-09-06) | `logActivity` (مغلّفة بـ try/catch كامل — ممنوع تعطّل أي طلب) بتُستدعى من `auth.controller.login` (نجاح/فشل بالإيميل)، `errorHandler` (أي 4xx/5xx بهوية صاحب الطلب، مع فلتر ضوضاء 401 على refresh/login)، و`account/sync-stats`؛ `scheduleActivityCleanup` يحذف الأقدم من 14 يوم يوميًا |
 
 ### 9.4 الأمان
 Helmet، CORS مقيّد بـ `CORS_ORIGIN`، rate limiting عام + أشد على مسارات auth، تحقق Zod على كل المدخلات، Prisma parameterized queries (بدون SQL خام)، تخزين الـ refresh tokens كـ hash، رسائل خطأ موحّدة بدون stack traces، الملفات تُخدَم فقط عبر endpoint موثّق ومقيّد بالملكية (بدون static serving مباشر).
@@ -405,20 +455,27 @@ Helmet، CORS مقيّد بـ `CORS_ORIGIN`، rate limiting عام + أشد عل
 
 ## 10. تكامل Google Sheets — `google-sheet/Code.gs`
 
-Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص بالأدمن. يستقبل POST من `backend/src/services/googleSheet.ts` يحتوي (الملف + اسم المهندس + نوع المشروع)، ويقوم بـ:
-1. تحويل الملف إلى صف في Google Sheet منسّق (ألوان navy/gold الخاصة بـ CEA).
-2. تضمين صور توقيعات الاعتماد — معرّفات ملفات التوقيع في `CONFIG`. **(تحديث 2026-08-26)** توقيع **مدير التنفيذ** بيتحدد حسب نوع المشروع (🏠 سكني / 🏪 تجاري) عبر `execSignatureIdFor()` — لو توقيع التجاري لسه placeholder بيرجع لتوقيع السكني بدل ما الاعتماد يفشل. نوع المشروع بيوصل مع كل اعتماد من `googleSheet.ts` (من حقل `User.project`)، وفيه تحديد تلقائي احتياطي بقائمة `COMMERCIAL_ENGINEERS` + `DEFAULT_PROJECT` للصفوف القديمة، وعمود "سكني/تجاري" في الشيت بدروب داون وألوان. **متبقي:** توقيع **مدير المشروع** لسه ملف واحد ثابت للنوعين (`SIG_PROJECT_MANAGER_FILE_ID` يُستخدم مباشرة) رغم وجود `SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID` كـ placeholder غير مستخدم — محتاج دالة اختيار مماثلة + ضبط الـ File IDs التجارية.
-3. توليد PDF.
-4. تتبّع حالة الاعتماد (`✅ معتمد` / `❌ مرفوض` / `⚠ معتمد بملاحظات`) والتي تُقرأ لاحقًا عبر `fetchSheetStatuses`.
+Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص بالأدمن. **النسخة في الريبو (5 سبتمبر 2026 وبعده) لسه محتاجة لصق يدوي في محرر Apps Script** (استبدال الكود → Deploy → Manage deployments → New version → تشغيل `applyNewDesign` مرة). `Code-site2.gs` (أزاليا) **لم يُحدَّث** بأي من تغييرات سبتمبر بقرار صاحب المشروع.
 
-يعالج أيضًا أكشن `backup` القادم من `backup.ts` لحفظ نسخة قاعدة البيانات في Drive. الأعمدة معرّفة في `COLS` (اسم المهندس، الوقت، رابط الملف، اعتماد/ملاحظات المدير التنفيذي والمشروع، الحالة، رابط الشيت المحوّل، رابط PDF، نوع المشروع).
+**مسارا الدخول (`processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed)`):**
+1. **من التطبيق (`doPost` → `signed=true`):** الملف بيوصل **موقّعًا بالكامل** (توقيعات المعتمدين اتختمت في السيرفر) → صف جديد + تحويل الملف لشيت (`prepareApprovalSlots` بيفضّي A16/G16/J16 قبل التحويل، والتحويل بيحافظ على الصور) → خانة F تُختم `✅ معتمد بالكامل` وتُقفل (`sealAdminApproval` — بيشيل قاعدة التحقق الأول لأن `setValue` كان بيترفض على خانة "مقفولة") → G = `approvalSummary` (سطر لكل اعتماد + `fitApprovalChainRow`) → **PDF يتولّد فورًا** في فولدر DC والحالة "معتمد بالكامل ✅" (لو الـ PDF فشل: الحالة "⚠ اتحوّل بس الـ PDF فشل" والملف المحوّل موجود).
+2. **من Google Form (`onFormSubmitHandler` → `signed=false`) — 🆘 مسار الطوارئ:** الصف يوصل "بانتظار DC" بخانة F فاضية، والـ DC يختار ✅ في خانة D → `onEditHandler` ينزّل توقيعي مدير التنفيذ (حسب سكني/تجاري عبر `execSignatureIdFor`) ومدير المشروع من صور Drive الثابتة في `CONFIG` على A16/G16، يختم F، ويولّد الـ PDF. توقيع مش مضبوط أو اتمسح من Drive بيتخطى بدل ما الاعتماد يتكسر. **`onEditHandler` ومفاتيح التوقيعات في `CONFIG` لازم يفضلوا — دول خطة الاسترجاع (قسم 15).**
+
+**الأعمدة (`COLS`) بعد إعادة التعريف (نفس الترتيب، معانٍ جديدة):** A اسم المهندس · B تاريخ الإرسال · C ملف السركي · **D اعتماد DC** (الزرار الواحد — بيخرج فورًا على أي صف حالته DONE) · **E ملاحظات DC** · **F الاعتماد الإداري** (تلقائي من التطبيق) · **G سلسلة الاعتماد** · H الحالة · I السراكي بعد الاعتماد (الشيت المحوّل) · J PDF النهائي · K سكني/تجاري. الحالات: "بانتظار DC" (ابتدائية لصفوف الفورم) · "معتمد بالكامل ✅" · "مرفوض من DC" (+ الحالات القديمة للتوافق).
+
+**أوامر القائمة "⚙ أدوات السراكي":** `applyNewDesign` (إعادة تطبيق التصميم/العناوين/الأقفال بلا مساس بالبيانات) · **`finalizeSignedRow`** (صف وصل موقّعًا من التطبيق لكن السكربت القديم كان شغال وقتها فوقف "بانتظار DC" → PDF بلا توقيعات Drive مكررة) · `reformatApprovalChainColumn` (مرة واحدة: G القديمة من " | " لسطر لكل اعتماد) · إخفاء/إظهار بيانات الأسبوع.
+
+يعالج أيضًا أكشن `backup` القادم من `backup.ts` لحفظ نسخة قاعدة البيانات في Drive، وحالة كل صف بتُقرأ من التطبيق عبر `fetchSheetStatuses` (كاش 60 ث في `googleSheet.ts`).
 
 ---
 
 ## 11. ملاحظات للمرجعية المستقبلية
 
 - **(2026-09-01) وحدة المخازن — مكتملة محليًا وغير منشورة عمدًا** — التفاصيل الكاملة في **قسم 12** بالأسفل، وخطوات نشرها في [DEPLOY-NEXT-RELEASE.md](DEPLOY-NEXT-RELEASE.md).
-- **(2026-09-03) وحدة "اعتمادات المديرين" — مبنية بالكامل محليًا، غير منشورة، وفيها إصلاحات إلزامية قبل النشر** — التصميم والبنية والحالة وقائمة الإصلاحات في [SESSION-LOG.md](SESSION-LOG.md) **قسم 9** (أبدأ منه في أي جلسة جديدة). ملخص: سلسلة مراجعة داخل التطبيق (مستويات مرتبة قابلة للتعديل، `User.approvalLevel`، `submission_reviews`، `/api/approvals/*` خلف وحدة `approvals`) قبل ما الكشف يوصل جوجل شيت؛ الشيت يفضل للـ DC فقط.
+- **(2026-09-03 → 06) وحدة "اعتمادات المديرين" + الدرجات + التوقيعات داخل التطبيق — منشورة بالكامل** — التوثيق البنيوي في **قسم 13** بالأسفل، والسرد الزمني والقرارات في [SESSION-LOG.md](SESSION-LOG.md) أقسام 9–13 (ابدأ من هناك في أي جلسة جديدة).
+- **(2026-09-06) متبقٍ يدويًا عند صاحب المشروع:** لصق `google-sheet/Code.gs` في Apps Script للموقع الأول (لحد ما يتلصق: الصفوف الجديدة بتوصل موقّعة وبتقف "بانتظار DC" — تتخلّص بأمر `finalizeSignedRow` أو بلصق السكربت)، رفع توقيع كل معتمد من كارت حسابه، وإسناد المعتمدين لكل حساب (قبلها أي كشف جديد بيتخطى مدير الفريق ومدير التنفيذ ويروح لمدير المشروع مباشرة).
+- **(2026-09-05) مسار الطوارئ:** [RECOVERY-PLAN.md](RECOVERY-PLAN.md) بيعتمد على بقاء `onEditHandler` ومفاتيح التوقيعات في `CONFIG` داخل `Code.gs`، وتريجر الفورم، وزرار الفورم (`gform_site1/2`) ظاهر للمهندسين — ما تشيلش أي منها.
+- **(2026-09-03) الواجهة في git:** ريبو بجذر المشروع (بلا remote). لو عايز نسخة على GitHub: `git remote add origin ...` ثم `git push -u origin main`. الـ backend ريبو مستقل جوه `backend/` (على GitHub).
 
 - **(2026-08-26) دعم موقعين/مشروعين منفصلين تمامًا — مُنفَّذ:** البرنامج بقى يخدم مشروعًا ثانيًا منفصلًا (مش السكني/التجاري — دول نوعان داخل المشروع الأول نفسه)، لكل موقع Google Sheet وApps Script ومدير تنفيذ/مدير مشروع مختلفون:
   - `User.site` (1 افتراضي / 2) يحدده الأدمن من لوحة الإدارة (دروب داون "الموقع" + `adminSaveSite` في app.js، وشارة "🏗️ الموقع الثاني" في قائمة الحسابات).
@@ -432,14 +489,14 @@ Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص �
   - Migrations: `20260826210000_user_submission_site`, `20260826230000_app_config`. (أثناء تطبيقها اتحلّت migration فاشلة معلّقة من 2026-08-25 اسمها `add_chat_messages` — كانت من تجربة شات جرت على نسخة المشروع في بارتشن D لكن ضربت قاعدة `cea` المحلية **المشتركة** بين النسختين. اتمسحت نهائيًا يوم 2026-08-26: جدول `chat_messages` وسجلات الـ migrations بتاعته اتشالوا من `cea` و`cea_test`، والإنتاج لم يتأثر بها إطلاقًا — تم التحقق من `_prisma_migrations` على Railway قبل النشر.)
 - كل الحسابات المالية (qty × price − discount = total) تعيش فقط داخل `calcTotal`/`saveRecord` — أي إعادة تنفيذ لهذا المنطق (في الـ Backend مثلاً) يجب أن يطابقها تمامًا.
 - ميزة النسخ الاحتياطي/الاستعادة المحلية (قسم 5.30) **منفصلة تمامًا** عن المزامنة السحابية ويجب عدم الخلط بينهما عند أي إعادة تصميم.
-- ورشة الاعتمادات (قسم 5.19) تعتمد على توفر `GOOGLE_WEBAPP_URL`/`GOOGLE_WEBAPP_SECRET` في env الـ Backend — بدونها الميزة تتعطل تلقائيًا (fail-safe، وليس crash).
+- ورشة الاعتمادات (قسم 5.19) تعتمد على توفر `GOOGLE_WEBAPP_URL`/`GOOGLE_WEBAPP_SECRET` في env الـ Backend — بدونها الميزة تتعطل تلقائيًا (fail-safe، وليس crash). سلسلة اعتمادات المديرين (قسم 13) مستقلة عن ده: بتشتغل حتى لو الشيت معطّل، والدفع للشيت fire-and-forget بعد اكتمالها مع زرار "☁️ إعادة الإرسال للشيت" لو فشل.
 - نظام الموديولات/الصلاحيات (قسم 4) مفروض على مستويين (واجهة + سيرفر) — أي تعديل مستقبلي على تابات جديدة لازم يُضاف في الاثنين معًا (`ALL_MODULES` في app.js **و** middleware `requireModule` في الـ backend) وإلا هيبقى فيه ثغرة صلاحيات.
 - ملفات `app.js.pre-submit.bak` و`app.js.supabase.bak` هما لقطات تاريخية لأغراض الرجوع فقط — لا تُستدعى من أي مكان في التطبيق الحي، وممكن حذفهما بأمان لو مفيش حاجة تانية بتعتمد عليهم.
 - `debug-out.xlsx` و`debug-x/` ملفات/فولدرات تطوير مؤقتة (من `dev-server.js`) — مش جزء من بيانات أو منطق التطبيق.
 
 ---
 
-## 12. وحدة المخازن (Inventory) — مكتملة، غير منشورة بعد
+## 12. وحدة المخازن (Inventory) — منشورة منذ 2026-09-03 (مخفية حتى يفعّلها الأدمن)
 
 مخزن واحد مشترك، **أونلاين فقط** (بيانات مشتركة حية — عكس باقي النظام الأوفلاين-أولاً، وده قرار تصميم مقصود). التصميم والقرارات في [ROADMAP-INVENTORY.md](ROADMAP-INVENTORY.md)، والنشر في [DEPLOY-NEXT-RELEASE.md](DEPLOY-NEXT-RELEASE.md).
 
@@ -458,8 +515,60 @@ Google Apps Script منشور كـ Web App تحت حساب جوجل الخاص �
 ### الواجهة — تاب "📦 المخازن" (تصميم بروح Sortly بعد معاينة معتمدة)
 تبويبات فرعية (المخزون | طلب صرف | الطلبات بعدّاد أحمر | الشراء) · 3 بطاقات ملخص · كارت "⚠️ محتاج إعادة طلب" بأزرار تحويل سريع لطلب شراء · كروت أصناف (كمية كبيرة ملونة، زرار ⋯ لأفعال الأدمن) · فلترة بالفئات + بحث · مودال إضافة/تعديل · زرار استيراد Excel (أعمدة بالاسم: الكود/الاسم/الوحدة/الفئة/الكمية/حد الطلب).
 
-### الاختبارات — `tests/inventory.test.ts` (11 اختبار، الإجمالي 56)
+### الاختبارات — `tests/inventory.test.ts` (11 اختبار؛ إجمالي المشروع 84 في 2026-09-06)
 حماية الوحدة، الكود الفريد، الحركات وسبب التسوية الإلزامي، رفض الكمية غير الكافية، دورة الصرف كاملة، **الفشل الذري بدون خصم جزئي** لو بند واحد نقص بعد الاعتماد، عزل طلبات المهندس، لقطة طلب الشراء، الاستيراد الجماعي، صلاحيات الوحدات والفئات.
 
 ### قرارات مسجلة
 مخزن واحد حاليًا (حقل `site` جاهز للمستقبل ومُتجاهل) · الأدمن هو أمين المخزن في الـ MVP · طلب أكبر من المتاح = رفض فوري + توجيه لطلب شراء أو التواصل مع مدير التنفيذ · الوحدة **مش في `DEFAULT_MODULES`** — أي نشر لن يُظهرها لأحد حتى يفعّلها الأدمن حسابًا بحساب.
+
+---
+
+## 13. اعتمادات المديرين (Approvals) + الدرجات + التوقيعات داخل التطبيق — منشورة (2026-09-03 → 06)
+
+> السبب: مدير المشروع لاقى جوجل شيت معقّدًا، وAppSheet اترفض (التريجرات ما بتشتغلش مع كتابة API + الخصوصية + اشتراك مدفوع). القرار: **المراجعة والاعتماد والتوقيعات كلها جوّه تطبيق CEA**، وجوجل شيت بقى مخزن + PDF فقط. "اعتماد DC" مكنش خطوة موافقة أصلًا (تصريح صاحب المشروع) — كان حيلة لإنزال التوقيعات والـ PDF من الشيت.
+
+### 13.1 المسار الكامل لكشف واحد
+1. المهندس يبعت الكشف من "السراكي" → `POST /api/submissions` → `startChain` يبني **سلسلة الكشف** من درجة صاحبه (المصفوفة) + المعتمدين المسندين له بالاسم. مستوى بلا شخص مسند **يتخطى**؛ مفيش مستويات مطلوبة → يتبعت للشيت فورًا (fallback آمن).
+2. الكشف `IN_REVIEW` عند `currentLevel`/`currentApproverId`. المعتمد يشوفه في تاب "📋 اعتمادات المديرين" (تحديث تلقائي كل 20 ث)، يراجعه جوّه التطبيق (نفس محرك معاينة الكشوف)، ويقرر: **معتمد** (يفتح للي بعده) / **معتمد بملاحظات** (يكمل والملاحظة تتسجل وتظهر للمهندس في صندوق أصفر) / **مرفوض بملاحظات** (إلزامية → `RETURNED` → المهندس يشوف "تم الرفض من X — السبب: Y").
+3. بعد الرفض: "🔄 عدّل السركي وأعد الإرسال" → `POST /:id/resend` بنسخة `rev++` والسلسلة من أولها. كل قرار في `submission_reviews` (سجل تدقيق كامل).
+4. آخر اعتماد → `SENT` → `collectSignatures` (توقيع **الشخص اللي اعتمد فعلًا** في كل مستوى من `UserSettings.signatureFileId`) → `stampSignatures` يختمها في بلوكاتها على كل أوراق المصنّف → الدفع لجوجل شيت مع `approvalSummary` → الشيت يحوّل ويطلّع الـ PDF فورًا. فشل الختم مايوقفش الدفع (يتبعت بلا توقيعات ويتسجل الخطأ)؛ فشل الدفع → زرار "☁️ إعادة الإرسال للشيت" في تسليماتي (`/gsync`).
+5. بعد `SENT`، `GET /api/approvals/:id/file` بيرجّع النسخة الموقّعة (نفس اللي راحت جوجل) للمعاينة/التحميل.
+
+### 13.2 الدرجات والمصفوفة (2026-09-05/06)
+- **`users.grade`** حقل واحد بدورين (درجة الحساب + مستوى اعتماده). الدرجات الخمس ثابتة في الكود: `junior · senior · team leader · construction manager · project manager`. المستويات اللي بتعتمد (أعمدة جدول الطابور): `team leader → construction manager → project manager`.
+- **المصفوفة "مين يعتمد لمين"** — افتراضي: junior/senior → الثلاثة؛ team leader → مدير التنفيذ ← مدير المشروع؛ construction/project manager → محدش (الكشف يروح الشيت فورًا). **قابلة للتعديل** من كارت "سلسلة الاعتماد حسب الدرجة" (خانات اختيار؛ درجة ما تعتمدش لنفسها ولا لأعلى منها — مقفولة) وبتتخزن في `app_config.approvalMatrix` مع كاش في الذاكرة (`requiredLevelsFor` لازم تفضل sync). الترتيب يُفرض دائمًا بترتيب السلم.
+- **الإسناد بالاسم لكل حساب** (`approverTlId/CmId/PmId`) من كارت الحساب — دروب داون مفلتر بالدرجة، وتحذير أحمر للمستوى الناقص ("المستوى ده هيتخطى"). مدير المشروع الوحيد في النظام بيتحدد تلقائيًا بلا إسناد.
+- **الصلاحيات:** مدير فريق تاني ما يشوفش ولا يعتمد كشف مش مسند له (403). الاستثناءات: الأدمن (يشوف الكل ويعتمد أي مستوى)، الكشوف القديمة (`currentApproverId = null` → أي معتمد بدرجة المستوى)، ومهندس بلا معتمد مسند (المستوى يتخطى).
+- **كشف "معلّق" (`isStuck`):** المستوى الحالي خرج من سلسلة صاحبه (درجته أو إسناده أو المصفوفة اتغيّرت) → يفضل `IN_REVIEW` ولا يتبعت قبل أوانه؛ الأدمن باعتماده يحرّكه لأول مستوى في سلسلته الحالية (أو للشيت لو مفيش). حفظ المصفوفة بيحذّر بعدد الكشوف قيد المراجعة.
+
+### 13.3 التوقيعات (2026-09-05)
+| البلوك | الخلية | المستوى |
+|---|---|---|
+| توقيع مدير المشروع | `A16` | project manager |
+| توقيع مدير التنفيذ | `G16` | construction manager |
+| توقيع مدير الفريق (كان "توقيع العامل") | `J16` | team leader |
+
+السيرفر بيتعرّف على البلوك من **نص العنوان في الصف 17** (`blocksForSheet`) — فالملفات القديمة (A = تنفيذ، G = مشروع) بتتختم صح برضو. حجم التوقيع بنسبته الأصلية (≤50% عرض البلوك، ≤58% ارتفاع الصف). **كل معتمد لازم يرفع توقيعه** (الأدمن يرفعه له من كارت الحساب — `PUT /api/account/settings` أدمن فقط)؛ معتمد بلا توقيع = بلوكه يطلع فاضي والكشف يعدّي عادي. مفيش "توقيع مدير تنفيذ التجاري" بقى — فيه بس مين اعتمد.
+
+### 13.4 التشغيل
+- **ترتيب التفعيل لأي معتمد:** فعّل له وحدة "اعتمادات المديرين" **أولًا** ثم حدد درجته وأسند له المهندسين — العكس يوقف الكشوف عند شخص مش شايف التاب (الأدمن يقدر يفكها).
+- الطابور مفلتر بالزمن: `IN_REVIEW` كله + `RETURNED`/`SENT` خلال آخر 7 أيام، والأدمن يقدر يخفي صفوف خلصانة من العرض (`queue_hidden_at` — بلا حذف).
+- الشيت الحي بيعرض للمهندس بعد `SENT`: "الاعتماد الإداري" (F) / "بانتظار DC" أو "DC" (D) / "سلسلة الاعتماد" (G).
+- في الإنتاج وقت النشر: 3 team leader / 1 construction manager / 2 project manager / 15 junior، والإسناد بيظبطه صاحب المشروع.
+
+---
+
+## 14. سجل نشاط الحسابات (Activity Log) — منشور 2026-09-06
+
+**المشكلة الأصلية:** لوجات morgan مفيهاش هوية المستخدم (IP بس)، فمكنش ينفع تربط خطأ بحساب. اتكشف بيها باج حقيقي: حساب معتمد بس (`beshoy.alfy`) كان بياخد 403 متكرر على `/api/records` من المزامنة فتظهر له "تعذر الاتصال" — اتصلح في `pullAll`/`initialSync` (قسم 5.28).
+
+- **جدول `activity_logs`:** `user_id · email · event · detail · status · path · ip · device · created_at`. الأحداث: `LOGIN_OK · LOGIN_FAIL` (بالإيميل حتى لو الحساب مش موجود) `· SYNC` (من `sync-stats` بأرقامه) `· API_ERR` (أي 4xx/5xx من `errorHandler` بهوية صاحب الطلب). تنظيف يومي بعد 14 يوم.
+- **قاعدة ذهبية:** `logActivity` مغلّفة بـ try/catch كامل — بتشتغل جوّه مسار تسجيل الدخول ومعالج الأخطاء، ولو رمت بتكسرهم (حصل فعليًا محليًا: Prisma client قديم → الدخول رجع 500).
+- **الواجهة:** كارت "📊 نشاط الحسابات" فوق كارت الحساب في الإدارة — جدول **كل** الحسابات (حتى بلا نشاط): الحساب · الحالة (`actVerdict`: ⛔ مش قادر يدخل / ⚠️ خطأ متكرر / ⚠️ مفيش مزامنة / 😴 مش نشط / ⏳ لسه ما دخلش / ✅ سليم) · آخر دخول · دخول ناجح · محاولات فاشلة · آخر مزامنة · مزامنات · أخطاء · **معنى الخطأ** (`actErrMeaning`: 403 على السراكي لحساب معتمد بس = طبيعي، لمهندس = وحدة مش مفعّلة؛ 401 الجلسة انتهت؛ 429 ضغط والتطبيق بيعيد؛ 5xx خطأ سيرفر). فلتر 24س/7/14 يوم، شارة "كام حساب محتاج نظرة"، ارتفاع ~3 حسابات بتمرير رأسي وترويسة لاصقة. وقسم "📜 سجل النشاط (آخر 14 يوم)" جوّه كارت كل حساب.
+- **الـ API:** `GET /api/admin/activity?userId=|email=` و`GET /api/admin/activity/summary?days=` (استعلامان مجمّعان فقط — users + logs — والتجميع في الذاكرة؛ بيدمج مفتاحي userId والإيميل عشان `LOGIN_FAIL` يتحسب).
+
+---
+
+## 15. خطة الاسترجاع لو السيرفر وقع — [RECOVERY-PLAN.md](RECOVERY-PLAN.md) (2026-09-05)
+
+الهدف: الشغل ما يقفش لو Railway وقع. التطبيق (Cloudflare) مستقل وبيفتح **أوفلاين** بنفس الجلسة والبيانات (`network_error` ما بيمسحش الجلسة). المسار: المهندس يطلّع "📄 تنزيل نسخة Excel معتمدة" من جهازه → يرفعها من زرار "📤 رفع ملف السركي على Google Form" (فيتشر `gform_site1/2`) → الصف يوصل الشيت "بانتظار DC" → الـ DC يعتمد من خانة D → توقيعات Drive (تنفيذ حسب سكني/تجاري + مدير المشروع) + PDF زي زمان (بلا توقيع مدير الفريق ولا سلسلة المديرين — مقبول كطوارئ). المسارين (تطبيق/فورم) شغالين جنب بعض في نفس الشيت بلا تعارض. لما السيرفر يرجع: المزامنة تلقائية، والكشوف اللي عدّت من الفورم مش في "تسليماتي" (طبيعي — ما تتعادش). الشروط اللي لازم تفضل: تريجرا `onFormSubmitHandler`/`onEditHandler`، صور التوقيع في Drive (`CONFIG`)، الفورم مربوط بالشيت، وزرار الفورم ظاهر للمهندسين. الملف فيه كمان أوامر تشخيص/إصلاح السيرفر (rollback، استعادة القاعدة من "CEA Backups" في Drive، ملفات الرفع غير الدائمة على Railway).
