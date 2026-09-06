@@ -1211,7 +1211,7 @@ function renderSummary(){
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
 const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سركي المعدات (إيجار معدات شهري 20→19)'};
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
 const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
@@ -1295,7 +1295,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سركي المعدات', settings:'الإعدادات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', settings:'الإعدادات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -2781,6 +2781,13 @@ function eqCalcDuration(){
   const m=eqMinutes(document.getElementById('eq-from').value, document.getElementById('eq-to').value);
   const el=document.getElementById('eq-duration'); if(el) el.value = m ? fmtMinutes(m)+' ساعة' : '—';
 }
+// المعدة = تخصص المقاول في قائمة المقاولين (زي fillSpec في فورم السركي) — قراءة فقط
+function eqFillEquipment(){
+  const n=document.getElementById('eq-contractor').value;
+  const c=contractors.find(x=>x.name===n);
+  const spec=(c && c.spec && c.spec!=='—') ? c.spec : '';
+  document.getElementById('eq-equipment').value=spec;
+}
 function eqSetDay(ymd){ const el=document.getElementById('eq-day'); if(el) el.value=dayNameOf(ymd)||''; }
 function renderEqMonthNav(){
   const b=getEqMonthBounds(eqMonthOffset);
@@ -2798,7 +2805,7 @@ function saveEquipment(){
         works=document.getElementById('eq-works').value.trim(), notes=document.getElementById('eq-notes').value.trim();
   if(!date){showToast('⚠ اختر التاريخ',true);return;}
   if(!contractor){showToast('⚠ اختر المقاول / المورد',true);return;}
-  if(!equipment){showToast('⚠ اكتب اسم المعدة',true);return;}
+  if(!equipment){showToast('⚠ المقاول ده مالوش تخصص (نوع المعدة) — حدده من إدارة المقاولين في الإعدادات',true);return;}
   if(!place){showToast('⚠ اختر المكان',true);return;}
   if(!timeFrom||!timeTo){showToast('⚠ حدد الوقت من وإلى',true);return;}
   const day=dayNameOf(date), minutes=eqMinutes(timeFrom,timeTo);
@@ -2844,7 +2851,7 @@ function eqRepeatLast(){
   const last=[...equipmentRecords].sort((a,b)=>(b.date+String(b.id)).localeCompare(a.date+String(a.id)))[0];
   if(!last){ showToast('⚠ مفيش يوم سابق يتكرر', true); return; }
   eqEditingId=null; document.getElementById('eq-edit-banner').classList.remove('show'); document.getElementById('eq-save-btn').textContent='✅ تسجيل يوم التشغيل';
-  document.getElementById('eq-contractor').value=last.contractor; document.getElementById('eq-equipment').value=last.equipment;
+  document.getElementById('eq-contractor').value=last.contractor; eqFillEquipment(); if(!document.getElementById('eq-equipment').value) document.getElementById('eq-equipment').value=last.equipment;
   document.getElementById('eq-place').value=last.place; document.getElementById('eq-from').value=last.timeFrom; document.getElementById('eq-to').value=last.timeTo;
   document.getElementById('eq-works').value=last.works||''; document.getElementById('eq-notes').value='';
   document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD()); eqCalcDuration();
@@ -2860,9 +2867,8 @@ function eqSheetsCount(b){ const days=Math.round((b.end-b.start)/86400000)+1; re
 function renderEquipment(){
   const list=document.getElementById('eq-list'); if(!list) return;
   renderEqMonthNav();
-  // قوائم المعدات: فلتر الشهر + datalist الفورم (من كل الأسماء المستخدمة)
+  // فلتر المعدات في الشهر (من كل الأسماء المستخدمة)
   const names=[...new Set(equipmentRecords.map(r=>r.equipment).filter(Boolean))].sort();
-  const dl=document.getElementById('eq-equipment-list'); if(dl) dl.innerHTML=names.map(n=>'<option value="'+esc(n)+'">').join('');
   const fsel=document.getElementById('eq-filter-equipment');
   if(fsel){ const cur=fsel.value; fsel.innerHTML='<option value="">🚜 كل المعدات</option>'+names.map(n=>'<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join(''); }
   const b=getEqMonthBounds(eqMonthOffset);

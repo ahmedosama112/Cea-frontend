@@ -106,7 +106,7 @@
     <button class="drawer-item" data-tab="site"     onclick="switchTab('site')"><span class="ico">🏗</span><span>الموقف التنفيذي</span></button>
     <button class="drawer-item" data-tab="todo"     onclick="switchTab('todo')"><span class="ico">✅</span><span>المهام</span></button>
     <button class="drawer-item" data-tab="inventory" onclick="switchTab('inventory')"><span class="ico">📦</span><span>المخازن</span></button>
-    <button class="drawer-item" data-tab="equipment" onclick="switchTab('equipment')"><span class="ico">🚜</span><span>سركي المعدات</span></button>
+    <button class="drawer-item" data-tab="equipment" onclick="switchTab('equipment')"><span class="ico">🚜</span><span>سراكي معدات (شهري)</span></button>
     <button class="drawer-item" data-tab="summary"  onclick="switchTab('summary')"><span class="ico">📊</span><span>الملخص</span></button>
     <div class="drawer-sep"></div>
     <button class="drawer-item" data-tab="settings" onclick="switchTab('settings')"><span class="ico">⚙️</span><span>الإعدادات</span></button>
@@ -710,6 +710,21 @@
 
 <!-- ══ EQUIPMENT — سركي المعدات (إيجار معدات شهري 20→19 — وحدة قابلة للتفعيل) ══ -->
 <div id="tab-equipment" class="panel">
+  <!-- متصفح الشهر (20 → 19) — فوق زي تاب السراكي -->
+  <div id="eq-month-nav" class="week-nav">
+    <div class="week-nav-row">
+      <button class="wk-arrow" onclick="shiftEqMonth(-1)" aria-label="الشهر السابق">‹</button>
+      <div class="week-nav-mid">
+        <div id="eq-month-label"></div>
+        <div id="eq-month-range"></div>
+      </div>
+      <button class="wk-arrow" onclick="shiftEqMonth(1)" aria-label="الشهر التالي">›</button>
+    </div>
+    <div class="week-nav-actions">
+      <button class="pill gold" onclick="resetEqMonth()">📅 الشهر الحالي</button>
+      <select id="eq-filter-equipment" class="pill" style="text-align:center" onchange="renderEquipment()"><option value="">🚜 كل المعدات</option></select>
+    </div>
+  </div>
   <div class="edit-banner" id="eq-edit-banner">
     <span>✏️ تعديل يوم تشغيل</span>
     <button onclick="cancelEqEdit()">✕</button>
@@ -721,12 +736,11 @@
       <label>المقاول / المورد <span class="req">*</span></label>
       <input type="search" class="select-search" id="eq-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('eq-contractor-search','eq-contractor')">
       <div class="select-search-empty" id="eq-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
-      <select id="eq-contractor"><option value="">-- اختر المقاول / المورد --</option></select>
+      <select id="eq-contractor" onchange="eqFillEquipment()"><option value="">-- اختر المقاول / المورد --</option></select>
     </div>
     <div class="field">
       <label>المعدة <span class="req">*</span></label>
-      <input type="text" id="eq-equipment" list="eq-equipment-list" placeholder="مثال: لودر كاتربيلر 950" maxlength="190">
-      <datalist id="eq-equipment-list"></datalist>
+      <input type="text" id="eq-equipment" class="auto-field" readonly placeholder="يتحدد تلقائياً من تخصص المقاول">
     </div>
     <div style="display:flex;gap:8px">
       <div class="field" style="flex:1"><label>التاريخ <span class="req">*</span></label><input type="date" id="eq-date" onchange="eqSetDay(this.value)"></div>
@@ -751,21 +765,6 @@
     <button class="btn btn-ghost" style="flex:1" onclick="eqRepeatLast()" title="ينسخ آخر يوم اتسجل بتاريخ النهاردة">🔁 كرّر آخر يوم</button>
   </div>
 
-  <!-- متصفح الشهر (20 → 19) -->
-  <div id="eq-month-nav" class="week-nav">
-    <div class="week-nav-row">
-      <button class="wk-arrow" onclick="shiftEqMonth(-1)" aria-label="الشهر السابق">‹</button>
-      <div class="week-nav-mid">
-        <div id="eq-month-label"></div>
-        <div id="eq-month-range"></div>
-      </div>
-      <button class="wk-arrow" onclick="shiftEqMonth(1)" aria-label="الشهر التالي">›</button>
-    </div>
-    <div class="week-nav-actions">
-      <button class="pill gold" onclick="resetEqMonth()">📅 الشهر الحالي</button>
-      <select id="eq-filter-equipment" class="pill" style="text-align:center" onchange="renderEquipment()"><option value="">🚜 كل المعدات</option></select>
-    </div>
-  </div>
   <div class="eq-sum" id="eq-summary"></div>
   <div class="records-header">
     <div class="rh-title">أيام التشغيل</div>
