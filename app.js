@@ -2770,6 +2770,60 @@ function eqMonthLabel(b){
   const s=b.start, e=b.end;
   return `20 ${AR_MONTHS[s.getMonth()]}${s.getFullYear()!==e.getFullYear()?' '+s.getFullYear():''}  ←  19 ${AR_MONTHS[e.getMonth()]} ${e.getFullYear()}`;
 }
+// ── إعدادات السركي الشهري (محلية على الجهاز — بيانات عرض/تسهيل، مش بيانات سجلات) ──
+// المقاول الثابت (cea_eq_contractor): بيتملى ويتقفل في الفورم مع معدته (تخصصه) — مش كل يوم يختار نفس المقاول.
+// الموقع في راس الكشف (cea_eq_site): من أسماء الموقعين في app_config + مواقع مضافة على الجهاز (cea_eq_sites)؛ الافتراضي موقع الحساب.
+function eqFixedContractor(){ const v=localStorage.getItem('cea_eq_contractor')||''; return contractors.some(c=>c.name===v) ? v : ''; }
+function eqApplyFixedContractor(){
+  const sel=document.getElementById('eq-contractor'), lock=document.getElementById('eq-contractor-lock'), search=document.getElementById('eq-contractor-search');
+  if(!sel) return;
+  const fixed=eqFixedContractor();
+  if(fixed){ sel.value=fixed; eqFillEquipment(); }
+  sel.disabled=!!fixed;
+  if(lock) lock.style.display = fixed ? '' : 'none';
+  if(search) search.style.display = fixed ? 'none' : '';
+}
+function eqSaveFixedContractor(){
+  const v=document.getElementById('eq-fixed-contractor').value;
+  if(v) localStorage.setItem('cea_eq_contractor', v); else localStorage.removeItem('cea_eq_contractor');
+  eqApplyFixedContractor();
+  showToast(v ? '✅ المقاول الثابت: '+v+' — اتملى واتقفل في الفورم' : '✅ اتشال المقاول الثابت — هتختاره مع كل يوم');
+}
+function eqCustomSites(){ try{ return JSON.parse(localStorage.getItem('cea_eq_sites')||'[]').filter(Boolean); }catch(e){ return []; } }
+function eqSiteOptions(){ return [...new Set([siteName(1), siteName(2), ...eqCustomSites()].filter(Boolean))]; }
+function eqCurrentSite(){
+  const saved=localStorage.getItem('cea_eq_site')||'';
+  if(saved && eqSiteOptions().includes(saved)) return saved;
+  return siteName(localStorage.getItem('cea_user_site')||1);
+}
+let _eqSiteNamesLoaded=false;
+async function eqLoadSiteNames(){
+  if(_eqSiteNamesLoaded || !navigator.onLine || !getAccessToken()) return;
+  try{ const r=await api('GET','/api/config'); _siteNames={ '1':r.data.site1Name||_siteNames['1'], '2':r.data.site2Name||_siteNames['2'] }; _eqSiteNamesLoaded=true; renderEqSettings(); }catch(e){}
+}
+function renderEqSettings(){
+  const fc=document.getElementById('eq-fixed-contractor');
+  if(fc){ const cur=eqFixedContractor(); fc.innerHTML='<option value="">— بدون (اختار كل مرة) —</option>'+contractors.map(c=>'<option value="'+esc(c.name)+'"'+(c.name===cur?' selected':'')+'>'+esc(c.name)+(c.spec&&c.spec!=='—'?' — '+esc(c.spec):'')+'</option>').join(''); }
+  eqApplyFixedContractor();
+  const sel=document.getElementById('eq-site'); if(!sel) return;
+  const cur=eqCurrentSite(), custom=eqCustomSites();
+  sel.innerHTML=eqSiteOptions().map(n=>'<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>').join('');
+  const chips=document.getElementById('eq-site-chips');
+  if(chips) chips.innerHTML=custom.map(n=>'<span class="chip">'+esc(n)+' <button type="button" title="حذف" onclick="eqRemoveSite('+jsArg(n)+')">✕</button></span>').join('');
+}
+function eqSaveSite(){ const v=document.getElementById('eq-site').value; localStorage.setItem('cea_eq_site', v); showToast('✅ الموقع في راس الكشف: '+v); }
+function eqAddSite(){
+  const inp=document.getElementById('eq-site-new'); const v=(inp.value||'').trim(); if(!v){ showToast('⚠ اكتب اسم الموقع', true); return; }
+  if(eqSiteOptions().includes(v)){ showToast('⚠ الموقع ده موجود', true); return; }
+  localStorage.setItem('cea_eq_sites', JSON.stringify([...eqCustomSites(), v]));
+  localStorage.setItem('cea_eq_site', v); inp.value='';
+  renderEqSettings(); showToast('✅ اتضاف واتحدد: '+v);
+}
+function eqRemoveSite(n){
+  localStorage.setItem('cea_eq_sites', JSON.stringify(eqCustomSites().filter(x=>x!==n)));
+  if(localStorage.getItem('cea_eq_site')===n) localStorage.removeItem('cea_eq_site');
+  renderEqSettings();
+}
 function fmtMinutes(m){ m=Math.max(0, Math.round(Number(m)||0)); return Math.floor(m/60)+':'+String(m%60).padStart(2,'0'); }
 function eqMinutes(from, to){
   if(!/^\d{2}:\d{2}$/.test(from||'') || !/^\d{2}:\d{2}$/.test(to||'')) return 0;
@@ -2830,6 +2884,7 @@ function clearEqForm(keepHeader){
   document.getElementById('eq-date').value=todayYMD(); eqSetDay(todayYMD());
   document.getElementById('eq-place').value=''; document.getElementById('eq-from').value=''; document.getElementById('eq-to').value='';
   document.getElementById('eq-works').value=''; document.getElementById('eq-notes').value=''; eqCalcDuration();
+  eqApplyFixedContractor();
 }
 function editEquipment(id){
   const r=equipmentRecords.find(x=>x.id===id); if(!r) return;
@@ -2866,7 +2921,7 @@ function eqMonthRecords(){
 function eqSheetsCount(b){ const days=Math.round((b.end-b.start)/86400000)+1; return Math.ceil(days/5); }
 function renderEquipment(){
   const list=document.getElementById('eq-list'); if(!list) return;
-  renderEqMonthNav();
+  renderEqMonthNav(); renderEqSettings(); eqLoadSiteNames();
   // فلتر المعدات في الشهر (من كل الأسماء المستخدمة)
   const names=[...new Set(equipmentRecords.map(r=>r.equipment).filter(Boolean))].sort();
   const fsel=document.getElementById('eq-filter-equipment');
@@ -2896,7 +2951,7 @@ function renderEquipment(){
 // ── الكشف الشهري (Excel) — ورقة لكل 5 أيام تقويمية من 20 لـ 19 ──
 // نفس شبكة الأعمدة الـ 13 بتاعة الكشف الأسبوعي عشان بلوكات التوقيع تقع في نفس الأعمدة (A..E / G..I / J..M)
 // وفي الصف 16 وعناوينها في 17 — signStamp.ts في السيرفر بيختم عليها من غير أي تعديل.
-function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStart, dayEnd, sigImgId, equipmentName, contractorName, monthMinutes, monthDays){
+function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStart, dayEnd, sigImgId, equipmentName, contractorName, monthMinutes, monthDays, siteLabel){
   const ws = workbook.addWorksheet((pageIdx+1)+'- '+String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,26), {
     pageSetup:{paperSize:9, orientation:'landscape', fitToPage:true}, views:[{rightToLeft:true}] });
   ws.columns=[{width:16},{width:9},{width:9},{width:9},{width:9},{width:9},{width:9},{width:8},{width:8},{width:14},{width:8},{width:12},{width:10}];
@@ -2908,7 +2963,7 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
 
   ws.mergeCells(1,1,1,13); ws.getCell(1,1).value='شركة هوم جيت للمقاولات ش م م';
   styleRange(1,1,1,13,{font:{bold:true,size:14,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy}); ws.getRow(1).height=24;
-  ws.mergeCells(2,1,2,13); ws.getCell(2,1).value=`كومبوند جريني افينيو  —  سركي / إيجار معدات (${equipmentName||''})`;
+  ws.mergeCells(2,1,2,13); ws.getCell(2,1).value=`${siteLabel||'كومبوند جريني افينيو'}  —  سركي / إيجار معدات (${equipmentName||''})`;
   styleRange(2,1,2,13,{font:{bold:true,size:11,color:{argb:navy},name:'Arial'}, fill:gold}); ws.getRow(2).height=20;
 
   ws.mergeCells(3,11,3,13); ws.getCell(3,13).value='إسم المقاول :';
@@ -2917,11 +2972,11 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
   ws.mergeCells(3,1,3,4);   ws.getCell(3,4).value=equipmentName||'';
   styleRange(3,1,3,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(3,cc).font=lbl;});
 
-  const places=[...new Set(exp.map(r=>r.place).filter(Boolean))].join(' ، ');
+  // الموقع من إعدادات السركي الشهري (مش قائمة أماكن الأعمال — الشهر فيه أماكن كتير، وكل يوم مكانه في الجدول)
   ws.mergeCells(4,11,4,13); ws.getCell(4,13).value='الموقع :';
-  ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value=places;
+  ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value=siteLabel||'';
   ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value='المشروع :';
-  ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value='كومبوند جريني افينيو';
+  ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value=siteLabel||'كومبوند جريني افينيو';
   styleRange(4,1,4,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(4,cc).font=lbl;});
 
   ws.mergeCells(5,11,5,13); ws.getCell(5,13).value='الفترة من :';
@@ -2987,18 +3042,19 @@ async function buildEquipmentWorkbook(exp, bounds, equipmentName){
     const contractorNames=[...new Set(exp.map(r=>r.contractor).filter(Boolean))];
     const contractorName=contractorNames.join('، ');
     const monthMinutes=exp.reduce((a,r)=>a+(Number(r.minutes)||0),0), monthDays=new Set(exp.map(r=>r.date)).size;
+    const siteLabel=eqCurrentSite();
     const pages=eqSheetsCount(bounds);
     for(let p=0;p<pages;p++){
       const ds=new Date(bounds.start); ds.setDate(bounds.start.getDate()+p*5);
       const de=new Date(ds); de.setDate(ds.getDate()+4); if(de>bounds.end) de.setTime(bounds.end.getTime());
-      buildEquipmentSheet(workbook, exp, bounds, p, pages, ds, de, sigImgId, equipmentName, contractorName, monthMinutes, monthDays);
+      buildEquipmentSheet(workbook, exp, bounds, p, pages, ds, de, sigImgId, equipmentName, contractorName, monthMinutes, monthDays, siteLabel);
     }
     const buffer=await workbook.xlsx.writeBuffer();
     const wkStart=toYMD(bounds.start), wkEnd=toYMD(bounds.end);
     const safe=String(equipmentName||'معدة').replace(/[\\\/\?\*\[\]:]/g,'').trim();
     const fileName=`سركي_معدات_${safe}_${wkStart}_${wkEnd}.xlsx`;
     return { buffer, fileName, sheetsCount:pages, contractorNames:[contractorName], wkStart, wkEnd,
-      total: Math.round(monthMinutes/60*100)/100, recordsCount: monthDays, placesLabel: equipmentName, buildLabel: safe, workbook, kind:'equipment', monthMinutes, monthDays };
+      total: Math.round(monthMinutes/60*100)/100, recordsCount: monthDays, placesLabel: equipmentName, buildLabel: safe, workbook, kind:'equipment', monthMinutes, monthDays, siteLabel };
   }catch(e){ showToast('⚠ خطأ في بناء الكشف: '+e.message,true); return null; }
 }
 // اختيار المعدة للكشف: الفلتر لو محدد، أو المعدة الوحيدة في الشهر، وإلا لازم يختار
@@ -3040,7 +3096,7 @@ function openEquipmentReview(b, exp, canSend){
         <div class="hint-box" style="margin-bottom:10px">
           <div><strong>المهندس:</strong> ${esc(getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
           <div><strong>المعدة:</strong> ${esc(b.placesLabel||'')} · <strong>المقاول:</strong> ${esc(b.contractorNames.join('، '))}</div>
-          <div><strong>الشهر:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)}</div>
+          <div><strong>الشهر:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)} · <strong>الموقع:</strong> ${esc(b.siteLabel||'')}</div>
           <div><strong>أيام التشغيل:</strong> ${b.monthDays} · <strong>إجمالي الساعات:</strong> ${fmtMinutes(b.monthMinutes)}</div>
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(b.fileName)}</span> (${b.sheetsCount} ورقة — كل ورقة 5 أيام)</div>
         </div>
@@ -4867,7 +4923,7 @@ function clearSession(){
 }
 // كل مفاتيح بيانات التطبيق على الجهاز (بدون مفاتيح الجلسة) — تُمسح عند الخروج أو تبديل الحساب
 // عشان بيانات مهندس ما تتدمجش في حساب مهندس تاني على نفس الهاتف
-const APP_DATA_KEYS=['saraki_records','saraki_ir','cea_equipment','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
+const APP_DATA_KEYS=['saraki_records','saraki_ir','cea_equipment','cea_eq_contractor','cea_eq_site','cea_eq_sites','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
   'cea_daily','cea_exec','saraki_signature','cea_records_fully_loaded','cea_records_oldest_loaded','cea_place_notes',
   'cea_sync_snapshot','cea_pin_hash','cea_user_title','cea_enabled_modules','cea_enabled_features'];
 function wipeLocalAppData(){

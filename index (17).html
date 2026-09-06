@@ -737,6 +737,7 @@
       <input type="search" class="select-search" id="eq-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('eq-contractor-search','eq-contractor')">
       <div class="select-search-empty" id="eq-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
       <select id="eq-contractor" onchange="eqFillEquipment()"><option value="">-- اختر المقاول / المورد --</option></select>
+      <p class="hint" id="eq-contractor-lock" style="display:none;margin:4px 0 0">🔒 ثابت من إعدادات السركي الشهري (تحت)</p>
     </div>
     <div class="field">
       <label>المعدة <span class="req">*</span></label>
@@ -746,16 +747,16 @@
       <div class="field" style="flex:1"><label>التاريخ <span class="req">*</span></label><input type="date" id="eq-date" onchange="eqSetDay(this.value)"></div>
       <div class="field" style="flex:1"><label>اليوم</label><input type="text" id="eq-day" class="auto-field" readonly placeholder="يتحدد تلقائياً"></div>
     </div>
+    <div style="display:flex;gap:8px">
+      <div class="field" style="flex:1"><label>من <span class="req">*</span></label><input type="time" id="eq-from" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
+      <div class="field" style="flex:1"><label>إلى <span class="req">*</span></label><input type="time" id="eq-to" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
+      <div class="field" style="flex:1"><label>المدة</label><input type="text" id="eq-duration" class="auto-field" readonly placeholder="—"></div>
+    </div>
     <div class="field">
       <label>المكان <span class="req">*</span></label>
       <input type="search" class="select-search" id="eq-place-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('eq-place-search','eq-place')">
       <div class="select-search-empty" id="eq-place-search-empty">لا يوجد مكان بهذا الاسم</div>
       <select id="eq-place"><option value="">-- اختر المكان --</option></select>
-    </div>
-    <div style="display:flex;gap:8px">
-      <div class="field" style="flex:1"><label>من <span class="req">*</span></label><input type="time" id="eq-from" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
-      <div class="field" style="flex:1"><label>إلى <span class="req">*</span></label><input type="time" id="eq-to" oninput="eqCalcDuration()" onchange="eqCalcDuration()"></div>
-      <div class="field" style="flex:1"><label>المدة</label><input type="text" id="eq-duration" class="auto-field" readonly placeholder="—"></div>
     </div>
     <div class="field"><label>بيان الأعمال</label><textarea id="eq-works" rows="2" placeholder="مثال: حفر أساسات + نقل ناتج الحفر للمقلب"></textarea></div>
     <div class="field"><label>ملاحظات</label><input type="text" id="eq-notes" placeholder="مثال: وقفت ساعة عطل هيدروليك" maxlength="500"></div>
@@ -781,6 +782,26 @@
     <button class="btn btn-ghost" style="flex:1" onclick="previewEquipmentSheet()">👁 معاينة الكشف</button>
     <button class="btn btn-navy" style="flex:1" onclick="exportEquipmentExcel()">📄 تنزيل Excel</button>
   </div>
+
+  <!-- إعدادات السركي الشهري (محلية على الجهاز): المقاول الثابت + الموقع اللي بيتكتب في راس الكشف -->
+  <details class="card" id="eq-settings" style="margin-top:12px">
+    <summary style="cursor:pointer;font-weight:900;font-size:13.5px">⚙️ إعدادات السركي الشهري</summary>
+    <div class="field" style="margin-top:10px">
+      <label>👷 المقاول / المورد الثابت</label>
+      <select id="eq-fixed-contractor" onchange="eqSaveFixedContractor()"><option value="">— بدون (اختار كل مرة) —</option></select>
+    </div>
+    <p class="hint" style="margin-top:0">لو حددته، المقاول والمعدة (تخصصه) بيتملوا لوحدهم في الفورم ويتقفلوا — ومش بتختارهم مع كل يوم تشغيل.</p>
+    <div class="field">
+      <label>📍 الموقع في راس الكشف</label>
+      <select id="eq-site" onchange="eqSaveSite()"></select>
+    </div>
+    <p class="hint" style="margin-top:0">بيتكتب في خانة "الموقع" وعنوان الورقة بدل أماكن الأعمال (الشهر فيه أماكن كتير — كل يوم مكانه في الجدول). الافتراضي موقعك المسجّل في حسابك.</p>
+    <div class="add-row">
+      <input type="text" id="eq-site-new" placeholder="إضافة موقع جديد..." maxlength="80">
+      <button class="btn btn-navy btn-inline" onclick="eqAddSite()">➕ إضافة</button>
+    </div>
+    <div id="eq-site-chips" class="chips"></div>
+  </details>
 </div>
 
 <!-- ══ IR ══ -->
