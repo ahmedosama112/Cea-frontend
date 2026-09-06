@@ -336,8 +336,12 @@
 
   <div class="card">
     <div class="card-title"><span>🖋️</span> سلسلة الاعتماد حسب الدرجة</div>
-    <p class="hint" style="margin-top:0">الدرجات ثابتة، والاعتماد بيمشي بالترتيب ده. الشخص نفسه في كل مستوى بيتحدد لكل حساب على حدة من كارت الحساب فوق.</p>
+    <p class="hint" style="margin-top:0">لكل درجة اختار المستويات اللي كشوفها بتعدّي عليها. الترتيب دايمًا: مدير الفريق ← مدير التنفيذ ← مدير المشروع. الشخص نفسه في كل مستوى بيتحدد لكل حساب على حدة من كارت الحساب فوق.</p>
     <div id="apr-matrix"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-primary btn-inline" id="apr-matrix-save" style="display:none" onclick="aprMatrixSave()">💾 حفظ السلسلة</button>
+      <button class="btn btn-ghost btn-inline" onclick="aprMatrixReset()">↩️ رجوع للمحفوظ</button>
+    </div>
   </div>
 
   <div class="card">

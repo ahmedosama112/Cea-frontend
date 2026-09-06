@@ -1722,13 +1722,57 @@ const APR_LEVEL_UI={
 function gradeLabel(g){ return GRADE_LABELS[g]||g||'—'; }
 async function loadAprLevelsAdmin(){
   try{ _aprMeta=(await api('GET','/api/admin/approval-levels')).data; }catch(e){ _aprMeta={grades:[],levels:[],matrix:{},approvers:[],solePmId:null}; }
-  const box=document.getElementById('apr-matrix');
-  if(box) box.innerHTML=(_aprMeta.grades||[]).map(g=>{
-    const chain=(_aprMeta.matrix||{})[g]||[];
-    return '<div class="apr-mx-row"><b>'+esc(gradeLabel(g))+'</b><span>'
-      +(chain.length? chain.map(l=>esc(APR_LEVEL_UI[l]?APR_LEVEL_UI[l].label:l)).join(' ← ') : 'محدش بيعتمد له — الكشف بيروح جوجل شيت فورًا')
-      +'</span></div>';
+  renderAprMatrix();
+}
+// مصفوفة "مين يعتمد لمين" — قابلة للتعديل: لكل درجة تختار المستويات اللي كشوفها بتعدّي عليها.
+// الترتيب بيتفرض في السيرفر بترتيب السلم مهما كان ترتيب الاختيار.
+let _aprMatrixDraft=null, _aprInReview=0;
+function renderAprMatrix(){
+  const box=document.getElementById('apr-matrix'); if(!box) return;
+  const grades=_aprMeta.grades||[], levels=_aprMeta.levels||APPROVING_LEVELS_FALLBACK;
+  if(!_aprMatrixDraft) _aprMatrixDraft=JSON.parse(JSON.stringify(_aprMeta.matrix||{}));
+  box.innerHTML=grades.map(g=>{
+    const chain=_aprMatrixDraft[g]||[];
+    const boxes=levels.map(l=>{
+      const on=chain.indexOf(l)>=0;
+      const lbl=APR_LEVEL_UI[l]?APR_LEVEL_UI[l].label:l;
+      // درجة ما تعتمدش لنفسها ولا لأعلى منها — الخيار بيتقفل بدل ما يبوّظ السلسلة
+      const selfOrLower=levels.indexOf(l)<=levels.indexOf(g);
+      const dis=selfOrLower?' disabled title="'+esc(lbl)+' مش فوق درجة '+esc(gradeLabel(g))+'"':'';
+      return '<label class="apr-mx-chk'+(on?' on':'')+(selfOrLower?' off':'')+'">'
+        +'<input type="checkbox"'+(on?' checked':'')+dis+' onchange="aprMatrixToggle(\''+g+'\',\''+l+'\',this.checked)"> '+esc(lbl)+'</label>';
+    }).join('');
+    return '<div class="apr-mx-row"><b>'+esc(gradeLabel(g))+'</b><span class="apr-mx-boxes">'+boxes
+      +(chain.length?'':' <i style="color:var(--muted)">محدش بيعتمد له — الكشف بيروح جوجل شيت فورًا</i>')+'</span></div>';
   }).join('');
+  const btn=document.getElementById('apr-matrix-save');
+  if(btn) btn.style.display = JSON.stringify(_aprMatrixDraft)===JSON.stringify(_aprMeta.matrix||{}) ? 'none' : '';
+}
+const APPROVING_LEVELS_FALLBACK=['team leader','construction manager','project manager'];
+function aprMatrixToggle(grade, level, on){
+  if(!_aprMatrixDraft[grade]) _aprMatrixDraft[grade]=[];
+  const arr=_aprMatrixDraft[grade].filter(x=>x!==level);
+  if(on) arr.push(level);
+  // نحافظ على ترتيب السلم محليًا كمان عشان العرض يطابق اللي هيتحفظ
+  _aprMatrixDraft[grade]=(_aprMeta.levels||APPROVING_LEVELS_FALLBACK).filter(l=>arr.indexOf(l)>=0);
+  renderAprMatrix();
+}
+function aprMatrixReset(){ _aprMatrixDraft=null; renderAprMatrix(); }
+async function aprMatrixSave(){
+  try{
+    const info=(await api('GET','/api/admin/approval-matrix')).data;
+    _aprInReview=info.inReview||0;
+  }catch(e){ _aprInReview=0; }
+  let msg='حفظ سلسلة الاعتماد الجديدة؟';
+  if(_aprInReview) msg+='\n\n⚠ فيه '+_aprInReview+' كشف قيد المراجعة دلوقتي. أي كشف واقف عند مستوى هتشيله هيفضل معلّق لحد ما تحرّكه انت من تاب الاعتمادات (مش هيتبعت لجوجل شيت من غير اعتماد).';
+  if(!confirm(msg)) return;
+  try{
+    const r=await api('PUT','/api/admin/approval-matrix',{matrix:_aprMatrixDraft});
+    _aprMeta.matrix=r.data; _aprMatrixDraft=null;
+    renderAprMatrix();
+    if(_adminSelected) adminFillGradeAndApprovers();
+    showToast('✅ اتحفظت سلسلة الاعتماد');
+  }catch(e){ showToast('⚠ '+e.message, true); }
 }
 // كارت الحساب: دروب داون الدرجة + دروب داون معتمد لكل مستوى مطلوب لدرجته
 function adminFillGradeAndApprovers(){
