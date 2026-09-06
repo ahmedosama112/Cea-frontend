@@ -689,3 +689,11 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-mx-row b { min-width:210px; color:var(--gold-text); }
 .apr-mx-row span { color:var(--muted); font-weight:700; }
 .apr-miss { font-size:11.5px; font-weight:800; color:var(--danger-fg); background:var(--danger-bg); border-radius:8px; padding:4px 8px; margin:4px 0 0; }
+
+/* جدول نشاط الحسابات (شاشة الإدارة) — نفس هيكل جدول الاعتمادات مع عمود أول لاصق بدل الأخير */
+.act-table { min-width:900px; }
+.act-table th:last-child, .act-table td:last-child { position:static; box-shadow:none; background:transparent; }
+.act-table th:first-child, .act-table td:first-child { position:sticky; right:0; z-index:1; box-shadow:-2px 0 6px rgba(0,0,0,.08); }
+.act-table th:first-child { z-index:2; background:var(--navy); }
+.act-table td:first-child { background:var(--card); }
+.act-table .apr-pill { font-size:10px; padding:3px 7px; }

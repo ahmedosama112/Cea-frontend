@@ -1437,6 +1437,7 @@ async function renderAdmin(){
   if(!isAdmin()) { switchTab('home'); return; }
   await loadSiteNames(); // الأول — عشان أسماء المواقع تظهر صح في labels الفيتشرز والدروب داون
   loadAprLevelsAdmin();
+  renderActivityTable();
   adminModuleCheckboxes('admin-create-modules', ['records','submissions','todo','summary'], DEFAULT_FEATURES);
   const list=document.getElementById('admin-users-list');
   try{
@@ -3420,6 +3421,89 @@ async function adminLoadUserSubs(){
       +'<div><b>'+esc(r.contractorName||'')+'</b>'+(r.placeName?' · '+esc(r.placeName):'')+' <small class="text-muted">'+esc(r.weekStart)+' → '+esc(r.weekEnd)+' · rev '+String(r.revision).padStart(2,'0')+'</small><br><small>'+st(r)+'</small></div>'
       +'<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+r.id+'\')">🗑 حذف</button></div>').join('');
   }catch(e){ box.innerHTML='<div class="hint">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+// ── ترجمة الأخطاء لمعناها بالعربي ──
+// كل خطأ بيرجع للجهاز له معنى تشغيلي: مين المسؤول (السيرفر / الحساب / الجهاز) وهل محتاج تدخل.
+// r = صف الحساب (عشان نفرّق مثلًا 403 السراكي لحساب معتمد = طبيعي، مش مشكلة)
+function actErrMeaning(e, r){
+  if(!e) return null;
+  const st=Number(e.status), path=String(e.path||''), det=String(e.detail||'');
+  if(st===403 && path.startsWith('/api/records') && r && !r.hasRecords)
+    return {t:'طبيعي — الحساب معتمد بس ومالوش وحدة السراكي', ok:true};
+  if(st===403 && det.includes('الوحدة'))
+    return {t:'وحدة مش مفعّلة للحساب — فعّلها من القوائم الرئيسية', ok:false};
+  if(st===403) return {t:'مالوش صلاحية على الطلب ده', ok:false};
+  if(st===401) return {t:'الجلسة انتهت — محتاج يسجّل دخول تاني', ok:false};
+  if(st===429) return {t:'ضغط على السيرفر — التطبيق بيعيد المحاولة لوحده', ok:true};
+  if(st===413) return {t:'الملف أكبر من الحد المسموح', ok:false};
+  if(st===404) return {t:'عنصر مش موجود على السيرفر (اتمسح أو قديم)', ok:false};
+  if(st===400) return {t:'بيانات ناقصة أو غلط في الطلب', ok:false};
+  if(st>=500) return {t:'خطأ في السيرفر — محتاج مراجعة', ok:false};
+  return {t:det||('خطأ '+st), ok:false};
+}
+// حالة الحساب في سطر واحد — الخلاصة اللي الأدمن بيقراها بسرعة
+function actVerdict(r){
+  const err=actErrMeaning(r.errTop, r);
+  if(r.loginFail>0 && r.loginOk===0) return {t:'⛔ مش قادر يدخل', c:'var(--danger-fg)', b:'var(--danger-bg)'};
+  if(err && !err.ok) return {t:'⚠️ فيه خطأ متكرر', c:'var(--warn-fg)', b:'var(--warn-bg)'};
+  if(!r.lastSeenAt) return {t:'⏳ لسه ما دخلش', c:'var(--muted)', b:'var(--input)'};
+  // حساب ما فتحش التطبيق أصلًا خلال المدة: "مش نشط" — مش مشكلة مزامنة (كان بيتحسب إنذار بالغلط)
+  const activeInWindow = (Date.now()-new Date(r.lastSeenAt)) < _actDays*24*60*60*1000;
+  if(!activeInWindow) return {t:'😴 مش نشط', c:'var(--muted)', b:'var(--input)'};
+  if(r.hasRecords && r.sync===0) return {t:'⚠️ مفيش مزامنة', c:'var(--warn-fg)', b:'var(--warn-bg)'};
+  return {t:'✅ سليم', c:'var(--ok-fg)', b:'var(--ok-bg)'};
+}
+function actWhen(v){
+  if(!v) return '—';
+  const d=new Date(v), mins=Math.round((Date.now()-d)/60000);
+  if(mins<1) return 'دلوقتي';
+  if(mins<60) return 'من '+mins+' دقيقة';
+  if(mins<1440) return 'من '+Math.round(mins/60)+' ساعة';
+  return d.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+}
+let _actDays=7, _actRows=[];
+async function renderActivityTable(){
+  const box=document.getElementById('act-table'); if(!box) return;
+  if(!navigator.onLine){ box.innerHTML='<div class="home-empty">بيانات حية — محتاج اتصال بالنت</div>'; return; }
+  box.innerHTML='<div class="home-empty">⏳ جاري التحميل...</div>';
+  try{
+    const r=await api('GET','/api/admin/activity/summary?days='+_actDays);
+    _actRows=r.data;
+    const heads=['الحساب','الحالة','آخر دخول','دخول ناجح','محاولات فاشلة','آخر مزامنة','مزامنات','أخطاء','معنى الخطأ'];
+    let html='<table class="apr-table act-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
+    html+=_actRows.map(u=>{
+      const v=actVerdict(u), err=actErrMeaning(u.errTop, u);
+      const sync=u.syncReportedAt||u.lastSync;
+      const syncTxt=u.hasRecords ? (sync?actWhen(sync):'—') : '<span class="text-muted">مالوش سراكي</span>';
+      const failCell=u.loginFail
+        ? '<b style="color:var(--danger-fg)">'+u.loginFail+'</b><br><small class="text-muted">'+esc(actWhen(u.lastLoginFail))+'</small>'
+        : '0';
+      const errCell=u.errors
+        ? '<b style="color:var(--warn-fg)">'+u.errors+'</b>'+(u.errTop?'<br><small class="text-muted">'+esc(String(u.errTop.status))+' · '+esc(String(u.errTop.path||'').replace('/api/',''))+'</small>':'')
+        : '0';
+      return '<tr>'
+        +'<td class="apr-eng" style="text-align:right">'+esc(u.email.split('@')[0])+'<small>'+esc(u.title||u.grade||'')+'</small></td>'
+        +'<td><span class="apr-pill" style="background:'+v.b+';color:'+v.c+'">'+esc(v.t)+'</span></td>'
+        +'<td>'+esc(actWhen(u.lastSeenAt))+'</td>'
+        +'<td>'+(u.loginOk||0)+'</td>'
+        +'<td>'+failCell+'</td>'
+        +'<td>'+syncTxt+'</td>'
+        +'<td>'+(u.sync||0)+'</td>'
+        +'<td>'+errCell+'</td>'
+        +'<td style="white-space:normal;min-width:200px;text-align:right">'+(err?'<span style="color:'+(err.ok?'var(--muted)':'var(--danger-fg)')+'">'+esc(err.t)+'</span>':'<span class="text-muted">—</span>')+'</td>'
+        +'</tr>';
+    }).join('');
+    html+='</tbody></table>';
+    box.innerHTML=html;
+    const n=document.getElementById('act-count');
+    // العدّاد: اللي محتاج تدخل فعلًا (مشكلة دخول/خطأ/مزامنة) — "مش نشط" و"لسه ما دخلش" مش مشاكل
+    if(n){ const bad=_actRows.filter(u=>/^[⛔⚠]/.test(actVerdict(u).t)).length; n.textContent = bad ? bad+' محتاج نظرة' : 'كله سليم'; }
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+function setActDays(d){
+  _actDays=d;
+  document.querySelectorAll('.act-days').forEach(b=>b.classList.toggle('active', Number(b.dataset.v)===d));
+  renderActivityTable();
 }
 // سجل نشاط الحساب — دخول/مزامنة/أخطاء، عشان الأدمن يعرف مصدر المشكلة (السيرفر ولا جهاز المهندس)
 const ACT_LABEL={

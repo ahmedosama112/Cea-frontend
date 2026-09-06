@@ -181,6 +181,17 @@
     <div id="admin-users-list" class="list-scroll"><div class="home-empty">⏳ جاري التحميل...</div></div>
   </div>
 
+  <div class="card">
+    <div class="card-title between"><span class="t">📊 نشاط الحسابات <span id="act-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn" onclick="renderActivityTable()">🔄 تحديث</button></div>
+    <p class="hint" style="margin-top:0">كل الحسابات — الدخول والمزامنة وأي خطأ رجع للجهاز مترجم لمعناه. الحسابات الجديدة بتظهر هنا تلقائيًا.</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+      <button class="pill act-days active" data-v="7" onclick="setActDays(7)">آخر 7 أيام</button>
+      <button class="pill act-days" data-v="1" onclick="setActDays(1)">آخر 24 ساعة</button>
+      <button class="pill act-days" data-v="14" onclick="setActDays(14)">آخر 14 يوم</button>
+    </div>
+    <div class="apr-scroll"><div id="act-table"><div class="home-empty">⏳</div></div></div>
+  </div>
+
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
 
