@@ -1211,10 +1211,10 @@ function renderSummary(){
 
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
-const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19'};
+const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics'];
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات الأماكن (شاشة تحليل بيانات للمديرين)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
-const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment'};
+const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
 function setEnabledModules(list){
   enabledModules=Array.isArray(list)?list.filter(m=>ALL_MODULES.includes(m)):[];
@@ -1298,7 +1298,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', settings:'الإعدادات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات الأماكن', settings:'الإعدادات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1316,6 +1316,7 @@ function switchTab(name){
   if(name==='submissions'&&typeof renderMySubmissions==='function')renderMySubmissions();
   if(name==='inventory')renderInventory();
   if(name==='approvals')renderApprovals();
+  if(name==='analytics')renderAnalytics();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
   if(name==='settings'){renderSettings(); renderEqSettings(); eqLoadSiteNames();}
@@ -6176,4 +6177,205 @@ function restoreData() {
   } else {
     document.getElementById('restore-file-hidden').click();
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// تحليلات الأماكن (للمديرين) — أونلاين فقط، كل الحساب في السيرفر
+// ───────────────────────────────────────────────────────────────────────────
+// الملخص (تاب summary) بيحسب من localStorage = سجلات المهندس نفسه بس.
+// التاب ده مختلف: بيسأل /api/analytics اللي بيجمّع سجلات كل المهندسين المسندين
+// للمدير. الأماكن هي محور التحليل لأن قائمتها بتتنسخ نصًّا واحدًا لكل الحسابات
+// (نسخ أماكن الأدمن)، فالتجميع عليها بيطلع صح — بعكس المقاولين لسه.
+// ═══════════════════════════════════════════════════════════════════════════
+
+let _anScope=null;          // {level, engineers[], sites[]}
+let _anPeriod='month';      // week | month | q | all | custom
+let _anBucket='week';       // تجميع الاتجاه الزمني
+let _anSort='total';
+let _anData=null;
+let _anTrend=null;
+let _anSeq=0;               // الفلتر ممكن يتغيّر والطلب لسه شغال — بنتجاهل الرد القديم
+
+const AN_PERIODS=[{k:'week',l:'هذا الأسبوع'},{k:'month',l:'هذا الشهر'},{k:'q',l:'آخر 3 شهور'},{k:'all',l:'كل الفترة'},{k:'custom',l:'مخصص'}];
+const AN_SORTS=[{k:'total',l:'الأعلى منصرفًا'},{k:'records',l:'الأكتر سجلات'},{k:'discount',l:'الأعلى خصمًا'},{k:'last',l:'آخر نشاط'},{k:'name',l:'الاسم'}];
+
+const anInt=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:0});
+const anPct=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:1});
+
+// حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
+function anRange(){
+  if(_anPeriod==='all') return {};
+  if(_anPeriod==='custom'){
+    const f=document.getElementById('an-from'), t=document.getElementById('an-to');
+    const r={}; if(f&&f.value) r.from=f.value; if(t&&t.value) r.to=t.value; return r;
+  }
+  const now=new Date(), to=toYMD(now); const d=new Date(now);
+  if(_anPeriod==='week') d.setDate(d.getDate()-((d.getDay()+1)%7));
+  else if(_anPeriod==='month') d.setDate(1);
+  else d.setDate(d.getDate()-90);
+  return {from:toYMD(d), to};
+}
+function anQuery(extra){
+  const r=anRange(), p=new URLSearchParams();
+  if(r.from) p.set('from',r.from);
+  if(r.to) p.set('to',r.to);
+  const site=document.getElementById('an-site'), user=document.getElementById('an-user');
+  if(site&&site.value) p.set('site',site.value);
+  if(user&&user.value) p.set('userId',user.value);
+  Object.entries(extra||{}).forEach(([k,v])=>{ if(v!=null&&v!=='') p.set(k,v); });
+  const s=p.toString(); return s?('?'+s):'';
+}
+function anSetPeriod(k){
+  _anPeriod=k;
+  const box=document.getElementById('an-custom'); if(box) box.style.display = k==='custom' ? '' : 'none';
+  anPaintChips();
+  if(k!=='custom') renderAnalytics();
+}
+function anPaintChips(){
+  const box=document.getElementById('an-periods'); if(!box) return;
+  box.innerHTML=AN_PERIODS.map(p=>`<button type="button" class="an-chip${p.k===_anPeriod?' on':''}" onclick="anSetPeriod('${p.k}')">${esc(p.l)}</button>`).join('');
+}
+function anSetBucket(b){ _anBucket=b; renderAnalytics(); }
+function anSetSort(v){ _anSort=v; anPaintBody(); }
+
+async function renderAnalytics(fresh){
+  const body=document.getElementById('an-body'); if(!body) return;
+  if(!getAccessToken()||!navigator.onLine){
+    body.innerHTML='<div class="card"><div class="home-empty">📈 التحليلات بيانات حية — محتاج اتصال بالنت</div></div>';
+    return;
+  }
+  const seq=++_anSeq;
+  body.innerHTML='<div class="card"><div class="home-empty">⏳ بيتم تجميع البيانات...</div></div>';
+  try{
+    if(!_anScope){
+      const sc=await api('GET','/api/analytics/scope');
+      _anScope=sc.data;
+      anPaintFilters();
+    }
+    const f=fresh===true?{fresh:'1'}:{};
+    const [p,t]=await Promise.all([
+      api('GET','/api/analytics/places'+anQuery(f)),
+      api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))),
+    ]);
+    if(seq!==_anSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
+    _anData=p.data; _anTrend=t.data;
+    anPaintBody();
+  }catch(e){
+    if(seq!==_anSeq) return;
+    body.innerHTML='<div class="card"><div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div></div>';
+  }
+}
+
+// قوائم الفلترة + سطر يوضح نطاق الرؤية (المدير لازم يعرف الأرقام دي بتخص مين)
+function anPaintFilters(){
+  const sc=_anScope||{engineers:[],sites:[],level:'self'};
+  const sel=document.getElementById('an-user');
+  if(sel) sel.innerHTML='<option value="">كل المهندسين</option>'+sc.engineers
+    .map(u=>`<option value="${esc(u.id)}">${esc(u.title?u.title+' — ':'')}${esc(u.email)}</option>`).join('');
+  const siteWrap=document.getElementById('an-site-wrap'), site=document.getElementById('an-site');
+  if(site) site.innerHTML='<option value="">كل المواقع</option>'+(sc.sites||[]).map(s=>`<option value="${s}">${s===2?'الموقع الثاني':'الموقع الأول'}</option>`).join('');
+  if(siteWrap) siteWrap.style.display=(sc.sites||[]).length>1?'':'none';
+  const sort=document.getElementById('an-sort');
+  if(sort) sort.innerHTML=AN_SORTS.map(s=>`<option value="${s.k}"${s.k===_anSort?' selected':''}>${esc(s.l)}</option>`).join('');
+  const hint=document.getElementById('an-scope');
+  if(hint){
+    const n=sc.engineers.length;
+    hint.innerHTML = sc.level==='all'
+      ? `نطاقك: <b style="color:var(--gold-text)">كل الحسابات</b> (${anInt(n)} حساب)`
+      : sc.level==='team'
+        ? `نطاقك: <b style="color:var(--gold-text)">المهندسين المسندين لك</b> (${anInt(n)} حساب) — الأرقام دي بتاعتهم بس`
+        : 'نطاقك: <b>سجلاتك أنت بس</b> — مالكش مهندسين مسندين';
+  }
+  anPaintChips();
+}
+
+// ── الرسوم: SVG خام بدون مكتبة (بتشتغل أوفلاين وبتطبع صح) ──
+function anBarChart(pts){
+  if(!pts||!pts.length) return '<div class="home-empty">مفيش سجلات في الفترة دي</div>';
+  const H=150, PAD_T=12, PAD_B=24, W=Math.max(300, pts.length*46);
+  const max=Math.max.apply(null, pts.map(p=>p.total))||1;
+  let out='';
+  pts.forEach((p,i)=>{
+    const h=Math.max(2, ((H-PAD_T-PAD_B)*p.total)/max);
+    // عرض العمود متسقّف: مع فترة أو اتنين بس العمود كان بيطلع بلوك عريض وحش
+    const bw=W/pts.length, w=Math.min(bw*0.6, 56), x=i*bw+(bw-w)/2, y=H-PAD_B-h;
+    const lab=p.bucket.length>7?p.bucket.slice(5):p.bucket; // YYYY-MM-DD → MM-DD
+    out+=`<rect class="an-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="3"><title>${esc(p.bucket)} — ${anInt(p.total)} ج.م · ${anInt(p.records)} سجل</title></rect>`
+       +`<text class="an-xlab" x="${(x+w/2).toFixed(1)}" y="${H-PAD_B+14}">${esc(lab)}</text>`;
+  });
+  return `<div class="an-chart-scroll"><svg class="an-chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`
+       + `<line class="an-axis" x1="0" y1="${H-PAD_B}" x2="${W}" y2="${H-PAD_B}"/>${out}</svg></div>`;
+}
+function anPlaceBars(rows){
+  if(!rows.length) return '<div class="home-empty">مفيش أماكن في الفترة دي</div>';
+  const top=rows.slice(0,12), max=top[0].total||1;
+  return '<div class="an-bars">'+top.map(r=>{
+    const pctW=Math.max(2, (r.total/max)*100);
+    return `<div class="an-bars-row"><div class="an-bars-head"><span class="an-bars-name">${esc(r.name)}</span><span class="an-bars-val">${anInt(r.total)}</span></div>`
+         + `<div class="an-bars-track"><div class="an-bars-fill" style="width:${pctW.toFixed(1)}%"></div></div></div>`;
+  }).join('')+'</div>';
+}
+
+function anSortRows(rows){
+  const c=[...rows];
+  if(_anSort==='records') c.sort((a,b)=>b.records-a.records);
+  else if(_anSort==='discount') c.sort((a,b)=>b.discount-a.discount);
+  else if(_anSort==='last') c.sort((a,b)=>String(b.lastDate||'').localeCompare(String(a.lastDate||'')));
+  else if(_anSort==='name') c.sort((a,b)=>a.name.localeCompare(b.name,'ar'));
+  else c.sort((a,b)=>b.total-a.total);
+  return c;
+}
+
+function anPaintBody(){
+  const body=document.getElementById('an-body'); if(!body||!_anData) return;
+  const d=_anData, t=d.totals, rows=anSortRows(d.rows);
+  const top=d.rows[0];
+  const kpis=[
+    ['','إجمالي المنصرف (ج.م)', anInt(t.total)],
+    ['gold','أماكن فيها شغل', anInt(t.places)],
+    ['red','نسبة الخصم', anPct(t.discountPct)+'%'],
+    ['purple','عدد السجلات', anInt(t.records)],
+    ['green','مهندسين سجّلوا', anInt(d.engineers)],
+    ['tint-ok','طلبات فحص', anInt(t.irTotal)],
+    ['tint-warn','ساعات معدات', anPct(t.equipHours)],
+    ['tint-purple','أعلى مكان', top?esc(top.name):'—'],
+  ];
+  let html='<div class="summary-grid">'+kpis.slice(0,4).map(k=>`<div class="summary-box ${k[0]}"><span class="val">${k[2]}</span><span class="lbl">${k[1]}</span></div>`).join('')+'</div>'
+         + '<div class="summary-grid">'+kpis.slice(4).map(k=>`<div class="summary-box ${k[0]}"><span class="val" style="font-size:${k[1]==='أعلى مكان'?'13px':'19px'}">${k[2]}</span><span class="lbl">${k[1]}</span></div>`).join('')+'</div>';
+
+  html+='<div class="card"><div class="card-title between"><span class="t">📉 اتجاه المنصرف</span>'
+      + `<span class="an-seg"><button type="button" class="an-chip${_anBucket==='week'?' on':''}" onclick="anSetBucket('week')">أسبوعي</button>`
+      + `<button type="button" class="an-chip${_anBucket==='month'?' on':''}" onclick="anSetBucket('month')">شهري</button></span></div>`
+      + anBarChart(_anTrend)+'</div>';
+
+  html+='<div class="card"><div class="card-title"><span>🏗</span> المنصرف على كل مكان</div>'+anPlaceBars(d.rows)+'</div>';
+
+  const heads=['المكان','المنصرف','الخصم','% الخصم','سجلات','أيام','مقاولين','مهندسين','IR (A/B/C)','الإنجاز','ساعات معدات','آخر نشاط'];
+  let tbl='<table class="apr-table an-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
+  tbl+=rows.map(r=>{
+    const dpct=r.gross>0?(r.discount/r.gross)*100:0;
+    return '<tr>'
+      +`<td class="an-name">${esc(r.name)}${r.variants.length>1?' <span class="an-warn" title="مكتوب بأكتر من صيغة: '+esc(r.variants.join(' · '))+'">✎</span>':''}</td>`
+      +`<td><b>${anInt(r.total)}</b></td><td>${anInt(r.discount)}</td>`
+      +`<td class="${dpct>=10?'an-bad':''}">${anPct(dpct)}%</td>`
+      +`<td>${anInt(r.records)}</td><td>${anInt(r.days)}</td><td>${anInt(r.contractors)}</td><td>${anInt(r.engineers)}</td>`
+      +`<td>${r.ir.total?`${anInt(r.ir.a)}/${anInt(r.ir.b)}/${anInt(r.ir.c)}`:'—'}</td>`
+      +`<td>${r.execAvg==null?'—':anPct(r.execAvg)+'%'}</td>`
+      +`<td>${r.equipHours?anPct(r.equipHours):'—'}</td>`
+      +`<td>${esc(r.lastDate||'—')}</td></tr>`;
+  }).join('');
+  tbl+='</tbody></table>';
+  html+='<div class="card"><div class="card-title between"><span class="t">📋 التفاصيل</span>'
+      + `<select id="an-sort" onchange="anSetSort(this.value)" class="an-sort">${AN_SORTS.map(s=>`<option value="${s.k}"${s.k===_anSort?' selected':''}>${esc(s.l)}</option>`).join('')}</select></div>`
+      + (rows.length?('<div class="apr-scroll">'+tbl+'</div>'):'<div class="home-empty">مفيش بيانات في النطاق ده</div>')
+      + '</div>';
+
+  // اختلاف كتابة نفس المكان = حد كتبه بإيده بدل ما يختاره — الأدمن يقدر يوحّده من الإعدادات
+  const mixed=d.rows.filter(r=>r.variants.length>1);
+  if(mixed.length) html+='<div class="card accent-gold"><div class="card-title"><span>✎</span> أماكن مكتوبة بأكتر من صيغة</div>'
+      + '<div class="hint">الأرقام اتجمعت صح (التطبيق بيوحّد الهمزات والمسافات)، بس يُفضّل توحيد الكتابة عند المهندسين عشان القوائم تبقى نضيفة:</div>'
+      + mixed.map(r=>`<div class="setting-item"><div style="flex:1;min-width:0"><div class="setting-name">${esc(r.name)}</div><div class="setting-sub">${esc(r.variants.join('  ·  '))}</div></div></div>`).join('')
+      + '</div>';
+
+  body.innerHTML=html;
 }

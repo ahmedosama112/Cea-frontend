@@ -729,3 +729,32 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-row small { font-weight:700; }
 .apr-strike { background:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-fg); }
 .xl-preview tr.xl-struck td { text-decoration:line-through; color:#B71C1C !important; background:#FDE8E8 !important; }
+
+/* ═══ تحليلات الأماكن (تاب المديرين) ═══ */
+.an-periods { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.an-chip { background:var(--input); border:1.5px solid var(--border-strong); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:700; color:var(--muted); cursor:pointer; font-family:inherit; }
+.an-chip.on { background:var(--navy); border-color:var(--navy); color:#fff; }
+.an-seg { display:flex; gap:6px; }
+.an-row { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.an-row .field { margin-bottom:0; }
+.an-sort { font-size:12px; padding:5px 8px; border:1px solid var(--border-strong); border-radius:8px; background:var(--card); color:var(--text); font-family:inherit; }
+/* الرسوم SVG خام — بدون مكتبة: بتشتغل أوفلاين وبتتبع الوضع الداكن وبتطبع صح */
+.an-chart-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+.an-chart { display:block; }
+.an-bar { fill:var(--gold); }
+.an-axis { stroke:var(--border-strong); stroke-width:1; }
+.an-xlab { fill:var(--muted); font-size:9.5px; text-anchor:middle; font-family:inherit; }
+.an-bars-row { margin-bottom:9px; }
+.an-bars-head { display:flex; justify-content:space-between; gap:8px; font-size:12px; margin-bottom:3px; }
+.an-bars-name { font-weight:700; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.an-bars-val { font-weight:800; color:var(--navy-text); flex:none; }
+.an-bars-track { background:var(--track); border-radius:6px; height:9px; overflow:hidden; }
+.an-bars-fill { height:100%; background:linear-gradient(90deg,var(--gold),#8A6D1D); border-radius:6px; }
+.an-table { min-width:900px; }
+.an-table .an-name { text-align:right; font-weight:700; }
+.an-table .an-bad { color:var(--red); font-weight:800; }
+.an-warn { color:var(--gold-text); cursor:help; }
+/* الـ select العام عرضه 100% — هنا لازم يفضل جنب عنوان الكارت */
+.card-title .an-sort { width:auto; flex:none; max-width:60%; }
+/* العمود المثبّت في .apr-table مخصّص لعمود الإجراءات في تاب الاعتمادات — مالوش لازمة هنا */
+.an-table th:last-child, .an-table td:last-child { position:static; box-shadow:none; }
