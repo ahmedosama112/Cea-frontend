@@ -2314,26 +2314,27 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
   styleRange(2,1,2,13,{font:{bold:true,size:11,color:{argb:navy},name:'Arial'}, fill:gold});
   ws.getRow(2).height = 20;
 
-  ws.mergeCells(3,11,3,13); ws.getCell(3,13).value = 'إسم العامل :';
+  // ‏ (علامة اتجاه عربي غير مرئية) بعد النقطتين: من غيرها الخلية بتتقرأ LTR فالنقطتين بتظهر في الجهة الغلط (Excel/جوجل شيت/PDF)
+  ws.mergeCells(3,11,3,13); ws.getCell(3,13).value = 'إسم العامل :‏';
   ws.mergeCells(3,8,3,10);  ws.getCell(3,10).value = c ? c.name : contractorName;
-  ws.mergeCells(3,5,3,7);   ws.getCell(3,7).value = 'المهنة :';
+  ws.mergeCells(3,5,3,7);   ws.getCell(3,7).value = 'المهنة :‏';
   ws.mergeCells(3,1,3,4);   ws.getCell(3,4).value = c ? (c.spec||'') : '';
   styleRange(3,1,3,13,{font:{size:10,name:'Arial'}});
   [13,7].forEach(cc=>{ws.getCell(3,cc).font={bold:true,size:10,name:'Arial',color:{argb:navy}};});
 
   const currentPlace = placeLabel || [...new Set(exp.map(r=>r.place).filter(Boolean))].join(' ، ');
-  ws.mergeCells(4,11,4,13); ws.getCell(4,13).value = 'الموقع :';
+  ws.mergeCells(4,11,4,13); ws.getCell(4,13).value = 'الموقع :‏';
   ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value = currentPlace;
-  ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value = 'المشروع :';
+  ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value = 'المشروع :‏';
   ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value = 'كومبوند جريني افينيو';
   styleRange(4,1,4,13,{font:{size:10,name:'Arial'}});
   [13,7].forEach(cc=>{ws.getCell(4,cc).font={bold:true,size:10,name:'Arial',color:{argb:navy}};});
 
-  ws.mergeCells(5,9,5,13); ws.getCell(5,13).value = 'نوع المعدة وقيمتها / قيمة اليومية :';
+  ws.mergeCells(5,9,5,13); ws.getCell(5,13).value = 'نوع المعدة وقيمتها / قيمة اليومية :‏';
   ws.mergeCells(5,6,5,8);  ws.getCell(5,8).value = c && c.rate ? `${Number(c.rate).toLocaleString('ar-EG')} ج.م / ${c.rateType||'يومية'}` : '';
-  ws.getCell(5,4).value = 'من :';
+  ws.getCell(5,4).value = 'من :‏';
   ws.getCell(5,3).value = wkStart;
-  ws.getCell(5,2).value = 'إلى :';
+  ws.getCell(5,2).value = 'إلى :‏';
   ws.getCell(5,1).value = wkEnd;
   styleRange(5,1,5,13,{font:{size:10,name:'Arial'}});
   ws.getCell(5,13).font = {bold:true,size:10,name:'Arial',color:{argb:navy}};
@@ -2996,22 +2997,22 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
   ws.mergeCells(2,1,2,13); ws.getCell(2,1).value=`${siteLabel||'كومبوند جريني افينيو'}  —  سركي / إيجار معدات (${equipmentName||''})`;
   styleRange(2,1,2,13,{font:{bold:true,size:11,color:{argb:navy},name:'Arial'}, fill:gold}); ws.getRow(2).height=20;
 
-  ws.mergeCells(3,11,3,13); ws.getCell(3,13).value='إسم المقاول :';
+  ws.mergeCells(3,11,3,13); ws.getCell(3,13).value='إسم المقاول :‏';
   ws.mergeCells(3,8,3,10);  ws.getCell(3,10).value=contractorName||'';
-  ws.mergeCells(3,5,3,7);   ws.getCell(3,7).value='المعدة :';
+  ws.mergeCells(3,5,3,7);   ws.getCell(3,7).value='المعدة :‏';
   ws.mergeCells(3,1,3,4);   ws.getCell(3,4).value=equipmentName||'';
   styleRange(3,1,3,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(3,cc).font=lbl;});
 
   // الموقع من إعدادات السركي الشهري (مش قائمة أماكن الأعمال — الشهر فيه أماكن كتير، وكل يوم مكانه في الجدول)
-  ws.mergeCells(4,11,4,13); ws.getCell(4,13).value='الموقع :';
+  ws.mergeCells(4,11,4,13); ws.getCell(4,13).value='الموقع :‏';
   ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value=siteLabel||'';
-  ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value='المشروع :';
+  ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value='المشروع :‏';
   ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value=siteLabel||'كومبوند جريني افينيو';
   styleRange(4,1,4,13,{font:{size:10,name:'Arial'}}); [13,7].forEach(cc=>{ws.getCell(4,cc).font=lbl;});
 
-  ws.mergeCells(5,11,5,13); ws.getCell(5,13).value='الفترة من :';
+  ws.mergeCells(5,11,5,13); ws.getCell(5,13).value='الفترة من :‏';
   ws.mergeCells(5,9,5,10);  ws.getCell(5,10).value=toYMD(dayStart);
-  ws.getCell(5,8).value='إلى :';
+  ws.getCell(5,8).value='إلى :‏';
   ws.mergeCells(5,6,5,7);   ws.getCell(5,7).value=toYMD(dayEnd);
   ws.mergeCells(5,1,5,5);   ws.getCell(5,5).value=`ورقة ${pageIdx+1} من ${pagesTotal}  —  شهر ${toYMD(bounds.start)} ← ${toYMD(bounds.end)}`;
   styleRange(5,1,5,13,{font:{size:10,name:'Arial'}}); [13,8].forEach(cc=>{ws.getCell(5,cc).font=lbl;});
