@@ -1475,7 +1475,7 @@ function adminSyncLine(u){
     const local = Number(u.syncLocalRecords||0), un = Number(u.syncUnsynced||0);
     const at = new Date(u.syncReportedAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
     sync = un>0
-      ? '<span style="color:var(--danger-fg);font-weight:700">السجلات المتزامنة: '+(local-un)+' من '+local+' — ⚠ '+un+' لسه ما اترفعش</span> <span class="text-muted">('+esc(at)+')</span>'
+      ? '<span style="color:var(--danger-fg);font-weight:700">السجلات المتزامنة: '+(local-un)+' من '+local+' — ⚠ '+un+' لسه ما اترفعش</span> <span class="text-muted">('+esc(at)+') — السبب في "📜 سجل النشاط" جوّه كارت الحساب (سطر "خطأ في طلب 400")</span>'
       : '<span style="color:var(--ok-fg);font-weight:700">السجلات المتزامنة: '+local+' من '+local+' ✅</span> <span class="text-muted">('+esc(at)+')</span>';
   }
   return '📊 عدد السراكي: <b>'+server+'</b> · '+sync;
@@ -3890,6 +3890,15 @@ async function adminLoadUserSubs(){
 // ── ترجمة الأخطاء لمعناها بالعربي ──
 // كل خطأ بيرجع للجهاز له معنى تشغيلي: مين المسؤول (السيرفر / الحساب / الجهاز) وهل محتاج تدخل.
 // r = صف الحساب (عشان نفرّق مثلًا 403 السراكي لحساب معتمد = طبيعي، مش مشكلة)
+// ترجمة تفاصيل خطأ التحقق (ZodError من السيرفر: "qtyType: Invalid enum value. Expected 'a' | 'b', received 'c'")
+// لعربي مفهوم: "نوع الكمية: القيمة 'c' مش من الخيارات المسموحة (a / b)"
+function actDetailAr(det){
+  let t=String(det||'');
+  t=t.replace(/(^|·\s*)([a-zA-Z_]+):\s*/g,(m,pre,f)=>pre+((typeof SYNC_FIELD_AR!=='undefined'&&SYNC_FIELD_AR[f])||f)+': ');
+  t=t.replace(/Invalid enum value\. Expected (.+?), received '([^']*)'/g,(m,exp,got)=>"القيمة '"+got+"' مش من الخيارات المسموحة ("+exp.replace(/'/g,'').replace(/\s*\|\s*/g,' / ')+')');
+  t=t.replace(/Required/g,'مطلوب').replace(/Expected (number|string), received (\w+)/g,'نوع البيانات غلط');
+  return t;
+}
 function actErrMeaning(e, r){
   if(!e) return null;
   const st=Number(e.status), path=String(e.path||''), det=String(e.detail||'');
@@ -3902,7 +3911,7 @@ function actErrMeaning(e, r){
   if(st===429) return {t:'ضغط على السيرفر — التطبيق بيعيد المحاولة لوحده', ok:true};
   if(st===413) return {t:'الملف أكبر من الحد المسموح', ok:false};
   if(st===404) return {t:'عنصر مش موجود على السيرفر (اتمسح أو قديم)', ok:false};
-  if(st===400) return {t:'بيانات ناقصة أو غلط في الطلب', ok:false};
+  if(st===400) return {t:'السيرفر رفض البيانات'+(det?': '+actDetailAr(det):' (ناقصة أو غلط)')+' — السجل واقف على جهاز المهندس لحد ما يتعدّل', ok:false};
   if(st>=500) return {t:'خطأ في السيرفر — محتاج مراجعة', ok:false};
   return {t:det||('خطأ '+st), ok:false};
 }
@@ -3990,7 +3999,7 @@ async function adminLoadActivity(){
       return '<div class="list-item" style="padding:6px 8px">'
         +'<div style="font-size:12px;font-weight:800;color:'+(bad?'var(--danger-fg)':'var(--text)')+'">'+ic+' '+esc(lbl)
         +(r.status?' <span class="apr-rev">'+r.status+'</span>':'')+'</div>'
-        +(r.detail?'<div style="font-size:11.5px;color:var(--muted)">'+esc(r.detail)+'</div>':'')
+        +(r.detail?'<div style="font-size:11.5px;color:var(--muted)">'+esc(r.event==='API_ERR'?actDetailAr(r.detail):r.detail)+'</div>':'')
         +'<div style="font-size:10.5px;color:var(--muted)">'+esc(when)+(r.path?' · '+esc(r.path):'')+(r.device?' · '+esc(r.device):'')+'</div>'
         +'</div>';
     }).join('');
