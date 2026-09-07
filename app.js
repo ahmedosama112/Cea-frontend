@@ -3396,11 +3396,16 @@ function aprOpenPreview(title, wb, r){
 function aprDataRows(ws, kind){
   const eq = kind==='equipment';
   const cv=(r,c)=>{ let v=ws.getCell(r,c).value; if(v&&typeof v==='object'){ v = v.richText ? v.richText.map(t=>t.text).join('') : (v.result!==undefined ? v.result : (v.text||'')); } return v==null?'':String(v); };
+  // وصف السطر لازم يحدد السجل بالظبط: الملف فيه ورقة لكل مقاول (ومكان) — فبناخد المقاول والمكان من راس نفس الورقة
+  // (عمالة: المقاول صف 3 عمود 10، الموقع صف 4 عمود 10 · معدات: المقاول صف 3 عمود 10، المعدة صف 3 عمود 4)
+  const contractor=cv(3,10), where= eq ? cv(3,4) : cv(4,10);
+  const who=[contractor, where].filter(Boolean).join(' · ');
   const out=[];
   for(let r=8; r<=(eq?12:14); r++){
     const d=cv(r,13), val=cv(r, eq?7:8);
     if(!d || !val) continue;
-    out.push({ row:r, label: cv(r,12)+' '+d+' — '+(eq ? val.replace(/\u200F/g,'')+' ساعة' : fmt(Number(val)||0)+' ج.م') });
+    const place = eq ? cv(r,10) : ''; // المعدات: المكان في السطر نفسه
+    out.push({ row:r, label: (cv(r,12)+' '+d+(who?' — '+who:'')+(place?' · '+place:'')+' — '+(eq ? val.replace(/\u200F/g,'')+' ساعة' : fmt(Number(val)||0)+' ج.م')).slice(0,190) });
   }
   return out;
 }
