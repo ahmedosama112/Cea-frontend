@@ -1212,7 +1212,7 @@ function renderSummary(){
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
 const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات الأماكن (شاشة تحليل بيانات للمديرين)'};
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
 const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
@@ -1298,7 +1298,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات الأماكن', settings:'الإعدادات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', settings:'الإعدادات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -6180,14 +6180,16 @@ function restoreData() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// تحليلات الأماكن (للمديرين) — أونلاين فقط، كل الحساب في السيرفر
+// تحليلات الأماكن والمقاولين (للمديرين) — أونلاين فقط، كل الحساب في السيرفر
 // ───────────────────────────────────────────────────────────────────────────
 // الملخص (تاب summary) بيحسب من localStorage = سجلات المهندس نفسه بس.
 // التاب ده مختلف: بيسأل /api/analytics اللي بيجمّع سجلات كل المهندسين المسندين
-// للمدير. الأماكن هي محور التحليل لأن قائمتها بتتنسخ نصًّا واحدًا لكل الحسابات
-// (نسخ أماكن الأدمن)، فالتجميع عليها بيطلع صح — بعكس المقاولين لسه.
+// للمدير. الأماكن والمقاولين الاتنين بيانات مرجعية يديرها الأدمن وحده
+// (writeRoles: ['ADMIN'] على السيرفر + pushContractorsIfAdmin/pushPlacesIfAdmin)
+// وبتتنسخ نصًّا حرفيًا لحسابات المهندسين، فالأسماء موحّدة والتجميع عبرهم صح.
 // ═══════════════════════════════════════════════════════════════════════════
 
+let _anDim='place';         // place | contractor
 let _anScope=null;          // {level, engineers[], sites[]}
 let _anPeriod='month';      // week | month | q | all | custom
 let _anBucket='week';       // تجميع الاتجاه الزمني
@@ -6196,11 +6198,13 @@ let _anData=null;
 let _anTrend=null;
 let _anSeq=0;               // الفلتر ممكن يتغيّر والطلب لسه شغال — بنتجاهل الرد القديم
 
+const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'}];
 const AN_PERIODS=[{k:'week',l:'هذا الأسبوع'},{k:'month',l:'هذا الشهر'},{k:'q',l:'آخر 3 شهور'},{k:'all',l:'كل الفترة'},{k:'custom',l:'مخصص'}];
 const AN_SORTS=[{k:'total',l:'الأعلى منصرفًا'},{k:'records',l:'الأكتر سجلات'},{k:'discount',l:'الأعلى خصمًا'},{k:'last',l:'آخر نشاط'},{k:'name',l:'الاسم'}];
 
 const anInt=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:0});
 const anPct=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:1});
+const anIsCtr=()=>_anDim==='contractor';
 
 // حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
 function anRange(){
@@ -6225,6 +6229,7 @@ function anQuery(extra){
   Object.entries(extra||{}).forEach(([k,v])=>{ if(v!=null&&v!=='') p.set(k,v); });
   const s=p.toString(); return s?('?'+s):'';
 }
+function anSetDim(k){ if(k===_anDim) return; _anDim=k; anPaintChips(); renderAnalytics(); }
 function anSetPeriod(k){
   _anPeriod=k;
   const box=document.getElementById('an-custom'); if(box) box.style.display = k==='custom' ? '' : 'none';
@@ -6232,6 +6237,8 @@ function anSetPeriod(k){
   if(k!=='custom') renderAnalytics();
 }
 function anPaintChips(){
+  const dims=document.getElementById('an-dims');
+  if(dims) dims.innerHTML=AN_DIMS.map(d=>`<button type="button" class="an-chip an-dim${d.k===_anDim?' on':''}" onclick="anSetDim('${d.k}')">${esc(d.l)}</button>`).join('');
   const box=document.getElementById('an-periods'); if(!box) return;
   box.innerHTML=AN_PERIODS.map(p=>`<button type="button" class="an-chip${p.k===_anPeriod?' on':''}" onclick="anSetPeriod('${p.k}')">${esc(p.l)}</button>`).join('');
 }
@@ -6254,7 +6261,7 @@ async function renderAnalytics(fresh){
     }
     const f=fresh===true?{fresh:'1'}:{};
     const [p,t]=await Promise.all([
-      api('GET','/api/analytics/places'+anQuery(f)),
+      api('GET','/api/analytics/'+(anIsCtr()?'contractors':'places')+anQuery(f)),
       api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))),
     ]);
     if(seq!==_anSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
@@ -6275,8 +6282,6 @@ function anPaintFilters(){
   const siteWrap=document.getElementById('an-site-wrap'), site=document.getElementById('an-site');
   if(site) site.innerHTML='<option value="">كل المواقع</option>'+(sc.sites||[]).map(s=>`<option value="${s}">${s===2?'الموقع الثاني':'الموقع الأول'}</option>`).join('');
   if(siteWrap) siteWrap.style.display=(sc.sites||[]).length>1?'':'none';
-  const sort=document.getElementById('an-sort');
-  if(sort) sort.innerHTML=AN_SORTS.map(s=>`<option value="${s.k}"${s.k===_anSort?' selected':''}>${esc(s.l)}</option>`).join('');
   const hint=document.getElementById('an-scope');
   if(hint){
     const n=sc.engineers.length;
@@ -6306,8 +6311,8 @@ function anBarChart(pts){
   return `<div class="an-chart-scroll"><svg class="an-chart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`
        + `<line class="an-axis" x1="0" y1="${H-PAD_B}" x2="${W}" y2="${H-PAD_B}"/>${out}</svg></div>`;
 }
-function anPlaceBars(rows){
-  if(!rows.length) return '<div class="home-empty">مفيش أماكن في الفترة دي</div>';
+function anRowBars(rows){
+  if(!rows.length) return '<div class="home-empty">مفيش بيانات في الفترة دي</div>';
   const top=rows.slice(0,12), max=top[0].total||1;
   return '<div class="an-bars">'+top.map(r=>{
     const pctW=Math.max(2, (r.total/max)*100);
@@ -6326,56 +6331,95 @@ function anSortRows(rows){
   return c;
 }
 
-function anPaintBody(){
-  const body=document.getElementById('an-body'); if(!body||!_anData) return;
-  const d=_anData, t=d.totals, rows=anSortRows(d.rows);
-  const top=d.rows[0];
-  const kpis=[
-    ['','إجمالي المنصرف (ج.م)', anInt(t.total)],
-    ['gold','أماكن فيها شغل', anInt(t.places)],
-    ['red','نسبة الخصم', anPct(t.discountPct)+'%'],
-    ['purple','عدد السجلات', anInt(t.records)],
-    ['green','مهندسين سجّلوا', anInt(d.engineers)],
-    ['tint-ok','طلبات فحص', anInt(t.irTotal)],
-    ['tint-warn','ساعات معدات', anPct(t.equipHours)],
-    ['tint-purple','أعلى مكان', top?esc(top.name):'—'],
+// كروت الأرقام — مختلفة حسب البُعد (IR/الإنجاز مالهمش معنى للمقاولين، وأسماء برّا القائمة للمقاولين بس)
+function anKpis(d){
+  const t=d.totals, top=d.rows[0];
+  const common=[
+    ['','إجمالي المنصرف (ج.م)', anInt(t.total), false],
+    ['red','نسبة الخصم', anPct(t.discountPct)+'%', false],
+    ['purple','عدد السجلات', anInt(t.records), false],
+    ['green','مهندسين سجّلوا', anInt(d.engineers), false],
   ];
-  let html='<div class="summary-grid">'+kpis.slice(0,4).map(k=>`<div class="summary-box ${k[0]}"><span class="val">${k[2]}</span><span class="lbl">${k[1]}</span></div>`).join('')+'</div>'
-         + '<div class="summary-grid">'+kpis.slice(4).map(k=>`<div class="summary-box ${k[0]}"><span class="val" style="font-size:${k[1]==='أعلى مكان'?'13px':'19px'}">${k[2]}</span><span class="lbl">${k[1]}</span></div>`).join('')+'</div>';
+  return anIsCtr()
+    ? [common[0], ['gold','مقاولين اشتغلوا', anInt(t.contractors), false], common[1], common[2],
+       common[3],
+       [t.unknown?'red':'tint-ok','أسماء برّا قائمتك', anInt(t.unknown), false],
+       ['tint-warn','ساعات معدات', anPct(t.equipHours), false],
+       ['tint-purple','أعلى مقاول', top?esc(top.name):'—', true]]
+    : [common[0], ['gold','أماكن فيها شغل', anInt(t.places), false], common[1], common[2],
+       common[3],
+       ['tint-ok','طلبات فحص', anInt(t.irTotal), false],
+       ['tint-warn','ساعات معدات', anPct(t.equipHours), false],
+       ['tint-purple','أعلى مكان', top?esc(top.name):'—', true]];
+}
 
-  html+='<div class="card"><div class="card-title between"><span class="t">📉 اتجاه المنصرف</span>'
-      + `<span class="an-seg"><button type="button" class="an-chip${_anBucket==='week'?' on':''}" onclick="anSetBucket('week')">أسبوعي</button>`
-      + `<button type="button" class="an-chip${_anBucket==='month'?' on':''}" onclick="anSetBucket('month')">شهري</button></span></div>`
-      + anBarChart(_anTrend)+'</div>';
-
-  html+='<div class="card"><div class="card-title"><span>🏗</span> المنصرف على كل مكان</div>'+anPlaceBars(d.rows)+'</div>';
-
-  const heads=['المكان','المنصرف','الخصم','% الخصم','سجلات','أيام','مقاولين','مهندسين','IR (A/B/C)','الإنجاز','ساعات معدات','آخر نشاط'];
-  let tbl='<table class="apr-table an-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
-  tbl+=rows.map(r=>{
+function anTable(rows){
+  const heads = anIsCtr()
+    ? ['المقاول','التخصص','الفئة','متوسط السعر','المنصرف','الخصم','% الخصم','سجلات','أيام','أماكن','مهندسين','ساعات معدات','آخر نشاط']
+    : ['المكان','المنصرف','الخصم','% الخصم','سجلات','أيام','مقاولين','مهندسين','IR (A/B/C)','الإنجاز','ساعات معدات','آخر نشاط'];
+  let t='<table class="apr-table an-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
+  t+=rows.map(r=>{
     const dpct=r.gross>0?(r.discount/r.gross)*100:0;
+    const money=`<td><b>${anInt(r.total)}</b></td><td>${anInt(r.discount)}</td><td class="${dpct>=10?'an-bad':''}">${anPct(dpct)}%</td>`;
+    if(anIsCtr()){
+      // اسم مش في قائمة المقاولين عند الأدمن = اسم قديم في سجل قديم (اتغيّر أو اتحذف)
+      const flag=r.inList?'':' <span class="an-warn" title="الاسم ده مش في قائمة المقاولين عندك — سجل قديم باسم اتغيّر أو اتحذف">⚠</span>';
+      return '<tr>'
+        +`<td class="an-name">${esc(r.name)}${flag}</td>`
+        +`<td>${esc(r.spec||'—')}</td>`
+        +`<td>${r.rate==null?'—':anInt(r.rate)+' / '+esc(r.rateType||'يومية')}</td>`
+        +`<td>${r.avgPrice==null?'—':anInt(r.avgPrice)}</td>`
+        +money
+        +`<td>${anInt(r.records)}</td><td>${anInt(r.days)}</td><td>${anInt(r.places)}</td><td>${anInt(r.engineers)}</td>`
+        +`<td>${r.equipHours?anPct(r.equipHours):'—'}</td><td>${esc(r.lastDate||'—')}</td></tr>`;
+    }
     return '<tr>'
       +`<td class="an-name">${esc(r.name)}${r.variants.length>1?' <span class="an-warn" title="مكتوب بأكتر من صيغة: '+esc(r.variants.join(' · '))+'">✎</span>':''}</td>`
-      +`<td><b>${anInt(r.total)}</b></td><td>${anInt(r.discount)}</td>`
-      +`<td class="${dpct>=10?'an-bad':''}">${anPct(dpct)}%</td>`
+      +money
       +`<td>${anInt(r.records)}</td><td>${anInt(r.days)}</td><td>${anInt(r.contractors)}</td><td>${anInt(r.engineers)}</td>`
       +`<td>${r.ir.total?`${anInt(r.ir.a)}/${anInt(r.ir.b)}/${anInt(r.ir.c)}`:'—'}</td>`
       +`<td>${r.execAvg==null?'—':anPct(r.execAvg)+'%'}</td>`
       +`<td>${r.equipHours?anPct(r.equipHours):'—'}</td>`
       +`<td>${esc(r.lastDate||'—')}</td></tr>`;
   }).join('');
-  tbl+='</tbody></table>';
+  return t+'</tbody></table>';
+}
+
+function anPaintBody(){
+  const body=document.getElementById('an-body'); if(!body||!_anData) return;
+  const d=_anData, rows=anSortRows(d.rows);
+  const k=anKpis(d);
+  const box=(x)=>`<div class="summary-box ${x[0]}"><span class="val"${x[3]?' style="font-size:13px"':''}>${x[2]}</span><span class="lbl">${x[1]}</span></div>`;
+  let html='<div class="summary-grid">'+k.slice(0,4).map(box).join('')+'</div>'
+         + '<div class="summary-grid">'+k.slice(4).map(box).join('')+'</div>';
+
+  html+='<div class="card"><div class="card-title between"><span class="t">📉 اتجاه المنصرف</span>'
+      + `<span class="an-seg"><button type="button" class="an-chip${_anBucket==='week'?' on':''}" onclick="anSetBucket('week')">أسبوعي</button>`
+      + `<button type="button" class="an-chip${_anBucket==='month'?' on':''}" onclick="anSetBucket('month')">شهري</button></span></div>`
+      + anBarChart(_anTrend)+'</div>';
+
+  html+='<div class="card"><div class="card-title"><span>'+(anIsCtr()?'👷':'🏗')+'</span> المنصرف على كل '+(anIsCtr()?'مقاول':'مكان')+'</div>'+anRowBars(d.rows)+'</div>';
+
   html+='<div class="card"><div class="card-title between"><span class="t">📋 التفاصيل</span>'
       + `<select id="an-sort" onchange="anSetSort(this.value)" class="an-sort">${AN_SORTS.map(s=>`<option value="${s.k}"${s.k===_anSort?' selected':''}>${esc(s.l)}</option>`).join('')}</select></div>`
-      + (rows.length?('<div class="apr-scroll">'+tbl+'</div>'):'<div class="home-empty">مفيش بيانات في النطاق ده</div>')
+      + (rows.length?('<div class="apr-scroll">'+anTable(rows)+'</div>'):'<div class="home-empty">مفيش بيانات في النطاق ده</div>')
       + '</div>';
 
-  // اختلاف كتابة نفس المكان = حد كتبه بإيده بدل ما يختاره — الأدمن يقدر يوحّده من الإعدادات
-  const mixed=d.rows.filter(r=>r.variants.length>1);
-  if(mixed.length) html+='<div class="card accent-gold"><div class="card-title"><span>✎</span> أماكن مكتوبة بأكتر من صيغة</div>'
+  if(anIsCtr()){
+    // السجل بيحتفظ باسم المقاول وقت التسجيل — فأي اسم برّا القائمة معناه إنه اتغيّر أو اتحذف بعدها
+    const out=d.rows.filter(r=>!r.inList);
+    if(out.length) html+='<div class="card accent-gold"><div class="card-title"><span>⚠</span> أسماء في السجلات مش في قائمة المقاولين</div>'
+      + '<div class="hint">السجل بيحتفظ باسم المقاول زي ما كان وقت التسجيل. الأسماء دي معناها إن المقاول اتغيّر اسمه أو اتحذف من القائمة بعد ما السجلات اتكتبت — الفلوس محسوبة صح، بس الاسم مش هيتطابق مع القائمة الحالية:</div>'
+      + out.map(r=>`<div class="setting-item"><div style="flex:1;min-width:0"><div class="setting-name">${esc(r.name)}</div><div class="setting-sub">${anInt(r.records)} سجل · ${anInt(r.total)} ج.م · آخر نشاط ${esc(r.lastDate||'—')}</div></div></div>`).join('')
+      + '</div>';
+  }else{
+    // اختلاف كتابة نفس المكان = حد كتبه بإيده بدل ما يختاره
+    const mixed=d.rows.filter(r=>r.variants.length>1);
+    if(mixed.length) html+='<div class="card accent-gold"><div class="card-title"><span>✎</span> أماكن مكتوبة بأكتر من صيغة</div>'
       + '<div class="hint">الأرقام اتجمعت صح (التطبيق بيوحّد الهمزات والمسافات)، بس يُفضّل توحيد الكتابة عند المهندسين عشان القوائم تبقى نضيفة:</div>'
       + mixed.map(r=>`<div class="setting-item"><div style="flex:1;min-width:0"><div class="setting-name">${esc(r.name)}</div><div class="setting-sub">${esc(r.variants.join('  ·  '))}</div></div></div>`).join('')
       + '</div>';
+  }
 
   body.innerHTML=html;
 }

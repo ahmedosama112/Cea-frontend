@@ -758,3 +758,7 @@ body.dark-mode .xl-wrap { background:#fff; }
 .card-title .an-sort { width:auto; flex:none; max-width:60%; }
 /* العمود المثبّت في .apr-table مخصّص لعمود الإجراءات في تاب الاعتمادات — مالوش لازمة هنا */
 .an-table th:last-child, .an-table td:last-child { position:static; box-shadow:none; }
+/* مبدّل البُعد (أماكن/مقاولين) — أبرز من شرائح الفترة عشان مايتلغبطوش */
+.an-dims { border-bottom:1px solid var(--border); padding-bottom:10px; }
+.an-chip.an-dim { font-size:13px; padding:7px 16px; }
+.an-chip.an-dim.on { background:var(--gold); border-color:var(--gold); color:#1B1405; }
