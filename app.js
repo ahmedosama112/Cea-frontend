@@ -6198,13 +6198,15 @@ let _anData=null;
 let _anTrend=null;
 let _anSeq=0;               // الفلتر ممكن يتغيّر والطلب لسه شغال — بنتجاهل الرد القديم
 
-const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'}];
+const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'},{k:'matrix',l:'🔀 العلاقة'}];
 const AN_PERIODS=[{k:'week',l:'هذا الأسبوع'},{k:'month',l:'هذا الشهر'},{k:'q',l:'آخر 3 شهور'},{k:'all',l:'كل الفترة'},{k:'custom',l:'مخصص'}];
 const AN_SORTS=[{k:'total',l:'الأعلى منصرفًا'},{k:'records',l:'الأكتر سجلات'},{k:'discount',l:'الأعلى خصمًا'},{k:'last',l:'آخر نشاط'},{k:'name',l:'الاسم'}];
 
 const anInt=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:0});
 const anPct=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:1});
 const anIsCtr=()=>_anDim==='contractor';
+const anIsMx=()=>_anDim==='matrix';
+const AN_ENDPOINT={place:'places', contractor:'contractors', matrix:'matrix'};
 
 // حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
 function anRange(){
@@ -6261,7 +6263,7 @@ async function renderAnalytics(fresh){
     }
     const f=fresh===true?{fresh:'1'}:{};
     const [p,t]=await Promise.all([
-      api('GET','/api/analytics/'+(anIsCtr()?'contractors':'places')+anQuery(f)),
+      api('GET','/api/analytics/'+(AN_ENDPOINT[_anDim]||'places')+anQuery(f)),
       api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))),
     ]);
     if(seq!==_anSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
@@ -6332,7 +6334,46 @@ function anSortRows(rows){
 }
 
 // كروت الأرقام — مختلفة حسب البُعد (IR/الإنجاز مالهمش معنى للمقاولين، وأسماء برّا القائمة للمقاولين بس)
+// شبكة مقاول × مكان. الصف/العمود الأخير = إجمالي المقاول في **كل** الأماكن (مش المعروضة بس)
+// عشان الرقم يبقى صح لوحده — والعناوين بتقول كده صراحةً.
+function anMatrixTable(d){
+  if(!d.contractors.length) return '<div class="home-empty">مفيش سجلات في الفترة دي</div>';
+  const cell=new Map(); d.cells.forEach(x=>cell.set(x.c+' '+x.p, x));
+  // التدرّج بالترتيب مش بالنسبة للأكبر: قيمة شاذة واحدة كانت بتخلي كل الخانات
+  // التانية شبه بيضا. الرقم المكتوب في الخانة هو المرجع الدقيق دايمًا.
+  const rank=new Map();
+  [...d.cells].sort((a,b)=>a.total-b.total).forEach((x,i,arr)=>rank.set(x.c+' '+x.p, arr.length>1?i/(arr.length-1):1));
+  let h='<table class="apr-table an-matrix"><thead><tr><th class="an-mx-head">المقاول \\ المكان</th>'
+      + d.places.map(p=>`<th title="${esc(p.name)}">${esc(p.name)}</th>`).join('')
+      + '<th>الإجمالي (كل الأماكن)</th></tr></thead><tbody>';
+  h+=d.contractors.map(c=>'<tr><th class="an-mx-head" title="'+esc(c.name)+'">'+esc(c.name)+'</th>'
+      + d.places.map(p=>{
+          const x=cell.get(c.key+' '+p.key);
+          if(!x) return '<td class="an-mx-0">·</td>';
+          const a=(0.10+0.45*(rank.get(c.key+' '+p.key)||0)).toFixed(3);
+          return `<td class="an-mx-v" style="background:rgba(201,168,76,${a})" title="${esc(c.name)} — ${esc(p.name)}&#10;${anInt(x.total)} ج.م · ${anInt(x.records)} سجل · آخر نشاط ${esc(x.lastDate||'—')}">${anInt(x.total)}</td>`;
+        }).join('')
+      + `<td><b>${anInt(c.total)}</b></td></tr>`).join('');
+  h+='<tr class="an-mx-tot"><th class="an-mx-head">الإجمالي (كل المقاولين)</th>'
+   + d.places.map(p=>`<td><b>${anInt(p.total)}</b></td>`).join('')
+   + `<td><b>${anInt(d.totals.total)}</b></td></tr>`;
+  return h+'</tbody></table>';
+}
+
 function anKpis(d){
+  if(anIsMx()){
+    const t=d.totals;
+    return [
+      ['','إجمالي المنصرف (ج.م)', anInt(t.total), false],
+      ['gold','مقاولين', anInt(t.contractors), false],
+      ['purple','أماكن', anInt(t.places), false],
+      ['green','ثنائيات فيها شغل', anInt(t.pairs), false],
+      ['','عدد السجلات', anInt(t.records), false],
+      [t.hiddenContractors?'tint-warn':'tint-ok','مقاولين برّا الشبكة', anInt(t.hiddenContractors), false],
+      [t.hiddenPlaces?'tint-warn':'tint-ok','أماكن برّا الشبكة', anInt(t.hiddenPlaces), false],
+      [t.hiddenTotal?'red':'tint-ok','منصرف برّا الشبكة', anInt(t.hiddenTotal), false],
+    ];
+  }
   const t=d.totals, top=d.rows[0];
   const common=[
     ['','إجمالي المنصرف (ج.م)', anInt(t.total), false],
@@ -6387,7 +6428,7 @@ function anTable(rows){
 
 function anPaintBody(){
   const body=document.getElementById('an-body'); if(!body||!_anData) return;
-  const d=_anData, rows=anSortRows(d.rows);
+  const d=_anData, rows=anIsMx()?[]:anSortRows(d.rows);
   const k=anKpis(d);
   const box=(x)=>`<div class="summary-box ${x[0]}"><span class="val"${x[3]?' style="font-size:13px"':''}>${x[2]}</span><span class="lbl">${x[1]}</span></div>`;
   let html='<div class="summary-grid">'+k.slice(0,4).map(box).join('')+'</div>'
@@ -6397,6 +6438,19 @@ function anPaintBody(){
       + `<span class="an-seg"><button type="button" class="an-chip${_anBucket==='week'?' on':''}" onclick="anSetBucket('week')">أسبوعي</button>`
       + `<button type="button" class="an-chip${_anBucket==='month'?' on':''}" onclick="anSetBucket('month')">شهري</button></span></div>`
       + anBarChart(_anTrend)+'</div>';
+
+  if(anIsMx()){
+    // الشبكة عريضة بطبعها — قايمة أعلى الثنائيات بتخلي الشاشة مفيدة على الموبايل كمان
+    html+='<div class="card"><div class="card-title"><span>🔝</span> أعلى الثنائيات (مقاول — مكان)</div>'+anRowBars(d.topPairs)+'</div>'
+        + '<div class="card"><div class="card-title"><span>🔀</span> مين اشتغل فين</div>'
+        + '<div class="hint">كل خانة = منصرف المقاول ده في المكان ده. اللون بيتدرّج بترتيب الخانة بين الخانات كلها (أغمق = ترتيب أعلى) — الرقم نفسه هو المرجع. النقطة · معناها إن المقاول ماشتغلش في المكان ده في الفترة دي.'
+        + (d.totals.hiddenContractors||d.totals.hiddenPlaces
+            ? ` الشبكة بتعرض أعلى ${anInt(d.contractors.length)} مقاول × ${anInt(d.places.length)} مكان — الباقي (${anInt(d.totals.hiddenTotal)} ج.م) بره الشبكة، وبيظهر في تاب الأماكن والمقاولين كامل.`
+            : '')
+        + '</div><div class="apr-scroll">'+anMatrixTable(d)+'</div></div>';
+    body.innerHTML=html;
+    return;
+  }
 
   html+='<div class="card"><div class="card-title"><span>'+(anIsCtr()?'👷':'🏗')+'</span> المنصرف على كل '+(anIsCtr()?'مقاول':'مكان')+'</div>'+anRowBars(d.rows)+'</div>';
 

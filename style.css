@@ -762,3 +762,12 @@ body.dark-mode .xl-wrap { background:#fff; }
 .an-dims { border-bottom:1px solid var(--border); padding-bottom:10px; }
 .an-chip.an-dim { font-size:13px; padding:7px 16px; }
 .an-chip.an-dim.on { background:var(--gold); border-color:var(--gold); color:#1B1405; }
+/* شبكة مقاول × مكان — عمود الأسماء مثبّت (inline-start = يمين في RTL) */
+.an-matrix { min-width:620px; }
+.an-matrix th.an-mx-head { position:sticky; inset-inline-start:0; z-index:2; text-align:right; white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+.an-matrix tbody th.an-mx-head { background:var(--card); color:var(--text); font-weight:700; font-size:12px; padding:9px 8px; border-top:1px solid var(--border); border-inline:1px solid var(--border); box-shadow:2px 0 6px rgba(0,0,0,.07); }
+.an-matrix tbody tr.an-mx-tot th.an-mx-head, .an-matrix tr.an-mx-tot td { background:var(--input); }
+.an-matrix td { font-size:11.5px; }
+.an-matrix td.an-mx-0 { color:var(--muted); opacity:.45; }
+/* العمود الأخير المثبّت في .apr-table مخصّص لتاب الاعتمادات — هنا المثبّت هو عمود الأسماء */
+.an-matrix th:last-child, .an-matrix td:last-child { position:static; box-shadow:none; }
