@@ -1158,7 +1158,7 @@ function renderRecords(){
         <span class="badge">⚒ ${esc(r.qty)} ${esc(r.qtyType||'')} × ${fmt(r.price)}</span>
         ${r.discount>0?`<span class="badge badge-warn">خصم ${fmt(r.discount)}</span>`:''}
       </div>
-      ${r.syncError?`<div class="record-notes" style="background:var(--danger-bg);color:var(--danger-fg);font-weight:800">⚠ السجل ده ما اترفعش للسيرفر — ${esc(r.syncError)}. عدّله بالقلم ✏️ وهيترفع لوحده.</div>`:''}
+      ${(r.syncError&&isAdmin())?`<div class="record-notes" style="background:var(--danger-bg);color:var(--danger-fg);font-weight:800">⚠ السجل ده ما اترفعش للسيرفر — ${esc(r.syncError)}. عدّله بالقلم ✏️ وهيترفع لوحده.</div>`:''}
       ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
       ${da.length?`<div class="deduct-box"><b>🔴 بالخصم على: ${esc(da.join(' ، '))}</b>${r.deductNote?`<br><span class="note">📌 ${esc(r.deductNote)}</span>`:''}</div>`:''}
       <div class="done-toggle exclude-toggle ${r.done?'on':''}" onclick="toggleDone(${r.id})"><div class="box">${r.done?'✗':''}</div><span>${r.done?'مش هيتسجل في شيت الإكسيل المعتمد':'عايز تحذف السجل من شيت الإكسيل المعتمد؟'}</span></div>
@@ -5630,13 +5630,16 @@ async function syncNow(){
     if(moduleEnabled('records')){
       api('POST','/api/account/sync-stats',{localRecords:records.length, unsynced:records.filter(r=>isLocalId(r.id)).length}).catch(()=>{});
     }
-    if(errors>0){
+    // (7 سبتمبر 2026 — قرار صاحب المشروع) تحذيرات "ما اترفعش/اترفض" للأدمن فقط:
+    // المهندس بيشوف حالة هادية، والأدمن بيشوف العدد هنا والتفاصيل في سجل النشاط وكارت الحساب
+    if(errors>0 && isAdmin()){
       setSyncStatus('⚠ اتزامن مع '+errors+' خطأ — هيتحاول تاني تلقائيًا', '#C62828');
     } else {
       setSyncStatus('✅ متزامن ('+new Date().toLocaleTimeString('ar-EG')+')', '#2E7D32');
     }
   }catch(e){
-    setSyncStatus('⚠ فشلت المزامنة — شغلك محفوظ محليًا وهيتزامن تلقائيًا', '#C62828');
+    if(isAdmin()) setSyncStatus('⚠ فشلت المزامنة — شغلك محفوظ محليًا وهيتزامن تلقائيًا', '#C62828');
+    else setSyncStatus('💾 شغلك محفوظ على الجهاز — هيتزامن تلقائيًا', 'var(--muted)');
   }finally{
     _syncing=false;
   }
