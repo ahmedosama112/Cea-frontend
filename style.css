@@ -720,3 +720,12 @@ body.dark-mode .xl-wrap { background:#fff; }
 .record-card.eq-card { border-right-color:var(--gold); }
 #eq-filter-equipment { flex:1; min-width:0; appearance:auto; }
 #eq-filter-equipment option { color:var(--text); background:var(--card); }
+
+/* شطب سطر من الكشف (رفض جزئي) — قائمة السطور تحت كل ورقة في معاينة المعتمد + تمييز السطر في الجدول */
+.apr-rows { display:flex; flex-direction:column; gap:4px; margin:6px 0 12px; }
+.apr-row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:12px; font-weight:700; padding:5px 8px; border:1px dashed var(--border-strong); border-radius:8px; background:var(--input); }
+.apr-row.struck { background:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-fg); }
+.apr-row.struck > span { text-decoration:line-through; }
+.apr-row small { font-weight:700; }
+.apr-strike { background:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-fg); }
+.xl-preview tr.xl-struck td { text-decoration:line-through; color:#B71C1C !important; background:#FDE8E8 !important; }

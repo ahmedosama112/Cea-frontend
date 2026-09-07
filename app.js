@@ -3307,7 +3307,7 @@ function aprBuildTable(){
       +'<td class="apr-eng">'+esc(r.user?.email?.split('@')[0]||'')+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
       +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button></td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
-      +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span></td>'
+      +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
       +'</tr>';
   }).join('');
@@ -3340,7 +3340,20 @@ async function aprReview(id){
 function aprOpenPreview(title, wb, r){
   let ov=document.getElementById('apr-preview-ov');
   if(!ov){ ov=document.createElement('div'); ov.id='apr-preview-ov'; ov.className='modal-overlay'; document.body.appendChild(ov); }
-  const sheetsHtml=wb.worksheets.map(ws=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, wb)).join('');
+  // شطب سطر (رفض جزئي): السطور المشطوبة في النسخة الحالية + قائمة سطور كل ورقة بأزرار ✕ للمعتمد اللي دوره
+  const struck=(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0));
+  const isStruck=(si,row)=>struck.find(x=>Number(x.sheetIndex)===si && Number(x.row)===row);
+  const canStrike = !!(r && r.canAct && r.reviewState==='IN_REVIEW');
+  const sheetsHtml=wb.worksheets.map((ws,si)=>{
+    const rows=aprDataRows(ws, r.kind);
+    const list = rows.length ? '<div class="apr-rows">'+rows.map(x=>{
+      const s=isStruck(si,x.row);
+      return '<div class="apr-row'+(s?' struck':'')+'"><span>'+esc(x.label)+'</span>'
+        + (s ? '<small>❌ مشطوب — '+esc(s.level)+(s.note?': '+esc(s.note):'')+'</small>'
+             : (canStrike ? '<button type="button" class="apr-fbtn apr-strike" onclick="aprRowReject(\''+r.id+'\','+si+','+x.row+','+jsArg(x.label)+')">✕ شطب السطر</button>' : ''))
+        + '</div>'; }).join('')+'</div>' : '';
+    return '<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, wb)+list;
+  }).join('');
   const acts = (r && r.canAct)
     ? '<button class="btn btn-inline" style="background:linear-gradient(135deg,#1B5E20,#2E7D32);color:#fff" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد</button>'
       +'<button class="btn btn-gold btn-inline" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات</button>'
@@ -3374,7 +3387,27 @@ function aprOpenPreview(title, wb, r){
     </div>`;
   ov.style.display='flex'; document.body.classList.add('modal-open');
   ov.onclick=e=>{ if(e.target===ov) aprClosePreview(); };
+  // تمييز السطور المشطوبة في الجدول نفسه (الملف جاي من السيرفر بالخط الأحمر، وده تأكيد بصري في المعاينة)
+  const tables=ov.querySelectorAll('#apr-xl-zoom table.xl-preview');
+  struck.forEach(x=>{ const t=tables[Number(x.sheetIndex)]; const tr=t && t.rows[Number(x.row)-1]; if(tr) tr.classList.add('xl-struck'); });
   _aprZoom=1; aprZoom(0);
+}
+// سطور البيانات في ورقة (نفس تخطيط buildApprovedSheet/buildEquipmentSheet): التاريخ عمود 13 + إجمالي (عمالة عمود 8 / معدات المدة عمود 7)
+function aprDataRows(ws, kind){
+  const eq = kind==='equipment';
+  const cv=(r,c)=>{ let v=ws.getCell(r,c).value; if(v&&typeof v==='object'){ v = v.richText ? v.richText.map(t=>t.text).join('') : (v.result!==undefined ? v.result : (v.text||'')); } return v==null?'':String(v); };
+  const out=[];
+  for(let r=8; r<=(eq?12:14); r++){
+    const d=cv(r,13), val=cv(r, eq?7:8);
+    if(!d || !val) continue;
+    out.push({ row:r, label: cv(r,12)+' '+d+' — '+(eq ? val.replace(/\u200F/g,'')+' ساعة' : fmt(Number(val)||0)+' ج.م') });
+  }
+  return out;
+}
+function aprRowReject(id, sheetIndex, row, label){
+  aprClosePreview(); // نافذة القرار (#apr-modal) بتتغطى بمعاينة الملف لو فضلت مفتوحة — بنقفلها ونعيد فتحها بعد الحفظ
+  _aprPending={id, decision:'ROW_REJECT', sheetIndex, row, label};
+  aprOpenModal('#C62828','✕ شطب سطر من الكشف', 'السطر: '+label+'\n\nالسطر هيتشطب بالأحمر ويتشال من إجمالي الورقة، والكشف يكمّل اعتماده بدونه. المهندس هيشوف السبب. مفيش إلغاء للشطب بعد الحفظ. لو شطبت كل السطور الكشف كله يترفض ويرجع للمهندس.', '✕ شطب', '#C62828', true);
 }
 let _aprZoom=1;
 function aprZoom(d){ _aprZoom=Math.min(2,Math.max(0.4,Math.round((_aprZoom+d)*100)/100)); const el=document.getElementById('apr-xl-zoom'); if(el) el.style.zoom=_aprZoom; const l=document.getElementById('apr-xl-zoom-label'); if(l) l.textContent=Math.round(_aprZoom*100)+'%'; }
@@ -3422,6 +3455,16 @@ async function aprConfirm(){
   if(decision!=='APPROVED' && !note){ showToast('⚠ اكتب الملاحظة', true); return; }
   const ok=document.getElementById('apr-modal-ok'); ok.disabled=true; ok.textContent='⏳ جاري الحفظ...';
   try{
+    if(decision==='ROW_REJECT'){
+      const {sheetIndex,row,label}=_aprPending;
+      const r=await api('POST','/api/approvals/'+id+'/rows/reject',{sheetIndex,row,label,note});
+      aprCloseModal();
+      if(r.fullyRejected){ aprClosePreview(); showToast('❌ كل السطور اتشطبت — الكشف اترفض ورجع للمهندس'); await renderApprovals(); return; }
+      showToast('✕ اتشطب السطر — الكشف يكمّل بدونه');
+      await renderApprovals();
+      aprReview(id); // إعادة فتح المعاينة بالملف المشطوب
+      return;
+    }
     await api('POST','/api/approvals/'+id+'/decide',{decision, note});
     aprCloseModal();
     showToast(decision==='REJECTED'?'❌ اترفض ورجع للمهندس':(decision==='APPROVED_NOTES'?'📝 اتعتمد بملاحظات':'✅ اتعتمد'));
@@ -3826,6 +3869,13 @@ function subRow(s, adminView){
     ? '<div class="s" style="font-size:11.5px;margin-top:3px;padding:6px 8px;background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;line-height:1.7">'
       + notes.map(x=>'📝 <b>'+esc(x.level)+'</b> اعتمد بملاحظة: '+esc(x.note)).join('<br>')+'</div>'
     : '';
+  // سطور مشطوبة من المعتمدين (رفض جزئي) في النسخة الحالية — المهندس يشوف السطر والسبب
+  const struckRows=(s.rowRejections||[]).filter(x=>Number(x.revision)===Number(s.revision||0));
+  const struckBox = struckRows.length
+    ? '<div class="s" style="font-size:11.5px;margin-top:3px;padding:6px 8px;background:var(--danger-bg);color:var(--danger-fg);border-radius:8px;line-height:1.7">'
+      + struckRows.map(x=>'✕ <b>سطر مشطوب:</b> '+esc(x.label)+' — <b>'+esc(x.level)+'</b>'+(x.note?': '+esc(x.note):'')).join('<br>')
+      + (s.reviewState==='IN_REVIEW'||s.reviewState==='SENT' ? '<br><span style="font-weight:600">الكشف كمّل اعتماده من غير السطور دي (اتشالت من الإجمالي).</span>' : '')+'</div>'
+    : '';
   const who = adminView ? '<div class="s">👤 '+esc(s.user?.email||'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
   return `<div class="setting-item" style="flex-direction:column;align-items:stretch;gap:6px">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">
@@ -3834,7 +3884,7 @@ function subRow(s, adminView){
         <div class="setting-sub">${s.kind==='equipment' ? '🚜 كشف معدات · الشهر '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' يوم تشغيل · '+fmtMinutes(Math.round(Number(s.total)*60))+' ساعة' : 'الأسبوع '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' سجل · '+fmt(s.total)+' ج.م'}</div>
         ${who}
         <div class="s" style="font-size:11px;color:var(--muted)">أُرسل ${esc(new Date(s.createdAt).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}))}${s.engineerNote?' · 📝 '+esc(s.engineerNote):''}</div>
-        ${rejBox}${notesBox}
+        ${rejBox}${notesBox}${struckBox}
         ${s.reviewNote?'<div class="s" style="font-size:11.5px;color:var(--text);margin-top:2px">💬 رد المراجعة: '+esc(s.reviewNote)+'</div>':''}
         ${s.reviewState==='SENT'?sheetTimeline(s):''}
       </div>
