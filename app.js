@@ -3160,10 +3160,16 @@ document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('
 
 // ── تسليماتي (المهندس) ──
 // خط سير الاعتماد في جوجل شيت (بيظهر لو التسليم متربط بصف في الشيت)
+// زرار "إعادة الإرسال للشيت" يظهر بس لو الكشف بقاله أكتر من 3 دقايق SENT من غير صف — الدفع الأول بياخد لدقيقتين
+// (كان بيظهر فورًا فصاحب المشروع ضغطه والدفع الأول لسه شغال؛ السيرفر بقى يمنع التكرار برضو)
+function subSentLongAgo(s){
+  const t=new Date(s.updatedAt||s.createdAt||0).getTime();
+  return !t || (Date.now()-t) > 3*60*1000;
+}
 function sheetTimeline(s){
   if(!s.gsheetRow){
     // الربط شغّال بس التسليم ده لسه ما وصلش (الرفع في الخلفية بياخد لدقيقة) — أو الربط مش مفعّل أصلًا
-    return s.googleSyncEnabled ? '<div class="s" style="font-size:11px;color:var(--muted);margin-top:3px">⏳ جاري الإرسال لشيت الاعتماد...</div>' : '';
+    return s.googleSyncEnabled ? '<div class="s" style="font-size:11px;color:var(--muted);margin-top:3px">⏳ جاري الإرسال لشيت الاعتماد... (التحويل في جوجل بياخد لدقيقتين — اضغط "تحديث" بعد شوية)</div>' : '';
   }
   const sh=s.sheet;
   const st=sh&&sh.status?sh.status:'';
@@ -3898,7 +3904,7 @@ function subRow(s, adminView){
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
-      ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
+      ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled && subSentLongAgo(s) ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
       ${adminView && isAdmin() ? '<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+s.id+'\')" title="حذف نهائي من التطبيق (الأدمن فقط)">🗑 حذف</button>' : ''}
     </div>
   </div>`;
