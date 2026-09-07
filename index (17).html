@@ -787,30 +787,14 @@
     <button class="btn btn-gold" onclick="submitEquipmentForReview()">📤 مراجعة وإرسال الكشف الشهري للاعتماد</button>
     <p class="hint" style="margin-top:6px">بيبني كشف الشهر المعروض للمعدة المختارة (ورقة لكل 5 أيام، الأيام الفاضية بتفضل فاضية)، تراجعه وتوافق، ويدخل سلسلة اعتمادات المديرين زي السركي الأسبوعي.</p>
   </div>
-  <div style="display:flex;gap:8px;margin-top:10px">
-    <button class="btn btn-ghost" style="flex:1" onclick="previewEquipmentSheet()">👁 معاينة الكشف</button>
-    <button class="btn btn-navy" style="flex:1" onclick="exportEquipmentExcel()">📄 تنزيل Excel</button>
-  </div>
-
-  <!-- إعدادات السركي الشهري (محلية على الجهاز) — كارت مستقل بفيتشر equipment_settings: الأدمن يظهره عشان يظبط الإعدادات على جهاز المهندس ثم يخفيه -->
-  <div class="card" id="eq-settings" data-feature="equipment_settings" style="margin-top:12px">
-    <div class="card-title"><span>⚙️</span> إعدادات السركي الشهري</div>
-    <div class="field" style="margin-top:10px">
-      <label>👷 المقاول / المورد الثابت</label>
-      <select id="eq-fixed-contractor" onchange="eqSaveFixedContractor()"><option value="">— بدون (اختار كل مرة) —</option></select>
-    </div>
-    <p class="hint" style="margin-top:0">لو حددته، المقاول والمعدة (تخصصه) بيتملوا لوحدهم في الفورم ويتقفلوا — ومش بتختارهم مع كل يوم تشغيل.</p>
-    <div class="field">
-      <label>📍 الموقع في راس الكشف</label>
-      <select id="eq-site" onchange="eqSaveSite()"></select>
-    </div>
-    <p class="hint" style="margin-top:0">بيتكتب في خانة "الموقع" وعنوان الورقة بدل أماكن الأعمال (الشهر فيه أماكن كتير — كل يوم مكانه في الجدول). الافتراضي موقعك المسجّل في حسابك.</p>
-    <div class="add-row">
-      <input type="text" id="eq-site-new" placeholder="إضافة موقع جديد..." maxlength="80">
-      <button class="btn btn-navy btn-inline" onclick="eqAddSite()">➕ إضافة</button>
-    </div>
-    <div id="eq-site-chips" class="chips"></div>
-  </div>
+  <button class="btn btn-ghost mt8" onclick="previewEquipmentSheet()">👁 معاينة الكشف الشهري</button>
+  <details style="margin-top:10px">
+    <summary class="hint" style="cursor:pointer">لما يكون مفيش نت أو مشكلة في السيرفر (تنزيل الملف + جوجل فورم)</summary>
+    <!-- نفس منطق تاب السراكي: زرارا الفورم بيتبعوا فيتشرز gform_site1/2 (applyFormButtons) -->
+    <button class="btn btn-navy mt8" onclick="exportEquipmentExcel()">📄 تنزيل الكشف الشهري (Excel)</button>
+    <button id="eq-gform-btn-1" class="btn btn-ghost" onclick="window.open('https://forms.gle/VjYxT2BkGj8UdkPY8','_blank')">📤 رفع ملف السركي على Google Form</button>
+    <button id="eq-gform-btn-2" class="btn btn-ghost" style="display:none" onclick="window.open('https://forms.gle/58VnYeRS69DgctbQ8','_blank')">📤 رفع ملف السركي على Google Form</button>
+  </details>
 </div>
 
 <!-- ══ IR ══ -->
@@ -1281,6 +1265,27 @@
       <button id="load-older-btn" class="btn btn-purple" onclick="loadOlderRecords()">⬇️ تحميل سجلات أقدم</button>
       <div class="status-line" style="font-size:10px">الجهاز ده محمّل عليه آخر سجلات فقط لتوفير الذاكرة والسرعة</div>
     </div>
+  </div>
+
+  <!-- ══ EQUIPMENT MONTHLY SHEET SETTINGS (وحدة المعدات + فيتشر equipment_settings) ══ -->
+  <div class="card accent-gold" id="eq-settings" data-module="equipment" data-feature="equipment_settings">
+    <div class="card-title"><span>🚜</span> إعدادات السركي الشهري (سراكي معدات)</div>
+    <p class="hint" style="margin-top:0">إعدادات محلية على الجهاز ده لتاب "سراكي معدات (شهري)".</p>
+    <div class="field" style="margin-top:10px">
+      <label>👷 المقاول / المورد الثابت</label>
+      <select id="eq-fixed-contractor" onchange="eqSaveFixedContractor()"><option value="">— بدون (اختار كل مرة) —</option></select>
+    </div>
+    <p class="hint" style="margin-top:0">لو حددته، المقاول والمعدة (تخصصه) بيتملوا لوحدهم في الفورم ويتقفلوا — ومش بتختارهم مع كل يوم تشغيل.</p>
+    <div class="field">
+      <label>📍 الموقع في راس الكشف</label>
+      <select id="eq-site" onchange="eqSaveSite()"></select>
+    </div>
+    <p class="hint" style="margin-top:0">بيتكتب في خانة "الموقع" وعنوان الورقة بدل أماكن الأعمال (الشهر فيه أماكن كتير — كل يوم مكانه في الجدول). الافتراضي موقعك المسجّل في حسابك.</p>
+    <div class="add-row">
+      <input type="text" id="eq-site-new" placeholder="إضافة موقع جديد..." maxlength="80">
+      <button class="btn btn-navy btn-inline" onclick="eqAddSite()">➕ إضافة</button>
+    </div>
+    <div id="eq-site-chips" class="chips"></div>
   </div>
 
   <!-- ══ SIGNATURE CARD ══ -->

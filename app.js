@@ -1235,8 +1235,8 @@ const ALL_FEATURES=[
   // الاعتمادات — زرار Google Form لكل موقع (الاسم بيتحدث تلقائيًا من أسماء المواقع)
   {key:'gform_site1',       label:'زرار Google Form — الموقع الأول', group:'الاعتمادات'},
   {key:'gform_site2',       label:'زرار Google Form — الموقع الثاني', group:'الاعتمادات'},
-  // سراكي المعدات — كارت الإعدادات (المقاول الثابت + الموقع في راس الكشف) مش في الافتراضي: الأدمن يظهره ليظبط ثم يخفيه
-  {key:'equipment_settings', label:'إعدادات السركي الشهري (المقاول الثابت + الموقع)', group:'سراكي المعدات'},
+  // سراكي المعدات — كارت "إعدادات السركي الشهري" في تاب الإعدادات (المقاول الثابت + الموقع): بيظهر لمن عنده وحدة المعدات، والأدمن يقدر يخفيه
+  {key:'equipment_settings', label:'إعدادات السركي الشهري في تاب الإعدادات (المقاول الثابت + الموقع)', group:'سراكي المعدات'},
   {key:'set_appearance',    label:'المظهر (الوضع الداكن)',       group:'الإعدادات'},
   {key:'set_contractors',   label:'إدارة المقاولين',            group:'الإعدادات'},
   {key:'set_places',        label:'إدارة أماكن الأعمال',        group:'الإعدادات'},
@@ -1252,7 +1252,7 @@ const ALL_FEATURES=[
   {key:'set_danger',        label:'منطقة الخطر (حذف/تهيئة)',    group:'الإعدادات'},
 ];
 const FEATURE_KEYS=ALL_FEATURES.map(f=>f.key);
-const DEFAULT_FEATURES=FEATURE_KEYS.filter(k=>!['set_danger','set_records_import','set_items_import','gform_site2','equipment_settings'].includes(k));
+const DEFAULT_FEATURES=FEATURE_KEYS.filter(k=>!['set_danger','set_records_import','set_items_import','gform_site2'].includes(k));
 // قوايم قديمة متحفوظة بالمفتاح الموحّد 'records_filters' (قبل فصله لبحث/ترتيب/تصدير معتمد) — بنترجمها للمفاتيح الجديدة
 function migrateFeatureList(list){
   if(!Array.isArray(list)||!list.includes('records_filters')) return list;
@@ -1318,7 +1318,7 @@ function switchTab(name){
   if(name==='approvals')renderApprovals();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
-  if(name==='settings')renderSettings();
+  if(name==='settings'){renderSettings(); renderEqSettings(); eqLoadSiteNames();}
   if(name==='todo'){populateDropdowns();renderTodo();}
   if(name==='summary')renderSummary();
   window.scrollTo({top:0,behavior:'instant'});
@@ -1416,12 +1416,15 @@ function applySiteNames(){
 // معلّمة = ظاهر، مش معلّمة = مخفي. (حساب قديم اتحفظ قبل إضافة المفاتيح: لما الأدمن يفتحه،
 // خانة فورم موقعه بتتعلّم تلقائيًا — فأول حفظ بيثبت الوضع الصحيح.) الأدمن بيشوف الزرارين دايمًا.
 function applyFormButtons(){
-  const b1=document.getElementById('gform-btn-1'), b2=document.getElementById('gform-btn-2');
-  if(!b1||!b2) return;
   const admin=isAdmin();
-  b1.style.display=(admin||featureEnabled('gform_site1'))?'':'none';
-  b2.style.display=(admin||featureEnabled('gform_site2'))?'':'none';
-  if(admin){ b1.textContent='📤 Google Form — '+siteName(1); b2.textContent='📤 Google Form — '+siteName(2); }
+  // زرارا الفورم في تاب السراكي وفي تاب سراكي المعدات — نفس الفيتشرز gform_site1/2
+  [['gform-btn-1','gform-btn-2'],['eq-gform-btn-1','eq-gform-btn-2']].forEach(([id1,id2])=>{
+    const b1=document.getElementById(id1), b2=document.getElementById(id2);
+    if(!b1||!b2) return;
+    b1.style.display=(admin||featureEnabled('gform_site1'))?'':'none';
+    b2.style.display=(admin||featureEnabled('gform_site2'))?'':'none';
+    if(admin){ b1.textContent='📤 Google Form — '+siteName(1); b2.textContent='📤 Google Form — '+siteName(2); }
+  });
 }
 applyFormButtons(); // عند فتح التطبيق (حتى أوفلاين) — من آخر موقع متخزن للمستخدم
 async function loadSiteNames(){

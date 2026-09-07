@@ -386,7 +386,7 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     if (!sheet) return null;
     const row = sheet.getLastRow() + 1;
 
-    sheet.getRange(row, COLS.ENGINEER_NAME).setValue(engineerName);
+    sheet.getRange(row, COLS.ENGINEER_NAME).setValue(safeText(engineerName));
     sheet.getRange(row, COLS.TIMESTAMP).setValue(new Date());
     // الأولوية: اختيار صريح (من التطبيق/سؤال الفورم) → وإلا تلقائي حسب اسم المهندس (COMMERCIAL_ENGINEERS)
     sheet.getRange(row, COLS.PROJECT).setValue(project || projectForEngineer(engineerName));
@@ -421,7 +421,7 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
     // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق
     sealAdminApproval(sheet.getRange(row, COLS.APPROVE_PM));
-    if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(String(approvalSummary));
+    if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(safeText(approvalSummary));
 
     // 🖋 (سبتمبر 2026) الملف بيوصل **موقّعًا بالكامل** من التطبيق: توقيع كل معتمد اتختم على
     // الإكسيل قبل الإرسال (signStamp.ts)، والتحويل بيحافظ على الصور. فما بقاش فيه خطوة DC:
@@ -711,12 +711,24 @@ function onOpen() {
 // السر مخزّن في Script Properties (مش مكتوب في الكود).
 // لو احتجت تغيّره: ⚙️ Project Settings → Script Properties → عدّل WEBAPP_SECRET (نفس قيمة Railway).
 const WEBAPP_SECRET = PropertiesService.getScriptProperties().getProperty('WEBAPP_SECRET') || '';
+// (فحص أمني 2026-09-06 — N10) مقارنة بطول ثابت: ما تكشفش طول/بداية السر من زمن الرد
+function secretMatches(given, expected) {
+  if (!expected || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+// (N10) أي نص جاي من التطبيق/الفورم بيتكتب في الشيت كنص: لو بدأ بـ = + - @ يتفسّر كمعادلة — بنسبقه بـ '
+function safeText(v) {
+  const s = String(v == null ? '' : v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
 
 function doPost(e) {
   const out = (obj) => ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
   try {
     const body = JSON.parse(e.postData.contents);
-    if (!body.secret || body.secret !== WEBAPP_SECRET) return out({ ok: false, error: 'unauthorized' });
+    if (!body.secret || !secretMatches(String(body.secret), WEBAPP_SECRET)) return out({ ok: false, error: 'unauthorized' });
 
     // 📊 استعلام الحالة: السيرفر بيبعت أرقام صفوف وبيرجع له حالة كل صف من عمود "الحالة"
     // (عشان المهندس يشوف في التطبيق كشفه وصل لفين في سلسلة الاعتماد)
