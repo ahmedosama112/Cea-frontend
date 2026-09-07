@@ -3201,7 +3201,7 @@ async function renderApprovals(){
     const roleEl=document.getElementById('apr-myrole');
     const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
     if(roleEl) roleEl.innerHTML = isApprover
-      ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b> — بتشوف كشوف المهندسين المسندين لك')
+      ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b> — بتشوف كل الكشوف، وبتعتمد اللي دورك فيه بس (المسند لك)')
       : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'مالكش دور اعتماد');
     aprBuildTable();
   }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
