@@ -1,0 +1,26 @@
+# إعدادات aider للموديل المحلي (بدون نت) — انظر local-ai/README.md
+# الموديل المحلي ضعيف نسبيًا، فكل الإعدادات هنا مضبوطة على "أقل حِمل ممكن".
+
+model: ollama_chat/qwen2.5-coder:7b
+
+# whole = الموديل يرجّع الملف كامل بدل diff.
+# الموديلات الصغيرة بتفشل في الـ diff format، وde بيخلي التعديل يشتغل من أول مرة.
+# ثمنه: الملف لازم يكون صغير (< 300 سطر).
+edit-format: whole
+
+# 🔒 التعديلات محلية بالكامل — لا commit تلقائي ولا أي اتصال بالشبكة
+auto-commits: false
+dirty-commits: false
+check-update: false
+analytics-disable: true
+
+# repo-map مطفي عمدًا: خريطة الريبو بتاعتك فيها app.js بـ 145k توكن،
+# لو اتفتحت هتاكل الـ context كله وتوقف الجهاز. اضف الملفات بإيدك بـ /add
+map-tokens: 0
+
+# قواعد المشروع — بتتبعت مع كل رسالة، عشان كده مكتوبة إنجليزي ومختصرة
+read:
+  - local-ai/CONVENTIONS.md
+
+# مايفتحش app.js أو أي ملف ضخم بالغلط
+show-model-warnings: false

@@ -1,0 +1,16 @@
+# حجم الـ context للموديلات المحلية.
+# Ollama افتراضيًا بيقص عند 4096 توكن من غير ما يقولك — أي حاجة أطول بتتاكل بصمت.
+# 8192 هو أقصى رقم معقول على 16 GB DDR3: أكبر من كده الـ KV cache ياكل رام
+# والقراءة الأولية (prefill) بتاخد دقايق على 4 نوى.
+
+- name: ollama_chat/qwen2.5-coder:7b
+  edit_format: whole
+  use_repo_map: false
+  extra_params:
+    num_ctx: 8192
+
+- name: ollama_chat/qwen2.5-coder:3b
+  edit_format: whole
+  use_repo_map: false
+  extra_params:
+    num_ctx: 8192
