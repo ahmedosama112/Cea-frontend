@@ -2733,8 +2733,9 @@ async function confirmSubmitApproved(){
   try{
     const fd=new FormData();
     fd.append('file', new Blob([b.buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), b.fileName);
-    fd.append('contractorName', b.contractorNames.length===1 ? b.contractorNames[0] : b.contractorNames.join('، '));
-    fd.append('placeName', b.placesLabel||'');
+    // الأسماء المتجمّعة محدودة بـ 1000 حرف في السيرفر (كشف بـ 11 مقاولًا فشل يوم 8 سبتمبر لما الحد كان 190) — نقص هنا كمان احتياطًا
+    fd.append('contractorName', (b.contractorNames.length===1 ? b.contractorNames[0] : b.contractorNames.join('، ')).slice(0,1000));
+    fd.append('placeName', (b.placesLabel||'').slice(0,1000));
     fd.append('weekStart', b.wkStart); fd.append('weekEnd', b.wkEnd);
     fd.append('total', String(b.total)); fd.append('recordsCount', String(b.recordsCount));
     fd.append('engineerNote', (document.getElementById('submit-note')?.value||'').trim());
