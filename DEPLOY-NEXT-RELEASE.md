@@ -179,3 +179,33 @@ cd "/e/fabel max cea project/backend" && git stash && git checkout c77e3ce && ra
 - توقيعات أزاليا والـ Triggers بتاعتها موضوع منفصل عن النشر ده (شوف SESSION-LOG قسم 1).
 - تعديل سكربت جوجل شيت (زرار واحد للـ DC — SESSION-LOG 9.6) **مستقل عن النشر ده**: بيتلصق يدويًا في محرر Apps Script لكل موقع (Code.gs / Code-site2.gs) ومش بيتأثر بـ Railway ولا Cloudflare.
 - بعد نشر ناجح ومستقر: حدّث سطر الحالة في أول هذا الملف + SESSION-LOG.
+
+---
+
+## 🔔 نشرة التنبيهات الداخلية (جاهزة محليًا — 8 سبتمبر 2026)
+
+**اللي هينزل:** قسم التنبيهات كامل (SESSION-LOG قسم 26، SYSTEM_REFERENCE قسم 18) — جرس في الهيدر لكل الحسابات + تاب "🔔 التنبيهات" للأدمن + تنبيهات تلقائية.
+
+### 1) Backend (Railway)
+```bash
+cd "/e/fabel max cea project/backend" && npm test && railway up --service cea-backend
+```
+- (الحفظ على GitHub سجل للكود فقط — النشر الفعلي بـ `railway up` زي كل مرة.)
+- **migration جديدة تتطبق تلقائيًا عند الإقلاع:** `20260908170000_notifications` — بتنشئ 3 جداول جديدة بس (`notifications`, `notification_targets`, `notification_reads`). **مش بتلمس أي جدول قديم** → صفر خطر على البيانات، ورجوعها = `DROP` للتلاتة.
+- بعد الإقلاع اتأكد في اللوجات من "Applying migration 20260908170000_notifications" ثم `/health` = ok.
+- تحقق سريع (بتوكن أدمن): `GET /api/notifications` لازم يرجّع `{notifications: [], auto: {...}}`.
+
+### 2) الواجهة (Cloudflare Pages) — بعد ما الـ backend يقوم
+```bash
+cd "/e/fabel max cea project" && node build-pwa.js && npx wrangler pages deploy pwa-dist --project-name cea-app --commit-dirty=true
+```
+- الملفات المتغيّرة: `index (17).html` · `app.js` · `style.css` (كاش الـ SW بيتختم تلقائيًا من `build-pwa.js`).
+
+### 3) بعد النشر (دقيقتين)
+1. ادخل بحساب الأدمن → القائمة الجانبية → **🔔 التنبيهات** → "➕ تنبيه جديد".
+2. التنبيه الافتراضي جاهز على طلب صاحب المشروع: **كل ثلاثاء 9:00 ص · ينبّه قبلها بيوم** — اكتب العنوان ("إرسال السراكي للاعتماد")، اختار المستقبلين، واحفظ.
+3. اتأكد إن الجرس فوق ظهر بعدّاد، وإن حساب مهندس عادي **مايشوفش** زرار "التنبيهات" في القائمة.
+
+### الرجوع (rollback)
+- الواجهة: نشر النسخة السابقة من Cloudflare (deployment قديم).
+- Backend: `git revert` + إعادة نشر — الجداول التلاتة بتفضل فاضية بلا أي أثر (مافيش عمود اتغيّر في جدول قديم).

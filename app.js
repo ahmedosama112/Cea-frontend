@@ -1303,7 +1303,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', settings:'الإعدادات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1323,6 +1323,7 @@ function switchTab(name){
   if(name==='approvals')renderApprovals();
   if(name==='analytics')renderAnalytics();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
+  if(name==='notify')renderNotifyAdmin();
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
   if(name==='settings'){renderSettings(); renderEqSettings(); eqLoadSiteNames();}
   if(name==='todo'){populateDropdowns();renderTodo();}
@@ -5057,7 +5058,8 @@ function clearSession(){
 // عشان بيانات مهندس ما تتدمجش في حساب مهندس تاني على نفس الهاتف
 const APP_DATA_KEYS=['saraki_records','saraki_ir','cea_equipment','cea_eq_contractor','cea_eq_site','cea_eq_sites','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
   'cea_daily','cea_exec','saraki_signature','cea_records_fully_loaded','cea_records_oldest_loaded','cea_place_notes',
-  'cea_sync_snapshot','cea_pin_hash','cea_user_title','cea_enabled_modules','cea_enabled_features'];
+  'cea_sync_snapshot','cea_pin_hash','cea_user_title','cea_enabled_modules','cea_enabled_features',
+  'cea_notifs','cea_notif_snooze','cea_notif_pending'];
 function wipeLocalAppData(){
   APP_DATA_KEYS.forEach(k=>localStorage.removeItem(k));
   records=[]; irRecords=[]; equipmentRecords=[]; todos=[]; contractors=[]; places=[]; inspectors=[]; items=[]; placeNotes={};
@@ -5264,7 +5266,8 @@ function onAuthReady(offline){
   renderHome();
   applyModuleVisibility();
   updateLoadOlderUI();
-  if(!offline){ initialSync().then(()=>refreshServerOldest()); }
+  renderBell();
+  if(!offline){ initialSync().then(()=>refreshServerOldest()); loadNotifications(); }
 }
 // ============ END AUTH ============
 
@@ -6503,4 +6506,446 @@ function anPaintBody(){
   }
 
   body.innerHTML=html;
+}
+
+/* ═══════════════ 🔔 التنبيهات الداخلية ═══════════════
+   السيرفر بيخزّن **تعريف** التنبيه بس (عنوان + جدولة + مستقبلين)، والجهاز بيحسب
+   مواعيد الظهور محليًا — فالجرس شغّال حتى أوفلاين من آخر نسخة اتحمّلت.
+   نوعان في نفس اللوحة:
+     • تنبيهات الأدمن (من تاب "التنبيهات") — ليها "✅ تم" لكل ظهور على حدة
+     • تنبيهات تلقائية بيحسبها النظام (كشف مستني اعتمادك / كشف مرفوض / مهام متأخرة)
+       — ما فيهاش "تم": بتختفي لوحدها لما السبب يخلص، وفيها "🕘 مش دلوقتي" لليوم. */
+
+let notifDefs=[], notifAuto={}, _notifKeysShown=null, _notifUsers=[];
+function notifLoadCache(){
+  try{ const c=JSON.parse(localStorage.getItem('cea_notifs')||'null');
+    if(c){ notifDefs=Array.isArray(c.list)?c.list:[]; notifAuto=c.auto||{}; } }catch(e){}
+}
+function notifSaveCache(){
+  try{ localStorage.setItem('cea_notifs', JSON.stringify({list:notifDefs, auto:notifAuto, at:Date.now()})); }catch(e){}
+}
+notifLoadCache();
+
+const NOTIF_DAY_NAMES=['الأحد','الإثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت']; // نفس ترتيب getDay()
+const NOTIF_WEEK_ORDER=[6,0,1,2,3,4,5];  // العرض بيبدأ بالسبت (أول الأسبوع عندنا)
+const NOTIF_GRACE_DAYS=1;                // التنبيه اللي فات ميعاده بيفضل ظاهر يوم كمان (متأخر)
+
+function notifTime12(t){
+  const p=String(t||'08:00').split(':'); const h=Number(p[0])||0, m=Number(p[1])||0;
+  return (h%12||12)+':'+String(m).padStart(2,'0')+(h<12?' ص':' م');
+}
+// فرق الأيام بين تاريخين نصيين (YYYY-MM-DD) بتوقيت الجهاز
+function notifDayDiff(a,b){
+  const d1=new Date(a+'T00:00:00'), d2=new Date(b+'T00:00:00');
+  return Math.round((d1-d2)/86400000);
+}
+function notifRelDay(ymd){
+  const diff=notifDayDiff(ymd, todayYMD());
+  if(diff===0) return 'النهاردة';
+  if(diff===1) return 'بكرة';
+  if(diff===-1) return 'إمبارح';
+  const d=new Date(ymd+'T00:00:00');
+  const label=NOTIF_DAY_NAMES[d.getDay()]+' '+d.toLocaleDateString('ar-EG',{day:'numeric',month:'long'});
+  return (diff>0?'':'')+label;
+}
+// اليوم ده ميعاد للتنبيه ده؟ (بيحترم نافذة البداية/النهاية)
+function notifMatchesDay(def, d){
+  const ymd=toYMD(d);
+  if(def.startDate && ymd<def.startDate) return false;
+  if(def.endDate   && ymd>def.endDate)   return false;
+  if(def.schedule==='daily')  return true;
+  if(def.schedule==='once')   return ymd===def.onceDate;
+  if(def.schedule==='weekly') return (def.weekdays||[]).indexOf(d.getDay())>=0;
+  if(def.schedule==='monthly'){
+    const last=new Date(d.getFullYear(), d.getMonth()+1, 0).getDate();
+    return d.getDate()===Math.min(Number(def.monthDay)||1, last);
+  }
+  return false;
+}
+// الظهور المستحق دلوقتي: بيفتح قبل الميعاد بـ leadDays (من ساعة الميعاد) وبيفضل ليوم بعده
+function notifCurrentOccurrence(def, now){
+  const done={}; (def.done||[]).forEach(k=>done[k]=1);
+  const p=String(def.timeOfDay||'08:00').split(':');
+  const hh=Number(p[0])||0, mm=Number(p[1])||0;
+  const lead=Math.max(0, Number(def.leadDays)||0);
+  for(let off=-NOTIF_GRACE_DAYS; off<=lead; off++){
+    const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+off);
+    if(!notifMatchesDay(def,d)) continue;
+    const key=toYMD(d);
+    if(done[key]) continue;
+    const showFrom=new Date(d); showFrom.setDate(showFrom.getDate()-lead); showFrom.setHours(hh,mm,0,0);
+    const hideAfter=new Date(d); hideAfter.setDate(hideAfter.getDate()+NOTIF_GRACE_DAYS); hideAfter.setHours(23,59,59,999);
+    if(now>=showFrom && now<=hideAfter) return {key:key, ymd:key};
+  }
+  return null;
+}
+// أقرب ميعاد جاي (للسطر التحتاني في اللوحة وللمعاينة في تاب الإدارة)
+function notifNextOccurrence(def){
+  for(let off=0; off<=400; off++){
+    const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()+off);
+    if(notifMatchesDay(def,d)) return toYMD(d);
+  }
+  return null;
+}
+
+// ── "مش دلوقتي" للتنبيهات التلقائية (على الجهاز بس، لآخر اليوم) ──
+function notifSnoozeMap(){ try{ return JSON.parse(localStorage.getItem('cea_notif_snooze')||'{}'); }catch(e){ return {}; } }
+function notifSnoozed(key){ return notifSnoozeMap()[key]===todayYMD(); }
+function notifSnooze(key){
+  const m=notifSnoozeMap(); m[key]=todayYMD();
+  try{ localStorage.setItem('cea_notif_snooze', JSON.stringify(m)); }catch(e){}
+  renderBell(); renderNotifyPanel();
+}
+
+// ── التنبيهات التلقائية (اعتمادات + كشوف مرفوضة من السيرفر، المهام المتأخرة من بيانات الجهاز) ──
+function notifAutoItems(){
+  const a=notifAuto||{}, out=[];
+  if(a.approvals && a.approvals.count){
+    out.push({auto:true, key:'auto:approvals', icon:'📋', level:'urgent',
+      title:a.approvals.count+' كشف مستني اعتمادك',
+      body:'ادخل تاب "اعتمادات المديرين" واعتمد الكشوف اللي دورك فيها.', tab:'approvals'});
+  }
+  if(a.rejected && a.rejected.count){
+    const lines=(a.rejected.items||[]).map(i=>'• '+(i.contractorName||'كشف')+(i.note?' — '+i.note:'')).join('\n');
+    out.push({auto:true, key:'auto:rejected', icon:'❌', level:'urgent',
+      title:a.rejected.count+' كشف مرفوض محتاج تعديل وإعادة إرسال',
+      body:lines||'ادخل تاب "التسليمات" وشوف سبب الرفض.', tab:'submissions'});
+  }
+  const late=(typeof todos!=='undefined'?todos:[]).filter(t=>!t.done && t.date && t.date<todayYMD()).length;
+  if(late && moduleEnabled('todo')){
+    out.push({auto:true, key:'auto:todos', icon:'⏰', level:'warn',
+      title:late+' مهمة فات ميعادها', body:'خلّصها أو أجّل ميعادها من تاب "المهام".', tab:'todo'});
+  }
+  return out.filter(x=>!notifSnoozed(x.key));
+}
+
+// كل التنبيهات المستحقة دلوقتي: التلقائي الأول (عمل مطلوب فعلًا) وبعده تنبيهات الأدمن بالأقدم ميعادًا
+function notifActiveItems(){
+  const now=new Date(), out=[];
+  notifDefs.forEach(def=>{
+    const occ=notifCurrentOccurrence(def, now);
+    if(occ) out.push({def:def, occ:occ, key:'n'+def.id+':'+occ.key, icon:def.icon||'🔔',
+      level:def.level||'info', title:def.title, body:def.body||'', tab:def.linkTab||''});
+  });
+  out.sort((x,y)=> String(x.occ.ymd).localeCompare(String(y.occ.ymd)));
+  return notifAutoItems().concat(out);
+}
+
+// ── الجرس ──
+function renderBell(){
+  const btn=document.getElementById('bell-btn'), badge=document.getElementById('bell-badge');
+  if(!btn) return;
+  btn.style.display = getAccessToken() ? 'flex' : 'none';
+  const items=notifActiveItems(), n=items.length;
+  if(badge){ badge.style.display = n?'':'none'; badge.textContent = n>9?'9+':String(n); }
+  // تنبيه جديد ظهر والتطبيق مفتوح؟ رنّة + Toast مرة واحدة
+  const keys=items.map(i=>i.key);
+  if(_notifKeysShown){
+    const fresh=items.filter(i=>_notifKeysShown.indexOf(i.key)<0);
+    if(fresh.length){
+      btn.classList.add('ringing'); setTimeout(()=>btn.classList.remove('ringing'), 3000);
+      showToast('🔔 '+fresh[0].title+(fresh.length>1?(' (+'+(fresh.length-1)+')'):''));
+    }
+  }
+  _notifKeysShown=keys;
+  if(document.body.classList.contains('notify-open')) renderNotifyPanel();
+}
+
+function toggleNotifyPanel(){
+  if(document.body.classList.contains('notify-open')) closeNotifyPanel(); else openNotifyPanel();
+}
+function openNotifyPanel(){
+  document.body.classList.add('notify-open');
+  const p=document.getElementById('notify-panel'); if(p) p.setAttribute('aria-hidden','false');
+  const b=document.getElementById('bell-btn'); if(b) b.setAttribute('aria-expanded','true');
+  const mb=document.getElementById('notify-manage-btn'); if(mb) mb.style.display = isAdmin()?'':'none';
+  renderNotifyPanel();
+  loadNotifications();
+}
+function closeNotifyPanel(){
+  document.body.classList.remove('notify-open');
+  const p=document.getElementById('notify-panel'); if(p) p.setAttribute('aria-hidden','true');
+  const b=document.getElementById('bell-btn'); if(b) b.setAttribute('aria-expanded','false');
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeNotifyPanel(); });
+
+function notifWhenLabel(item){
+  if(item.auto) return {txt:'دلوقتي', late:true};
+  const k=item.occ.ymd, diff=notifDayDiff(k, todayYMD()), t=notifTime12(item.def.timeOfDay);
+  if(diff===0)  return {txt:'⏰ النهاردة الساعة '+t, late:false};
+  if(diff<0)    return {txt:'⚠ كان المفروض '+notifRelDay(k)+' — لسه ما اتعملش', late:true};
+  return {txt:'🗓 '+notifRelDay(k)+' الساعة '+t, late:false};
+}
+function notifItemHtml(item){
+  const w=notifWhenLabel(item);
+  const cls = item.auto ? 'lv-auto' : ('lv-'+(item.level||'info'));
+  const go = item.tab ? '<button class="go" onclick="notifGo(\''+esc(item.tab)+'\')">فتح</button>' : '';
+  const act = item.auto
+    ? go+'<button onclick="notifSnooze(\''+esc(item.key)+'\')">مش دلوقتي</button>'
+    : go+'<button onclick="notifDone(\''+esc(String(item.def.id))+'\',\''+esc(item.occ.ymd)+'\')">✅ تم</button>';
+  return '<div class="notify-item '+cls+'">'
+    +'<div class="ic">'+esc(item.icon||'🔔')+'</div>'
+    +'<div class="bd"><div class="ti">'+esc(item.title||'')+'</div>'
+    +(item.body?'<div class="tx">'+esc(item.body)+'</div>':'')
+    +'<div class="when'+(w.late?' late':'')+'">'+esc(w.txt)+'</div></div>'
+    +'<div class="acts">'+act+'</div></div>';
+}
+function renderNotifyPanel(){
+  const box=document.getElementById('notify-list'); if(!box) return;
+  const items=notifActiveItems();
+  box.innerHTML = items.length ? items.map(notifItemHtml).join('')
+    : '<div class="home-empty">✅ مفيش تنبيهات مستحقة دلوقتي</div>';
+  // السطر التحتاني: أقرب تنبيه جاي (عشان تعرف إن فيه حاجة مجدولة حتى لو اللوحة فاضية)
+  const foot=document.getElementById('notify-foot'); if(!foot) return;
+  let best=null;
+  notifDefs.forEach(def=>{
+    const nx=notifNextOccurrence(def);
+    if(nx && (!best || nx<best.ymd)) best={ymd:nx, def:def};
+  });
+  foot.innerHTML = best
+    ? ('🗓 الجاي: <b>'+esc(best.def.title)+'</b> — '+esc(notifRelDay(best.ymd))+' الساعة '+esc(notifTime12(best.def.timeOfDay)))
+    : (notifDefs.length?'':'مفيش تنبيهات مجدولة'+(isAdmin()?' — ضيفها من "⚙️ إدارة"':''));
+}
+function notifGo(tab){ closeNotifyPanel(); if(tab) switchTab(tab); }
+
+// ── "تم" على ظهور: بيتسجل محليًا فورًا، وبيتبعت للسيرفر (لو أوفلاين بيستنى في طابور) ──
+function notifPendingGet(){ try{ return JSON.parse(localStorage.getItem('cea_notif_pending')||'[]'); }catch(e){ return []; } }
+function notifPendingSet(a){ try{ localStorage.setItem('cea_notif_pending', JSON.stringify(a)); }catch(e){} }
+async function notifFlushPending(){
+  const q=notifPendingGet(); if(!q.length || !navigator.onLine || !getAccessToken()) return;
+  const left=[];
+  for(const it of q){
+    try{ await api('POST','/api/notifications/'+it.id+'/'+(it.undo?'undone':'done'), {occurrence:it.occurrence}); }
+    catch(e){ if(!e.status || e.status>=500) left.push(it); } // 404 = التنبيه اتمسح → نسيبه
+  }
+  notifPendingSet(left);
+}
+async function notifDone(id, occurrence){
+  const def=notifDefs.filter(d=>String(d.id)===String(id))[0];
+  if(def){ def.done=(def.done||[]).concat([occurrence]); notifSaveCache(); }
+  renderBell(); renderNotifyPanel();
+  showToast('✅ تمام — هيرجع يظهر في ميعاده الجاي');
+  try{ await api('POST','/api/notifications/'+id+'/done',{occurrence}); }
+  catch(e){ notifPendingSet(notifPendingGet().concat([{id:id, occurrence:occurrence}])); }
+}
+
+// ── تحميل التنبيهات من السيرفر ──
+let _notifLoading=false;
+async function loadNotifications(manual){
+  if(!getAccessToken()) return;
+  if(!navigator.onLine){ if(manual) showToast('⚠ أوفلاين — المعروض من آخر تحديث'); renderBell(); return; }
+  if(_notifLoading) return;
+  _notifLoading=true;
+  try{
+    await notifFlushPending();
+    const r=await api('GET','/api/notifications');
+    notifDefs=(r.data&&r.data.notifications)||[];
+    notifAuto=(r.data&&r.data.auto)||{};
+    notifSaveCache();
+    if(manual) showToast('✅ اتحدّثت');
+  }catch(e){
+    if(manual) showToast('⚠ '+(e.message||'تعذر تحديث التنبيهات'), true);
+  }finally{
+    _notifLoading=false;
+    renderBell();
+  }
+}
+setInterval(()=>{ renderBell(); }, 60*1000);                                   // مواعيد الظهور بتتحسب على الجهاز
+setInterval(()=>{ if(!document.hidden) loadNotifications(); }, 5*60*1000);     // تعريفات جديدة/تنبيهات تلقائية
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ renderBell(); loadNotifications(); } });
+window.addEventListener('online', ()=>loadNotifications());
+
+/* ═══════════ تاب "التنبيهات" — إدارة (أدمن فقط) ═══════════ */
+let _notifAll=[], _notifEditId=null;
+
+function notifScheduleText(d){
+  let s='';
+  if(d.schedule==='daily') s='كل يوم';
+  else if(d.schedule==='weekly') s='كل '+((d.weekdays||[]).map(x=>NOTIF_DAY_NAMES[x]).join(' و')||'—');
+  else if(d.schedule==='monthly') s='يوم '+(d.monthDay||'—')+' من كل شهر';
+  else s='مرة واحدة يوم '+(d.onceDate||'—');
+  s+=' · '+notifTime12(d.timeOfDay);
+  if(d.leadDays>0) s+=' · بينبّه قبلها '+(d.leadDays===1?'بيوم':(d.leadDays===2?'بيومين':('بـ'+d.leadDays+' أيام')));
+  if(d.startDate||d.endDate) s+=' · ('+(d.startDate||'من دلوقتي')+' ← '+(d.endDate||'مفتوح')+')';
+  return s;
+}
+function notifAudienceText(d){
+  if(d.audience==='all')   return '👥 كل الحسابات';
+  if(d.audience==='me')    return '🙋 أنا بس';
+  if(d.audience==='site')  return '🏗️ حسابات '+siteName(d.audienceSite);
+  if(d.audience==='grade') return '🎖️ '+gradeLabel(d.audienceGrade);
+  const names=(d.userIds||[]).map(id=>{
+    const u=_notifUsers.filter(x=>String(x.id)===String(id))[0];
+    return u?personName(u):('#'+id);
+  });
+  return '👤 '+(names.join('، ')||'حسابات مختارة');
+}
+function notifAdminRow(d){
+  const nx=notifNextOccurrence(d);
+  return '<div class="notif-row'+(d.active?'':' off')+'">'
+    +'<div class="ic">'+esc(d.icon||'🔔')+'</div>'
+    +'<div class="bd"><div class="n">'+esc(d.title)+(d.active?'':' <span style="font-size:11px;color:var(--muted)">(موقوف)</span>')+'</div>'
+    +(d.body?'<div class="s">'+esc(d.body)+'</div>':'')
+    +'<div class="s">⏰ '+esc(notifScheduleText(d))+'</div>'
+    +'<div class="s">'+esc(notifAudienceText(d))+(d.linkTab?(' · يفتح: '+esc(TAB_TITLES[d.linkTab]||d.linkTab)):'')+'</div>'
+    +'<div class="s">'+(d.active&&nx?('🗓 الجاي: '+esc(notifRelDay(nx))):'—')+'</div></div>'
+    +'<div class="acts">'
+    +'<button class="btn-sm-edit" onclick="notifEdit(\''+esc(String(d.id))+'\')">✏️</button>'
+    +'<button class="btn-sm-edit" style="background:var(--muted)" onclick="notifToggleActive(\''+esc(String(d.id))+'\')">'+(d.active?'⏸':'▶')+'</button>'
+    +'<button class="btn-sm-edit" style="background:var(--red)" onclick="notifDelete(\''+esc(String(d.id))+'\')">🗑</button>'
+    +'</div></div>';
+}
+async function renderNotifyAdmin(){
+  if(!isAdmin()){ switchTab('home'); return; }
+  notifBuildWeekdays();
+  notifFillPickers();
+  const box=document.getElementById('notify-admin-list'); if(!box) return;
+  if(!navigator.onLine){ box.innerHTML='<div class="home-empty">⚠ إدارة التنبيهات محتاجة اتصال بالنت</div>'; return; }
+  try{
+    try{ _notifUsers=(await api('GET','/api/admin/users')).data||[]; }catch(e){ _notifUsers=[]; }
+    notifFillUsers();
+    _notifAll=(await api('GET','/api/notifications/manage')).data||[];
+    box.innerHTML = _notifAll.length ? _notifAll.map(notifAdminRow).join('')
+      : '<div class="home-empty">مفيش تنبيهات لسه — اضغط "➕ تنبيه جديد"</div>';
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+function notifBuildWeekdays(){
+  const box=document.getElementById('nf-weekdays'); if(!box || box.children.length) return;
+  box.innerHTML=NOTIF_WEEK_ORDER.map(d=>'<button type="button" class="nf-day" data-d="'+d+'" onclick="this.classList.toggle(\'on\');notifPreview()">'+NOTIF_DAY_NAMES[d]+'</button>').join('');
+}
+function notifFillPickers(){
+  const st=document.getElementById('nf-site');
+  if(st) st.innerHTML='<option value="1">'+esc(siteName(1))+'</option><option value="2">'+esc(siteName(2))+'</option>';
+  const gr=document.getElementById('nf-grade');
+  if(gr) gr.innerHTML=Object.keys(GRADE_LABELS).map(g=>'<option value="'+esc(g)+'">'+esc(GRADE_LABELS[g])+'</option>').join('');
+}
+function notifFillUsers(){
+  const box=document.getElementById('nf-users'); if(!box) return;
+  box.innerHTML=_notifUsers.map(u=>'<label class="pref-row" style="min-height:40px;padding:5px 2px;cursor:pointer">'
+    +'<span class="pref-title" style="font-size:13px;font-weight:700">'+esc(personName(u))+' <span style="font-weight:600;color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(u.email)+'</span></span>'
+    +'<input type="checkbox" class="nf-user-cb" value="'+esc(String(u.id))+'" style="width:20px;height:20px;accent-color:var(--gold)"></label>').join('')
+    || '<div class="home-empty">لا يوجد حسابات</div>';
+}
+function notifSetForm(d){
+  const g=id=>document.getElementById(id);
+  g('nf-title').value=d.title||'';
+  g('nf-body').value=d.body||'';
+  g('nf-icon').value=d.icon||'';
+  g('nf-level').value=d.level||'info';
+  g('nf-schedule').value=d.schedule||'weekly';
+  g('nf-monthday').value=d.monthDay||'';
+  g('nf-oncedate').value=d.onceDate||'';
+  g('nf-time').value=d.timeOfDay||'08:00';
+  g('nf-lead').value=d.leadDays||0;
+  g('nf-start').value=d.startDate||'';
+  g('nf-end').value=d.endDate||'';
+  g('nf-audience').value=d.audience||'me';
+  g('nf-site').value=String(d.audienceSite||1);
+  if(d.audienceGrade) g('nf-grade').value=d.audienceGrade;
+  g('nf-linktab').value=d.linkTab||'';
+  const days=d.weekdays||[];
+  document.querySelectorAll('#nf-weekdays .nf-day').forEach(b=>b.classList.toggle('on', days.indexOf(Number(b.dataset.d))>=0));
+  const ids=(d.userIds||[]).map(String);
+  document.querySelectorAll('.nf-user-cb').forEach(cb=>{ cb.checked = ids.indexOf(String(cb.value))>=0; });
+  notifScheduleChanged(); notifAudienceChanged();
+}
+function notifNew(){
+  _notifEditId=null;
+  notifBuildWeekdays(); notifFillPickers(); notifFillUsers();
+  // الافتراضي = المثال الأشهر عندنا: كل ثلاثاء الساعة 9 صباحًا مع تنبيه قبلها بيوم
+  notifSetForm({schedule:'weekly', weekdays:[2], timeOfDay:'09:00', leadDays:1, level:'warn', icon:'🔔', audience:'me'});
+  document.getElementById('notify-form-title').textContent='➕ تنبيه جديد';
+  document.getElementById('notify-form-card').style.display='block';
+  document.getElementById('nf-title').focus();
+}
+function notifEdit(id){
+  const d=_notifAll.filter(x=>String(x.id)===String(id))[0]; if(!d) return;
+  _notifEditId=String(id);
+  notifBuildWeekdays(); notifFillPickers(); notifFillUsers();
+  notifSetForm(d);
+  document.getElementById('notify-form-title').textContent='✏️ تعديل التنبيه';
+  document.getElementById('notify-form-card').style.display='block';
+  document.getElementById('notify-form-card').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function notifCancel(){ _notifEditId=null; document.getElementById('notify-form-card').style.display='none'; }
+function notifScheduleChanged(){
+  const v=document.getElementById('nf-schedule').value;
+  document.getElementById('nf-weekly-wrap').style.display  = v==='weekly'?'':'none';
+  document.getElementById('nf-monthly-wrap').style.display = v==='monthly'?'':'none';
+  document.getElementById('nf-once-wrap').style.display    = v==='once'?'':'none';
+  notifPreview();
+}
+function notifAudienceChanged(){
+  const v=document.getElementById('nf-audience').value;
+  document.getElementById('nf-site-wrap').style.display  = v==='site'?'':'none';
+  document.getElementById('nf-grade-wrap').style.display = v==='grade'?'':'none';
+  document.getElementById('nf-users-wrap').style.display = v==='users'?'':'none';
+  notifPreview();
+}
+function notifReadForm(){
+  const g=id=>document.getElementById(id).value;
+  const days=[]; document.querySelectorAll('#nf-weekdays .nf-day.on').forEach(b=>days.push(Number(b.dataset.d)));
+  const ids=[]; document.querySelectorAll('.nf-user-cb:checked').forEach(cb=>ids.push(cb.value));
+  return {
+    title:g('nf-title').trim(), body:g('nf-body').trim(), icon:g('nf-icon').trim()||'🔔',
+    level:g('nf-level'), schedule:g('nf-schedule'),
+    onceDate:g('nf-oncedate')||null, weekdays:days, monthDay:g('nf-monthday')?Number(g('nf-monthday')):null,
+    timeOfDay:g('nf-time')||'08:00', leadDays:Number(g('nf-lead'))||0,
+    startDate:g('nf-start')||null, endDate:g('nf-end')||null,
+    audience:g('nf-audience'), audienceSite:Number(g('nf-site'))||1, audienceGrade:g('nf-grade'),
+    userIds:ids, linkTab:g('nf-linktab')
+  };
+}
+// معاينة حيّة: التنبيه ده هيظهر إمتى وليمين
+function notifPreview(){
+  const box=document.getElementById('nf-preview'); if(!box) return;
+  const d=notifReadForm();
+  const nx=notifNextOccurrence(d);
+  let s='⏰ '+notifScheduleText(d)+'<br>'+notifAudienceText(d);
+  if(nx){
+    s+='<br>🗓 أول ظهور: '+notifRelDay(nx);
+    if(d.leadDays>0){
+      const pre=new Date(nx+'T00:00:00'); pre.setDate(pre.getDate()-d.leadDays);
+      s+=' — وهيبتدي يبان في الجرس من '+notifRelDay(toYMD(pre))+' الساعة '+notifTime12(d.timeOfDay);
+    }
+  }else s+='<br>⚠ مفيش ميعاد جاي بالإعدادات دي';
+  box.innerHTML=s;
+}
+document.addEventListener('input', e=>{
+  if(e.target && e.target.id && e.target.id.indexOf('nf-')===0) notifPreview();
+});
+async function notifSave(){
+  const body=notifReadForm();
+  if(!body.title){ showToast('⚠ اكتب عنوان التنبيه', true); return; }
+  if(body.schedule==='weekly' && !body.weekdays.length){ showToast('⚠ اختار يوم واحد على الأقل', true); return; }
+  if(body.schedule==='monthly' && !body.monthDay){ showToast('⚠ اكتب يوم الشهر', true); return; }
+  if(body.schedule==='once' && !body.onceDate){ showToast('⚠ اختار تاريخ التنبيه', true); return; }
+  if(body.audience==='users' && !body.userIds.length){ showToast('⚠ اختار حساب واحد على الأقل', true); return; }
+  const btn=document.getElementById('nf-save-btn'); btn.disabled=true;
+  try{
+    if(_notifEditId) await api('PATCH','/api/notifications/manage/'+_notifEditId, body);
+    else await api('POST','/api/notifications/manage', body);
+    showToast('✅ اتحفظ');
+    notifCancel();
+    await renderNotifyAdmin();
+    loadNotifications();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر الحفظ'), true); }
+  finally{ btn.disabled=false; }
+}
+async function notifToggleActive(id){
+  const d=_notifAll.filter(x=>String(x.id)===String(id))[0]; if(!d) return;
+  try{
+    await api('PATCH','/api/notifications/manage/'+id, {active: !d.active});
+    showToast(d.active?'⏸ اتوقف':'▶ اشتغل');
+    await renderNotifyAdmin(); loadNotifications();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر التعديل'), true); }
+}
+async function notifDelete(id){
+  const d=_notifAll.filter(x=>String(x.id)===String(id))[0];
+  if(!confirm('حذف التنبيه "'+((d&&d.title)||'')+'" نهائيًا؟')) return;
+  try{
+    await api('DELETE','/api/notifications/manage/'+id);
+    showToast('🗑 اتحذف');
+    await renderNotifyAdmin(); loadNotifications();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر الحذف'), true); }
 }
