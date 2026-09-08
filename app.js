@@ -3267,9 +3267,13 @@ function aprLevelCell(r, level){
   const rv=(r.reviews||[]).filter(x=>x.level===level && x.revision===r.revision);
   const last=rv[rv.length-1];
   if(last){
-    if(last.decision==='REJECTED') return '<span class="apr-pill apr-rej">❌ مرفوض</span>';
-    if(last.decision==='APPROVED_NOTES') return '<span class="apr-pill apr-notes" title="'+esc(last.note||'')+'">📝 بملاحظات</span>';
-    return '<span class="apr-pill apr-ok">✅ معتمد</span>';
+    // مين اعتمد وإمتى — بيتعرض هنا برّه الشيت (قرار 8 سبتمبر: الشيت نفسه يفضل نضيف بالتوقيع بس)
+    const who=last.byUser ? (last.byUser.title || String(last.byUser.email||'').split('@')[0]) : '';
+    const when=last.createdAt ? new Date(last.createdAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) : '';
+    const by = who ? '<br><small class="apr-by">بواسطة '+esc(who)+(when?' · '+esc(when):'')+'</small>' : '';
+    if(last.decision==='REJECTED') return '<span class="apr-pill apr-rej">❌ مرفوض</span>'+by;
+    if(last.decision==='APPROVED_NOTES') return '<span class="apr-pill apr-notes" title="'+esc(last.note||'')+'">📝 بملاحظات</span>'+by;
+    return '<span class="apr-pill apr-ok">✅ معتمد</span>'+by;
   }
   if(r.reviewState==='IN_REVIEW' && r.currentLevel===level) return '<span class="apr-pill apr-wait">⏳ '+(r.canAct?'دورك':'منتظر')+'</span>';
   // مستوى مش في سلسلة صاحب الكشف أصلًا (درجته مش محتاجاه، أو مفيش معتمد مسند له)
@@ -3387,7 +3391,7 @@ function aprOpenPreview(title, wb, r){
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(r.file?.fileName||'')}</span> (${wb.worksheets.length} شيت)</div>
         </div>
         <div class="subhead" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <span>${r.reviewState==='SENT' ? '🖋️ الكشف بعد اكتمال الاعتمادات والتوقيعات — نفس النسخة اللي وصلت جوجل شيت' : (r.reviews||[]).some(x=>x.revision===r.revision&&x.decision!=='REJECTED') ? '🖋️ الكشف بتوقيعات اللي اعتمدوا لحد دلوقتي (تحت كل توقيع: معتمد بواسطة مين)' : '📄 الكشف كما بعته المهندس'} (${wb.worksheets.length} شيت)</span>
+          <span>${r.reviewState==='SENT' ? '🖋️ الكشف بعد اكتمال الاعتمادات والتوقيعات — نفس النسخة اللي وصلت جوجل شيت' : (r.reviews||[]).some(x=>x.revision===r.revision&&x.decision!=='REJECTED') ? '🖋️ الكشف بتوقيعات اللي اعتمدوا لحد دلوقتي' : '📄 الكشف كما بعته المهندس'} (${wb.worksheets.length} شيت)</span>
           <span class="xl-tools">
             <button type="button" class="xl-tool" onclick="aprZoom(-0.15)">➖</button>
             <button type="button" class="xl-tool" id="apr-xl-zoom-label" onclick="aprZoomReset()">100%</button>

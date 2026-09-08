@@ -771,3 +771,4 @@ body.dark-mode .xl-wrap { background:#fff; }
 .an-matrix td.an-mx-0 { color:var(--muted); opacity:.45; }
 /* العمود الأخير المثبّت في .apr-table مخصّص لتاب الاعتمادات — هنا المثبّت هو عمود الأسماء */
 .an-matrix th:last-child, .an-matrix td:last-child { position:static; box-shadow:none; }
+.apr-by { display:block; font-size:10px; color:var(--muted); font-weight:700; margin-top:2px; white-space:nowrap; }
