@@ -3275,13 +3275,15 @@ function aprLevelCell(r, level){
     if(last.decision==='APPROVED_NOTES') return '<span class="apr-pill apr-notes" title="'+esc(last.note||'')+'">📝 بملاحظات</span>'+by;
     return '<span class="apr-pill apr-ok">✅ معتمد</span>'+by;
   }
-  if(r.reviewState==='IN_REVIEW' && r.currentLevel===level) return '<span class="apr-pill apr-wait">⏳ '+(r.canAct?'دورك':'منتظر')+'</span>';
+  // اسم المعتمد المسند للمستوى ده (بيرجع من السيرفر مع كل كشف) — بيتعرض تحت "دورك/منتظر" وتحت المقفول
+  const assigned=(r.approverNames&&r.approverNames[level]) ? '<br><small class="apr-by">عند: '+esc(r.approverNames[level])+'</small>' : '';
+  if(r.reviewState==='IN_REVIEW' && r.currentLevel===level) return '<span class="apr-pill apr-wait">⏳ '+(r.canAct?'دورك':'منتظر')+'</span>'+assigned;
   // مستوى مش في سلسلة صاحب الكشف أصلًا (درجته مش محتاجاه، أو مفيش معتمد مسند له)
   const chain=Array.isArray(r.chain)?r.chain:_aprLevels;
   if(chain.indexOf(level)===-1) return '<span class="apr-pill apr-lock" title="مش مطلوب في سلسلة المهندس ده">·</span>';
   // مستوى لسه ما وصلوش
   const li=chain.indexOf(level), ci=chain.indexOf(r.currentLevel);
-  if(r.reviewState==='IN_REVIEW' && ci>=0 && li>ci) return '<span class="apr-pill apr-lock">🔒 مقفول</span>';
+  if(r.reviewState==='IN_REVIEW' && ci>=0 && li>ci) return '<span class="apr-pill apr-lock">🔒 مقفول</span>'+assigned;
   return '<span class="apr-pill apr-lock">—</span>';
 }
 // زرار الأدمن "إخفاء من الجدول": بيخفي الصف من طابور الاعتمادات بس — الكشف وسجل المراجعات و"تسليماتي" والشيت زي ما هم.
