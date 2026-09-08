@@ -3387,7 +3387,7 @@ function aprOpenPreview(title, wb, r){
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(r.file?.fileName||'')}</span> (${wb.worksheets.length} شيت)</div>
         </div>
         <div class="subhead" style="margin-top:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <span>${r.reviewState==='SENT' ? '🖋️ الكشف بعد اكتمال الاعتمادات والتوقيعات — نفس النسخة اللي وصلت جوجل شيت' : '📄 الكشف كما بعته المهندس'} (${wb.worksheets.length} شيت)</span>
+          <span>${r.reviewState==='SENT' ? '🖋️ الكشف بعد اكتمال الاعتمادات والتوقيعات — نفس النسخة اللي وصلت جوجل شيت' : (r.reviews||[]).some(x=>x.revision===r.revision&&x.decision!=='REJECTED') ? '🖋️ الكشف بتوقيعات اللي اعتمدوا لحد دلوقتي (تحت كل توقيع: معتمد بواسطة مين)' : '📄 الكشف كما بعته المهندس'} (${wb.worksheets.length} شيت)</span>
           <span class="xl-tools">
             <button type="button" class="xl-tool" onclick="aprZoom(-0.15)">➖</button>
             <button type="button" class="xl-tool" id="apr-xl-zoom-label" onclick="aprZoomReset()">100%</button>
