@@ -3265,7 +3265,7 @@ function sheetTimeline(s){
 }
 /* ═══════════ اعتمادات المديرين (وحدة approvals — أونلاين فقط) ═══════════
    سلسلة مراجعة داخل التطبيق قبل ما الكشف ينزل جوجل شيت. */
-let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false;
+let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false, _aprMyId='';
 const APR_TIPS={
   APPROVED:['اعتماد','معتمد بدون ملاحظات — الكشف يفتح للمعتمد اللي بعده في السلسلة.'],
   APPROVED_NOTES:['اعتماد بملاحظات','معتمد مع ملاحظة — بيكمل للمعتمد اللي بعده برضو. الملاحظة بتتسجل، مش بترجع للمهندس.'],
@@ -3276,13 +3276,13 @@ async function renderApprovals(){
   if(!getAccessToken()||!navigator.onLine){ box.innerHTML='<div class="home-empty">اعتمادات المديرين بيانات حية — محتاج اتصال بالنت</div>'; return; }
   try{
     const [lv, q]=await Promise.all([api('GET','/api/approvals/levels'), api('GET','/api/approvals/queue')]);
-    _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel; _aprViewer=!!q.viewer;
+    _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel; _aprViewer=!!q.viewer; _aprMyId=String(q.myId||'');
     aprApplyViewerTitles();
     const roleEl=document.getElementById('apr-myrole');
     const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
     if(roleEl) roleEl.innerHTML = isApprover
       ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b> — بتشوف كل الكشوف، وبتعتمد اللي دورك فيه بس (المسند لك)')
-      : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'👁 مشاهدة فقط — كشوفك إنت بس، بتتابع الكشف وصل لفين من غير أي إجراء');
+      : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'👁 مشاهدة فقط — بتشوف كل الكشوف وحالتها وملاحظاتها، وتفتح ملفات كشوفك إنت بس، من غير أي إجراء');
     aprBuildTable();
   }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
 }
@@ -3493,7 +3493,7 @@ function aprBuildTable(){
     return '<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
-      +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>'+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
+      +'<td>'+(_aprViewer && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
