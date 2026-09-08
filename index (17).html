@@ -1109,6 +1109,7 @@
   </div>
   <div class="card" data-feature="set_contractors">
     <div class="card-title"><span>👷</span> إدارة المقاولين</div>
+    <input type="search" class="select-search" id="contractors-search" placeholder="🔍 ابحث بالاسم أو التخصص..." oninput="renderSettings()" autocomplete="off">
     <div id="contractors-list" class="list-scroll"></div>
     <div id="edit-contractor-form" class="inline-form" style="display:none">
       <div class="subhead" style="margin-top:0">✏️ تعديل بيانات المقاول</div>
@@ -1145,6 +1146,7 @@
 
   <div class="card" data-feature="set_places">
     <div class="card-title"><span>📍</span> إدارة أماكن الأعمال</div>
+    <input type="search" class="select-search" id="places-search" placeholder="🔍 ابحث في الأماكن..." oninput="renderSettings()" autocomplete="off">
     <div id="places-list" class="list-scroll"></div>
     <div id="edit-place-form" class="inline-form" style="display:none">
       <div class="subhead" style="margin-top:0">✏️ تعديل المكان</div>

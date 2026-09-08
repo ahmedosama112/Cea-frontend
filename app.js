@@ -462,8 +462,13 @@ function renderSettings() {
   document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display = isAdmin() ? '' : 'none'; });
   const rateTypeLabel = {ساعة:'ساعة',يومية:'يومية',مقطوعية:'مقطوعية'};
   const emptyP = txt => `<p class="hint" style="padding:8px 0;margin:0">${txt}</p>`;
+  // بحث في القوائم (الاسم/التخصص للمقاولين، الاسم/الملاحظة للأماكن) — الفهرس i يفضل فهرس المصفوفة الأصلية عشان التعديل/الحذف
+  const cq=(document.getElementById('contractors-search')?.value||'').trim().toLowerCase();
+  const pq=(document.getElementById('places-search')?.value||'').trim().toLowerCase();
+  const cList=contractors.map((c,i)=>({c,i})).filter(({c})=>!cq || String(c.name||'').toLowerCase().includes(cq) || String(c.spec||'').toLowerCase().includes(cq));
+  const pList=places.map((p,i)=>({p,i})).filter(({p})=>!pq || String(p).toLowerCase().includes(pq) || String(placeNotes[p]||'').toLowerCase().includes(pq));
   document.getElementById('contractors-list').innerHTML = contractors.length
-    ? contractors.map((c,i)=>`
+    ? (cList.length ? cList.map(({c,i})=>`
       <div class="setting-item">
         <div style="flex:1;min-width:0">
           <div class="setting-name">${esc(c.name)}</div>
@@ -473,11 +478,11 @@ function renderSettings() {
           <button class="btn-sm-edit" onclick="startEditContractor(${i})">تعديل</button>
           <button class="btn-sm-del"  onclick="removeContractor(${i})">حذف</button>
         </div>`:''}
-      </div>`).join('')
+      </div>`).join('') : emptyP('مفيش مقاول مطابق للبحث'))
     : emptyP('لا يوجد مقاولين');
 
   document.getElementById('places-list').innerHTML = places.length
-    ? places.map((p,i)=>`<div class="setting-item">
+    ? (pList.length ? pList.map(({p,i})=>`<div class="setting-item">
         <div style="flex:1;min-width:0">
           <div class="setting-name">${esc(p)}</div>
           ${placeNotes[p]?`<div class="setting-sub">❕ ${esc(placeNotes[p])}</div>`:''}
@@ -486,7 +491,7 @@ function renderSettings() {
           <button class="btn-sm-edit" onclick="startEditPlace(${i})">تعديل</button>
           <button class="btn-sm-del" onclick="removePlace(${i})">حذف</button>
         </div>`:''}
-      </div>`).join('')
+      </div>`).join('') : emptyP('مفيش مكان مطابق للبحث'))
     : emptyP('لا يوجد أماكن');
   document.getElementById('inspectors-list').innerHTML = inspectors.length
     ? inspectors.map((ins,i)=>`<div class="setting-item"><div class="setting-name">${esc(ins)}</div><button class="btn-sm-del" onclick="removeInspector(${i})">حذف</button></div>`).join('')
