@@ -4809,7 +4809,21 @@ function openPhotoLightbox(id){
 let execRecords = JSON.parse(localStorage.getItem('cea_exec')||'[]');
 let execEditingId = null;
 
-function saveExecAll(){ localStorage.setItem('cea_exec', JSON.stringify(execRecords)); }
+// الموقف التنفيذي بيتحفظ بمفتاحه لوحده — لكن لازم يحترم نفس عقد saveAll:
+// (1) لو الذاكرة اتملت كان بيرمي استثناء **غير مُمسك**: المستخدم يكون شاف "✅ تم حفظ البند"
+//     (الرسالة كانت قبل الحفظ)، والقايمة ما بتتحدثش، ومحدش بيقوله إن حاجة ما اتحفظتش.
+// (2) كان مابيجدولش مزامنة زي أي حفظ تاني — فتعديل الموقف التنفيذي بيستنى الدورة الدورية.
+function saveExecAll(){
+  try{
+    localStorage.setItem('cea_exec', JSON.stringify(execRecords));
+    scheduleSync();
+    return true;
+  }catch(e){
+    console.error('saveExecAll failed', e);
+    showToast('⚠ الذاكرة المحلية اتملت — البيانات ما اتحفظتش! امسح صور تقارير قديمة أو اعمل نسخة احتياطية', true);
+    return false;
+  }
+}
 
 // ---- Exec stages chips ----
 let execSelectedStages = [];
@@ -4911,20 +4925,27 @@ function saveExecRecord(){
   const pct = itemObj&&itemObj.stages
     ? Math.round(itemObj.stages.reduce((s,st,i)=>s+(st.pct*(stageDone[i]||0)/100),0)*10)/10
     : 0;
-  if(execEditingId!==null){
+  // الحفظ هنا بيعدّل على سجل موجود في 3 حالات من 3 (تعديل / تحديث بند بنفس المكان / إضافة)،
+  // فبنمسك نسخة من الحالة قبل التعديل ونرجّعها لو الحفظ فشل — المصفوفة بتتعدّل في مكانها
+  // عشان مرجعها اللي بتستخدمه المزامنة يفضل هو هو.
+  const execSnapshot=execRecords.map(r=>({...r}));
+  const wasExecEdit=execEditingId!==null;
+  if(wasExecEdit){
     const idx=execRecords.findIndex(r=>r.id===execEditingId);
     if(idx!==-1) execRecords[idx]={...execRecords[idx],item,place,pct,notes,stages:stagesSnapshot,stageDone:[...stageDone],updated:todayYMD()};
-    execEditingId=null;
-    document.getElementById('exec-edit-banner').style.display='none';
-    document.getElementById('exec-save-btn').textContent='✅ حفظ البند';
-    showToast('✏️ تم التعديل');
   } else {
     const existing=execRecords.find(r=>r.item===item&&r.place===place);
     if(existing){ existing.pct=pct; existing.notes=notes; existing.stages=stagesSnapshot; existing.stageDone=[...stageDone]; existing.updated=todayYMD(); }
     else execRecords.push({id:Date.now(),item,place,pct,notes,stages:stagesSnapshot,stageDone:[...stageDone],updated:todayYMD()});
-    showToast('✅ تم حفظ البند');
   }
-  saveExecAll(); clearExecForm(); renderExec();
+  if(!saveExecAll()){ execRecords.length=0; execRecords.push(...execSnapshot); renderExec(); return; }
+  if(wasExecEdit){
+    execEditingId=null;
+    document.getElementById('exec-edit-banner').style.display='none';
+    document.getElementById('exec-save-btn').textContent='✅ حفظ البند';
+    showToast('✏️ تم التعديل');
+  } else showToast('✅ تم حفظ البند');
+  clearExecForm(); renderExec();
 }
 
 function clearExecForm(){
@@ -5021,8 +5042,11 @@ async function exportExecExcel(){
 
 function deleteExecRecord(id){
   if(!confirm('حذف هذا البند؟')) return;
+  const before=execRecords;
   execRecords=execRecords.filter(r=>r.id!==id);
-  saveExecAll(); renderExec(); showToast('🗑 تم الحذف');
+  // الحذف ما اتحفظش → نرجّع البند عشان القايمة ما تورّيش إنه اتحذف وهو لسه موجود
+  if(!saveExecAll()){ execRecords=before; return; }
+  renderExec(); showToast('🗑 تم الحذف');
 }
 
 function renderExec(){
