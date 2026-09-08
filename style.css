@@ -694,13 +694,18 @@ body.dark-mode .xl-wrap { background:#fff; }
 .modal-box.wide.fullscreen .xl-wrap { max-height:calc(100vh - 240px); }
 
 /* ─── اعتمادات المديرين ─── */
-/* شريط تكبير جدول الاعتمادات — ظاهر على كل الأحجام (الزوم بقى حر من 25% لـ 300%، مفيد على الكمبيوتر برضو) */
-.apr-zoom-bar { display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap; }
+/* شريط تكبير جدول الاعتمادات — الموبايل فقط (≤899px) بقرار صاحب المشروع (8 سبتمبر): على الكمبيوتر الجدول بيتعرض بحجمه الطبيعي بلا زوم */
+.apr-zoom-bar { display:none; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap; }
+@media (max-width:899px){ .apr-zoom-bar { display:flex; } }
 /* برواز الجدول: تمرير في الاتجاهين جوه البرواز (مش أفقي بس) عشان الجدول المكبّر يتحرّك في كل الاتجاهات.
    touch-action: pan-x pan-y → الإصبع الواحد بيمرّر عادي، والإصبعين بيوصلوا لكود الزوم بتاعنا بدل ما المتصفح
    يزوّم الصفحة كلها. overscroll-behavior: التمرير لآخر الجدول ما يجرّش الصفحة وراه. */
-.apr-scroll { overflow:auto; max-height:min(74vh,820px); overscroll-behavior:contain; touch-action:pan-x pan-y; cursor:grab; border:1px solid var(--border-strong); border-radius:12px; margin-top:8px; -webkit-overflow-scrolling:touch; }
-.apr-scroll.grabbing { cursor:grabbing; user-select:none; }
+/* الكمبيوتر: تمرير أفقي بس زي الأول (بلا برواز رأسي ولا سحب). الموبايل: البرواز الحر (تمرير في الاتجاهين + pinch). */
+.apr-scroll { overflow-x:auto; border:1px solid var(--border-strong); border-radius:12px; margin-top:8px; -webkit-overflow-scrolling:touch; }
+@media (max-width:899px){
+  .apr-scroll { overflow:auto; max-height:min(74vh,820px); overscroll-behavior:contain; touch-action:pan-x pan-y; cursor:grab; }
+  .apr-scroll.grabbing { cursor:grabbing; user-select:none; }
+}
 /* صف العناوين مثبّت مع التمرير الرأسي — الأعمدة تفضل معروفة وإنت نازل في الكشوف */
 .apr-table thead th { position:sticky; top:0; z-index:3; }
 .apr-table th:last-child { z-index:4; }

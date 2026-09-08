@@ -3317,8 +3317,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
 // بنفضل على CSS zoom (مش transform): الجدول بيتصغّر فعليًا فمساحة التمرير والعمود المثبّت بيفضلوا مظبوطين.
 const APR_ZOOM_MIN=0.25, APR_ZOOM_MAX=3;
 let _aprTblZoom=1;
+// الزوم وإيماءاته للموبايل فقط (≤899px) — على الكمبيوتر الجدول بحجمه الطبيعي دايمًا (قرار صاحب المشروع 8 سبتمبر)
+function aprMobile(){ return window.matchMedia('(max-width:899px)').matches; }
 function aprTableApplyZoom(){
-  const box=document.getElementById('apr-table'); if(box) box.style.zoom=String(_aprTblZoom);
+  const box=document.getElementById('apr-table'); if(box) box.style.zoom=String(aprMobile() ? _aprTblZoom : 1);
   const lb=document.getElementById('apr-zoom-label'); if(lb) lb.textContent=Math.round(_aprTblZoom*100)+'%';
 }
 // z = النسبة الجديدة · focal = نقطة التركيز {x,y} بالنسبة لبرواز التمرير (وسط الإصبعين أو مؤشر الماوس)
@@ -3370,14 +3372,14 @@ function aprBindZoomGestures(){
   sc.addEventListener('touchcancel', ()=>{ pinch=null; }, {passive:true});
   // Ctrl/⌘ + عجلة الماوس (نفس إيماءة الزوم المعتادة على الكمبيوتر) — العجلة لوحدها بتفضل تمرير عادي
   sc.addEventListener('wheel', e=>{
-    if(!e.ctrlKey && !e.metaKey) return;
+    if(!aprMobile() || (!e.ctrlKey && !e.metaKey)) return;
     e.preventDefault();
     aprTableSetZoom(_aprTblZoom*(e.deltaY<0?1.12:1/1.12), aprFocalAt(sc, e.clientX, e.clientY));
   }, {passive:false});
   // سحب بالماوس في كل الاتجاهات (الإصبع بيسحب بشكل طبيعي أصلًا) — الأزرار جوه الجدول بتفضل شغالة
   let drag=null;
   sc.addEventListener('mousedown', e=>{
-    if(e.button!==0 || (e.target.closest && e.target.closest('button,a,input,textarea,select'))) return;
+    if(!aprMobile() || e.button!==0 || (e.target.closest && e.target.closest('button,a,input,textarea,select'))) return;
     drag={ x:e.clientX, y:e.clientY, sl:sc.scrollLeft, st:sc.scrollTop }; sc.classList.add('grabbing');
   });
   window.addEventListener('mousemove', e=>{
@@ -3392,6 +3394,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   try{ const z=parseFloat(localStorage.getItem('cea_apr_zoom')||''); if(z>=APR_ZOOM_MIN && z<=APR_ZOOM_MAX) _aprTblZoom=z; }catch(e){}
   aprTableApplyZoom();
   aprBindZoomGestures();
+  window.addEventListener('resize', aprTableApplyZoom); // تدوير الشاشة/تغيير العرض: الزوم يتطبق أو يتشال حسب الحجم
 });
 function aprTabLive(){
   const tab=document.getElementById('tab-approvals');
