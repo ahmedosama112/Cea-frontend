@@ -1479,6 +1479,7 @@ async function renderAdmin(){
   await loadSiteNames(); // الأول — عشان أسماء المواقع تظهر صح في labels الفيتشرز والدروب داون
   loadAprLevelsAdmin();
   renderActivityTable();
+  loadBackupStatus();
   adminModuleCheckboxes('admin-create-modules', ['records','submissions','todo','summary'], DEFAULT_FEATURES);
   const list=document.getElementById('admin-users-list');
   try{
@@ -6710,6 +6711,13 @@ function notifAutoItems(){
       title:a.rejected.count+' كشف مرفوض محتاج تعديل وإعادة إرسال',
       body:lines||'ادخل تاب "التسليمات" وشوف سبب الرفض.', tab:'submissions'});
   }
+  if(a.backup){
+    const b=a.backup;
+    out.push({auto:true, key:'auto:backup', icon:'💾', level:'urgent',
+      title: !b.at ? 'مفيش نسخة احتياطية متسجّلة' : (b.ok ? 'آخر نسخة احتياطية بقالها أكتر من يوم ونص' : 'آخر نسخة احتياطية فشلت'),
+      body: (b.detail ? b.detail + ' · ' : '')+'افتح إدارة الحسابات → كارت "🗄 النسخة الاحتياطية" وخد نسخة يدوية للتأكد.',
+      tab:'admin'});
+  }
   const late=(typeof todos!=='undefined'?todos:[]).filter(t=>!t.done && t.date && t.date<todayYMD()).length;
   if(late && moduleEnabled('todo')){
     out.push({auto:true, key:'auto:todos', icon:'⏰', level:'warn',
@@ -7047,4 +7055,56 @@ async function notifDelete(id){
     showToast('🗑 اتحذف');
     await renderNotifyAdmin(); loadNotifications();
   }catch(e){ showToast('⚠ '+(e.message||'تعذر الحذف'), true); }
+}
+
+/* ═══════════ 🗄 حالة النسخة الاحتياطية (شاشة الأدمن) ═══════════
+   المساران موجودين في السيرفر من زمان (`/admin/backup-status` و`/admin/backup-now`) ومكانش
+   فيه أي واجهة بتناديهم — يعني فشل النسخة كان بيفضل في اللوجات لحد ما حد يدوّر. */
+function backupAgeText(at){
+  if(!at) return 'مفيش نسخة متسجّلة';
+  const ms=Date.now()-Date.parse(at);
+  if(!Number.isFinite(ms)) return esc(String(at));
+  const h=Math.floor(ms/3600000);
+  if(h<1) return 'من شوية';
+  if(h<24) return 'من '+h+' ساعة';
+  const d=Math.floor(h/24);
+  return d===1?'من يوم':(d===2?'من يومين':'من '+d+' أيام');
+}
+async function loadBackupStatus(){
+  const box=document.getElementById('backup-status'); if(!box) return;
+  if(!navigator.onLine){ box.innerHTML='<div class="home-empty">⚠ محتاج اتصال بالنت</div>'; return; }
+  box.innerHTML='<div class="home-empty">⏳</div>';
+  try{
+    const st=(await api('GET','/api/admin/backup-status')).data;
+    if(!st){
+      box.innerHTML='<div class="setting-item"><div style="flex:1"><div class="setting-name" style="color:var(--danger-fg)">⚠ مفيش نسخة احتياطية متسجّلة</div>'
+        +'<div class="setting-sub">يا إما السيرفر لسه ما عملش نسخة من يوم آخر نشر، يا إما ربط جوجل مش مفعّل.</div></div></div>';
+      return;
+    }
+    const at=st.at, ageMs=at?(Date.now()-Date.parse(at)):Infinity;
+    const stale=!(ageMs<36*3600*1000);
+    const ok=st.ok===true && !stale;
+    const when=at ? new Date(at).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}) : '—';
+    const color = ok?'var(--ok-fg)':'var(--danger-fg)';
+    const head = st.ok===true ? (stale?'⚠ آخر نسخة نجحت — بس بقالها وقت':'✅ آخر نسخة نجحت') : '❌ آخر نسخة فشلت';
+    box.innerHTML='<div class="setting-item"><div style="flex:1;min-width:0">'
+      +'<div class="setting-name" style="color:'+color+'">'+head+' · '+esc(backupAgeText(at))+'</div>'
+      +'<div class="setting-sub">'+esc(when)+'</div>'
+      +(st.detail?'<div class="setting-sub" style="margin-top:3px">'+esc(st.detail)+'</div>':'')
+      +'</div></div>';
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+async function runBackupNow(){
+  if(!confirm('تاخد نسخة احتياطية كاملة دلوقتي وترفعها على Google Drive؟')) return;
+  const btn=document.getElementById('backup-now-btn');
+  const old=btn.textContent; btn.disabled=true; btn.textContent='⏳ جاري أخذ النسخة...';
+  try{
+    const r=await api('POST','/api/admin/backup-now');
+    showToast('✅ '+((r.data&&r.data.detail)||'تمت النسخة'));
+  }catch(e){ showToast('⚠ '+(e.message||'فشل النسخ الاحتياطي'), true); }
+  finally{
+    btn.disabled=false; btn.textContent=old;
+    loadBackupStatus();
+    loadNotifications(); // التنبيه في الجرس يختفي/يظهر حسب النتيجة
+  }
 }

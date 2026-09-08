@@ -321,6 +321,14 @@
     <div class="apr-scroll act-scroll"><div id="act-table"><div class="home-empty">⏳</div></div></div>
   </div>
 
+  <div class="card">
+    <div class="card-title between"><span class="t">🗄 النسخة الاحتياطية</span><button class="link-btn" onclick="loadBackupStatus()">🔄 تحديث</button></div>
+    <p class="hint" style="margin-top:0">نسخة كاملة للقاعدة (28 جدول) بتروح Google Drive كل يوم بعد الفجر. لو فشلت أو اتأخرت هتلاقي تنبيه في الجرس كمان.</p>
+    <div id="backup-status"><div class="home-empty">⏳</div></div>
+    <button class="btn btn-navy mt8" id="backup-now-btn" onclick="runBackupNow()">💾 خد نسخة دلوقتي</button>
+    <p class="hint" style="margin-top:6px">النسخة اليدوية بتاخد لحد دقيقتين حسب حجم القاعدة — سيب الشاشة مفتوحة.</p>
+  </div>
+
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
 
