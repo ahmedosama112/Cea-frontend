@@ -16,3 +16,7 @@ debug-out.xlsx
 node_modules/
 .DS_Store
 Thumbs.db
+
+# ملفات مؤقتة للمساعد المحلي (قصاصات من app.js)
+local-ai/scratch/
+local-ai/rag/index.json
