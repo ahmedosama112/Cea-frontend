@@ -3265,7 +3265,7 @@ function sheetTimeline(s){
 }
 /* ═══════════ اعتمادات المديرين (وحدة approvals — أونلاين فقط) ═══════════
    سلسلة مراجعة داخل التطبيق قبل ما الكشف ينزل جوجل شيت. */
-let _aprLevels=[], _aprMyLevel=null, _aprRows=[];
+let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false;
 const APR_TIPS={
   APPROVED:['اعتماد','معتمد بدون ملاحظات — الكشف يفتح للمعتمد اللي بعده في السلسلة.'],
   APPROVED_NOTES:['اعتماد بملاحظات','معتمد مع ملاحظة — بيكمل للمعتمد اللي بعده برضو. الملاحظة بتتسجل، مش بترجع للمهندس.'],
@@ -3276,14 +3276,27 @@ async function renderApprovals(){
   if(!getAccessToken()||!navigator.onLine){ box.innerHTML='<div class="home-empty">اعتمادات المديرين بيانات حية — محتاج اتصال بالنت</div>'; return; }
   try{
     const [lv, q]=await Promise.all([api('GET','/api/approvals/levels'), api('GET','/api/approvals/queue')]);
-    _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel;
+    _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel; _aprViewer=!!q.viewer;
+    aprApplyViewerTitles();
     const roleEl=document.getElementById('apr-myrole');
     const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
     if(roleEl) roleEl.innerHTML = isApprover
       ? ('دورك: <b style="color:var(--gold-text)">'+esc(_aprMyLevel)+'</b> — بتشوف كل الكشوف، وبتعتمد اللي دورك فيه بس (المسند لك)')
-      : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'مالكش دور اعتماد');
+      : (isAdmin()?'أدمن — تقدر تعتمد أي مستوى وتشوف كل الكشوف':'👁 مشاهدة فقط — كشوفك إنت بس، بتتابع الكشف وصل لفين من غير أي إجراء');
     aprBuildTable();
   }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+// (8 سبتمبر 2026) المشاهد لازم يبان قدامه إن التاب للمتابعة بس — بنزوّد "(مشاهدة فقط)" على عنوان التاب
+// في القائمة الجانبية وفي كارت الشاشة وفي شريط العنوان. بيتنادى بعد ما الطابور يرجّع الفلاج من السيرفر.
+function aprApplyViewerTitles(){
+  const label='اعتمادات المديرين'+(_aprViewer?' (مشاهدة فقط)':'');
+  TAB_TITLES.approvals=label;
+  const drawer=document.querySelector('.drawer-item[data-tab="approvals"] span:not(.ico)');
+  if(drawer) drawer.textContent=label;
+  const card=document.querySelector('#tab-approvals .card-title .t');
+  if(card) card.textContent='📋 '+label;
+  const tab=document.getElementById('tab-approvals'), head=document.getElementById('header-title');
+  if(head && tab && tab.classList.contains('active')) head.textContent=label;
 }
 // تحديث تلقائي للطابور: كل 20 ثانية والتاب مفتوح وظاهر (وكمان أول ما ترجع للتطبيق) — عشان لما معتمد يخلص،
 // اللي بعده يشوف دوره من غير ريفرش. بيتخطى التحديث لو فيه قرار مفتوح أو معاينة ملف عشان ما يقطعش شغلك.
@@ -3298,22 +3311,87 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let t=null; try{ t=sessionStorage.getItem('cea_reopen_tab'); sessionStorage.removeItem('cea_reopen_tab'); }catch(e){}
   if(t==='approvals'){ const tryOpen=(n)=>{ if(getAccessToken() && document.getElementById('tab-approvals')){ switchTab('approvals'); } else if(n>0) setTimeout(()=>tryOpen(n-1), 400); }; setTimeout(()=>tryOpen(10), 600); }
 });
-// تكبير/تصغير جدول الاعتمادات (الشريط ظاهر على الموبايل بس — CSS). بيتحفظ على الجهاز.
-// CSS zoom بيصغّر الجدول فعليًا (مش transform) فالتمرير والعمود المثبّت بيفضلوا مظبوطين
+// تكبير/تصغير جدول الاعتمادات — زوم حر. بيتحفظ على الجهاز.
+// (8 سبتمبر 2026 — قرار صاحب المشروع) كان محبوس بين 50% و130% وبالأزرار بس، والتمرير أفقي بس.
+// دلوقتي: من 25% لـ 300% · بإصبعين (pinch) · Ctrl/⌘ + عجلة الماوس · سحب بالماوس أو الإصبع في كل الاتجاهات.
+// بنفضل على CSS zoom (مش transform): الجدول بيتصغّر فعليًا فمساحة التمرير والعمود المثبّت بيفضلوا مظبوطين.
+const APR_ZOOM_MIN=0.25, APR_ZOOM_MAX=3;
 let _aprTblZoom=1;
 function aprTableApplyZoom(){
   const box=document.getElementById('apr-table'); if(box) box.style.zoom=String(_aprTblZoom);
   const lb=document.getElementById('apr-zoom-label'); if(lb) lb.textContent=Math.round(_aprTblZoom*100)+'%';
 }
-function aprTableZoom(d){
-  _aprTblZoom=Math.min(1.3, Math.max(0.5, Math.round((_aprTblZoom+d)*10)/10));
+// z = النسبة الجديدة · focal = نقطة التركيز {x,y} بالنسبة لبرواز التمرير (وسط الإصبعين أو مؤشر الماوس)
+// بنظبط التمرير بعد الزوم عشان النقطة دي تفضل تحت الإصبع بدل ما الجدول ينط
+function aprTableSetZoom(z, focal){
+  const sc=document.getElementById('apr-scroll');
+  const prev=_aprTblZoom;
+  _aprTblZoom=Math.min(APR_ZOOM_MAX, Math.max(APR_ZOOM_MIN, Math.round(z*100)/100));
+  if(_aprTblZoom===prev) return;
+  aprTableApplyZoom();
   try{ localStorage.setItem('cea_apr_zoom', String(_aprTblZoom)); }catch(e){}
-  aprTableApplyZoom();
+  if(sc && focal){
+    const ratio=_aprTblZoom/prev;
+    // RTL: كروم بيخلي scrollLeft سالب (مقاس من يمين المحتوى) — بنشتغل بالقيمة المطلقة ونرجّع الإشارة
+    const neg=sc.scrollLeft<0;
+    const sx=Math.abs(sc.scrollLeft);
+    sc.scrollLeft=(neg?-1:1)*Math.max(0,(sx+focal.x)*ratio-focal.x);
+    sc.scrollTop=Math.max(0,(sc.scrollTop+focal.y)*ratio-focal.y);
+  }
 }
+// الأزرار بتضرب/تقسم على 1.25 (مش زيادة ثابتة): من 100% لـ 300% بـ 5 ضغطات بدل 20، والتصغير بيفضل ناعم
+function aprTableZoom(dir){ aprTableSetZoom(dir>0 ? _aprTblZoom*1.25 : _aprTblZoom/1.25, aprTableCenterFocal()); }
 function aprTableZoomReset(){ _aprTblZoom=1; try{ localStorage.removeItem('cea_apr_zoom'); }catch(e){} aprTableApplyZoom(); }
+// أزرار ➖/➕ مالهاش نقطة تركيز — بنكبّر حوالين نص البرواز
+function aprTableCenterFocal(){
+  const sc=document.getElementById('apr-scroll'); if(!sc) return null;
+  return { x:sc.clientWidth/2, y:sc.clientHeight/2 };
+}
+function aprFocalAt(sc, clientX, clientY){
+  const b=sc.getBoundingClientRect();
+  // في RTL بنقيس من الحافة اللي التمرير مقاس منها (اليمين) عشان الحساب يطابق scrollLeft السالب
+  const x = sc.scrollLeft<0 ? (b.right-clientX) : (clientX-b.left);
+  return { x, y: clientY-b.top };
+}
+// ربط إيماءات الزوم/السحب على برواز الجدول — مرة واحدة
+function aprBindZoomGestures(){
+  const sc=document.getElementById('apr-scroll'); if(!sc || sc._aprGestures) return; sc._aprGestures=1;
+  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY);
+  const mid=t=>aprFocalAt(sc, (t[0].clientX+t[1].clientX)/2, (t[0].clientY+t[1].clientY)/2);
+  let pinch=null;
+  sc.addEventListener('touchstart', e=>{ if(e.touches.length===2) pinch={ d:dist(e.touches), z:_aprTblZoom }; }, {passive:true});
+  sc.addEventListener('touchmove', e=>{
+    if(!pinch || e.touches.length!==2) return;
+    e.preventDefault(); // من غير كده المتصفح بيزوّم الصفحة كلها بدل الجدول
+    const d=dist(e.touches);
+    if(d>0 && pinch.d>0) aprTableSetZoom(pinch.z*(d/pinch.d), mid(e.touches));
+  }, {passive:false});
+  sc.addEventListener('touchend', e=>{ if(e.touches.length<2) pinch=null; }, {passive:true});
+  sc.addEventListener('touchcancel', ()=>{ pinch=null; }, {passive:true});
+  // Ctrl/⌘ + عجلة الماوس (نفس إيماءة الزوم المعتادة على الكمبيوتر) — العجلة لوحدها بتفضل تمرير عادي
+  sc.addEventListener('wheel', e=>{
+    if(!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    aprTableSetZoom(_aprTblZoom*(e.deltaY<0?1.12:1/1.12), aprFocalAt(sc, e.clientX, e.clientY));
+  }, {passive:false});
+  // سحب بالماوس في كل الاتجاهات (الإصبع بيسحب بشكل طبيعي أصلًا) — الأزرار جوه الجدول بتفضل شغالة
+  let drag=null;
+  sc.addEventListener('mousedown', e=>{
+    if(e.button!==0 || (e.target.closest && e.target.closest('button,a,input,textarea,select'))) return;
+    drag={ x:e.clientX, y:e.clientY, sl:sc.scrollLeft, st:sc.scrollTop }; sc.classList.add('grabbing');
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!drag) return;
+    e.preventDefault();
+    sc.scrollLeft=drag.sl-(e.clientX-drag.x);
+    sc.scrollTop=drag.st-(e.clientY-drag.y);
+  });
+  window.addEventListener('mouseup', ()=>{ if(drag){ drag=null; sc.classList.remove('grabbing'); } });
+}
 document.addEventListener('DOMContentLoaded', ()=>{
-  try{ const z=parseFloat(localStorage.getItem('cea_apr_zoom')||''); if(z>=0.5 && z<=1.3) _aprTblZoom=z; }catch(e){}
+  try{ const z=parseFloat(localStorage.getItem('cea_apr_zoom')||''); if(z>=APR_ZOOM_MIN && z<=APR_ZOOM_MAX) _aprTblZoom=z; }catch(e){}
   aprTableApplyZoom();
+  aprBindZoomGestures();
 });
 function aprTabLive(){
   const tab=document.getElementById('tab-approvals');
@@ -3365,7 +3443,29 @@ async function aprHide(id){
     renderApprovals();
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
+// ملاحظات المعتمدين على النسخة الحالية — بتتكتب كاملة في خانة "الإجراء / الحالة"
+// (8 سبتمبر 2026 — قرار صاحب المشروع): كانت بتظهر في tooltip بس، فالمهندس/المدير كان بيشوف "رجع للمهندس من team leader"
+// من غير السبب. دلوقتي الكومنت نفسه مكتوب وظاهر تحت الحالة (رفض · اعتماد بملاحظات · سطر مشطوب).
+function aprNotesBlock(r){
+  const cur=Number(r.revision||0);
+  const out=[];
+  (r.reviews||[]).forEach(x=>{
+    if(Number(x.revision)!==cur || !x.note) return;
+    if(x.decision!=='REJECTED' && x.decision!=='APPROVED_NOTES') return;
+    const who=personName(x.byUser);
+    out.push('<div class="apr-note'+(x.decision==='REJECTED'?' apr-note-rej':'')+'">'
+      +(x.decision==='REJECTED'?'❌':'📝')+' <b>'+esc(x.level)+'</b>'+(who?' · '+esc(who):'')+': '+esc(x.note)+'</div>');
+  });
+  (r.rowRejections||[]).forEach(x=>{
+    if(Number(x.revision)!==cur) return;
+    out.push('<div class="apr-note apr-note-rej">✕ سطر مشطوب: '+esc(x.label||'')+' · '+esc(x.level||'')+(x.note?': '+esc(x.note):'')+'</div>');
+  });
+  return out.length ? '<div class="apr-notes-box">'+out.join('')+'</div>' : '';
+}
 function aprStatusCell(r){
+  return aprStatusPill(r)+aprNotesBlock(r);
+}
+function aprStatusPill(r){
   if(r.reviewState==='RETURNED'){
     const rej=(r.reviews||[]).filter(x=>x.decision==='REJECTED').pop();
     return '<span class="apr-pill apr-rej">❌ رجع للمهندس'+(rej?' من '+esc(rej.level):'')+'</span>'+aprHideBtn(r);
@@ -3390,7 +3490,7 @@ function aprBuildTable(){
     return '<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
-      +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button></td>'
+      +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>'+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
@@ -3399,9 +3499,10 @@ function aprBuildTable(){
   html+='</tbody></table>';
   // نحافظ على موضع التمرير الأفقي: إعادة الرسم (بعد قرار أو تحديث تلقائي) كانت بترجّع الجدول لأوله
   // فعمود "الإجراء" (أقصى الشمال) بيختفي وكأن الأزرار راحت — خصوصًا على الموبايل
-  const sc=box.closest('.apr-scroll')||box; const keepX=sc.scrollLeft;
+  const sc=box.closest('.apr-scroll')||box; const keepX=sc.scrollLeft, keepY=sc.scrollTop;
   box.innerHTML=html;
   if(keepX) sc.scrollLeft=keepX;
+  if(keepY) sc.scrollTop=keepY;
 }
 // مراجعة = معاينة الملف جوه التطبيق (جدول) من غير تحميل — نفس محرك معاينة الكشوف
 async function aprReview(id){
@@ -3418,7 +3519,7 @@ async function aprReview(id){
     await wb.xlsx.load(buf);
     const ws=wb.worksheets[0];
     if(!ws) throw new Error('الملف فاضي');
-    aprOpenPreview('👁 مراجعة كشف '+name, wb, r);
+    aprOpenPreview('👁 '+(_aprViewer?'مشاهدة':'مراجعة')+' كشف '+name, wb, r);
   }catch(e){ showToast('⚠ '+(e.message||'تعذر فتح الملف'), true); }
 }
 // نفس شكل معاينة المهندس (openSubmitReview) بالظبط — كارت معلومات + زوم + الكشف المنسّق + أزرار القرار

@@ -694,10 +694,16 @@ body.dark-mode .xl-wrap { background:#fff; }
 .modal-box.wide.fullscreen .xl-wrap { max-height:calc(100vh - 240px); }
 
 /* ─── اعتمادات المديرين ─── */
-/* شريط تكبير جدول الاعتمادات: للموبايل/الشاشات الضيقة فقط — على الكمبيوتر مخفي والجدول بحجمه الطبيعي */
-.apr-zoom-bar { display:none; align-items:center; gap:6px; margin-top:8px; }
-@media (max-width:899px){ .apr-zoom-bar { display:flex; } }
-.apr-scroll { overflow-x:auto; border:1px solid var(--border-strong); border-radius:12px; margin-top:8px; -webkit-overflow-scrolling:touch; }
+/* شريط تكبير جدول الاعتمادات — ظاهر على كل الأحجام (الزوم بقى حر من 25% لـ 300%، مفيد على الكمبيوتر برضو) */
+.apr-zoom-bar { display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap; }
+/* برواز الجدول: تمرير في الاتجاهين جوه البرواز (مش أفقي بس) عشان الجدول المكبّر يتحرّك في كل الاتجاهات.
+   touch-action: pan-x pan-y → الإصبع الواحد بيمرّر عادي، والإصبعين بيوصلوا لكود الزوم بتاعنا بدل ما المتصفح
+   يزوّم الصفحة كلها. overscroll-behavior: التمرير لآخر الجدول ما يجرّش الصفحة وراه. */
+.apr-scroll { overflow:auto; max-height:min(74vh,820px); overscroll-behavior:contain; touch-action:pan-x pan-y; cursor:grab; border:1px solid var(--border-strong); border-radius:12px; margin-top:8px; -webkit-overflow-scrolling:touch; }
+.apr-scroll.grabbing { cursor:grabbing; user-select:none; }
+/* صف العناوين مثبّت مع التمرير الرأسي — الأعمدة تفضل معروفة وإنت نازل في الكشوف */
+.apr-table thead th { position:sticky; top:0; z-index:3; }
+.apr-table th:last-child { z-index:4; }
 /* تاب الاعتمادات بس: على الشاشات الكبيرة (كمبيوتر) يتوسع لحد 1400px عشان الجدول يبان من غير تمرير أفقي —
    باقي التبويبات تفضل على عرض 760px المريح للقراءة */
 @media (min-width:900px){ #tab-approvals.panel { max-width:1400px; } }
@@ -707,7 +713,6 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-table tr.mine { background:linear-gradient(90deg,rgba(201,168,76,.14),transparent); }
 /* عمود "الإجراء / الحالة" (آخر عمود = أقصى الشمال في RTL) مثبّت: يفضل ظاهر حتى لو الجدول أعرض من الشاشة */
 .apr-table th:last-child, .apr-table td:last-child { position:sticky; left:0; z-index:1; box-shadow:2px 0 6px rgba(0,0,0,.08); }
-.apr-table th:last-child { z-index:2; }
 .apr-table td:last-child { background:var(--card); }
 .apr-table tr.mine td:last-child { background:var(--card); }
 .apr-eng { font-weight:800; } .apr-eng small { display:block; color:var(--muted); font-weight:600; font-size:10.5px; }
@@ -848,4 +853,8 @@ body.dark-mode .xl-wrap { background:#fff; }
 .an-matrix td.an-mx-0 { color:var(--muted); opacity:.45; }
 /* العمود الأخير المثبّت في .apr-table مخصّص لتاب الاعتمادات — هنا المثبّت هو عمود الأسماء */
 .an-matrix th:last-child, .an-matrix td:last-child { position:static; box-shadow:none; }
+/* ملاحظة المعتمد (رفض / بملاحظات / سطر مشطوب) — مكتوبة كاملة في خانة "الإجراء / الحالة" */
+.apr-notes-box { margin-top:6px; display:flex; flex-direction:column; gap:4px; text-align:start; }
+.apr-note { font-size:10.5px; font-weight:700; line-height:1.55; white-space:pre-wrap; word-break:break-word; background:var(--input); color:var(--text); border:1px solid var(--border); border-inline-start:3px solid var(--gold); border-radius:7px; padding:4px 7px; max-width:280px; }
+.apr-note-rej { border-inline-start-color:var(--danger-bg); }
 .apr-by { display:block; font-size:10px; color:var(--muted); font-weight:700; margin-top:2px; white-space:nowrap; }
