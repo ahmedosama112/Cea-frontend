@@ -920,12 +920,22 @@ function fillSpec() {
   const n = document.getElementById('f-contractor').value;
   const c = contractors.find(x=>x.name===n);
   document.getElementById('f-spec').value = c ? c.spec : '';
+  const priceEl = document.getElementById('f-price');
   if(c && c.rate) {
-    document.getElementById('f-price').value = c.rate;
+    priceEl.value = c.rate;
     if(c.rateType && document.getElementById('f-qty-type')) {
       document.getElementById('f-qty-type').value = c.rateType;
     }
     calcTotal();
+  } else {
+    // مقاول مالوش سعر محفوظ: لازم نفضّي سعر المقاول اللي قبله — من غير كده السعر القديم بيفضل
+    // في الخانة، والتحقق (if(!qty||!price)) بيعدّيه لأنه مش صفر، فسطر بسعر غلط بيتحفظ في صمت
+    const had = priceEl.value !== '';
+    priceEl.value = '';
+    // مقاول ممكن يكون متسجّل بنوع كمية من غير سعر — نحترم نوعه المحفوظ ومانفرضش "يومية"
+    const qt = document.getElementById('f-qty-type'); if(qt) qt.value = (c && c.rateType) ? c.rateType : 'يومية';
+    calcTotal();
+    if(n && had) showToast('ℹ️ المقاول ده مالوش سعر محفوظ — اكتب السعر');
   }
 }
 
@@ -1053,9 +1063,15 @@ function saveRecord(){
   const deductOn   = getDeductOn(); // array of selected contractor names
   const deductNote = (document.getElementById('f-deduct-note') ? document.getElementById('f-deduct-note').value.trim() : '');
   if(!day){showToast('⚠ اختر اليوم',true);return;}if(!contractor){showToast('⚠ اختر المقاول',true);return;}if(!place){showToast('⚠ اختر مكان الأعمال',true);return;}if(!qty||!price){showToast('⚠ أدخل العدد والسعر',true);return;}
-  if(editingId!==null){const idx=records.findIndex(r=>r.id===editingId);if(idx!==-1)records[idx]={...records[idx],day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote};editingId=null;document.getElementById('edit-banner').classList.remove('show');document.getElementById('save-btn').textContent='✅ تسجيل البيانات';showToast('✏️ تم التعديل بنجاح!');}
-  else{records.push({id:Date.now(),day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote});showToast('✅ تم التسجيل بنجاح!');}
-  if(!saveAll()) return; // الذاكرة اتملت — سيب النموذج زي ما هو عشان البيانات متضيعش
+  const isNew = editingId===null;
+  if(!isNew){const idx=records.findIndex(r=>r.id===editingId);if(idx!==-1)records[idx]={...records[idx],day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote};}
+  else{records.push({id:Date.now(),day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote});}
+  // الحفظ فشل (الذاكرة اتملت): النموذج بيفضل زي ما هو عشان البيانات متضيعش — لكن لازم كمان
+  // نشيل السجل من الذاكرة، وإلا دوسة "تسجيل" تانية بتعمل نسخة تانية بـid جديد، والمزامنة
+  // بترفع من الذاكرة فالمكرر بيوصل السيرفر والكشف المعتمد. ورسالة النجاح مابتظهرش إلا بعد حفظ فعلي.
+  if(!saveAll()){ if(isNew) records.pop(); return; }
+  if(!isNew){editingId=null;document.getElementById('edit-banner').classList.remove('show');document.getElementById('save-btn').textContent='✅ تسجيل البيانات';showToast('✏️ تم التعديل بنجاح!');}
+  else showToast('✅ تم التسجيل بنجاح!');
   renderRecords();renderSummary();clearForm(false);
 }
 function editRecord(id){const r=records.find(x=>x.id===id);if(!r)return;editingId=id;switchTab('form');document.getElementById('f-date').value=r.date;autoSetDay(r.date);if(!document.getElementById('f-day').value)document.getElementById('f-day').value=r.day;document.getElementById('f-qty').value=r.qty;if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value=r.qtyType||'يومية';document.getElementById('f-price').value=r.price;document.getElementById('f-discount').value=r.discount;document.getElementById('f-notes').value=r.notes;document.getElementById('f-place').value=r.place;document.getElementById('f-contractor').value=r.contractor;document.getElementById('f-spec').value=r.spec;calcTotal();
@@ -1072,9 +1088,14 @@ function toggleDone(id){const idx=records.findIndex(r=>r.id===id);if(idx===-1)re
 function saveIR(){
   const date=document.getElementById('ir-date').value,item=document.getElementById('ir-item').value,place=document.getElementById('ir-place').value,inspector=document.getElementById('ir-inspector').value,status=document.getElementById('ir-status').value,notes=document.getElementById('ir-notes').value.trim();
   if(!item){showToast('⚠ اختر البند',true);return;}if(!place){showToast('⚠ اختر المكان',true);return;}if(!status){showToast('⚠ اختر الحالة',true);return;}
-  if(irEditingId!==null){const idx=irRecords.findIndex(r=>r.id===irEditingId);if(idx!==-1)irRecords[idx]={...irRecords[idx],date,item,place,inspector,status,notes};irEditingId=null;document.getElementById('ir-edit-banner').classList.remove('show');document.getElementById('ir-save-btn').textContent='✅ تسجيل IR';showToast('✏️ تم تعديل IR');}
-  else{irRecords.push({id:Date.now(),date,item,place,inspector,status,notes});showToast('✅ تم تسجيل IR بنجاح!');}
-  saveAll();renderIR();renderSummary();clearIRForm();
+  const isNewIr = irEditingId===null;
+  if(!isNewIr){const idx=irRecords.findIndex(r=>r.id===irEditingId);if(idx!==-1)irRecords[idx]={...irRecords[idx],date,item,place,inspector,status,notes};}
+  else{irRecords.push({id:Date.now(),date,item,place,inspector,status,notes});}
+  // الحفظ فشل → شيل الجديد من الذاكرة وسيب النموذج مليان (كان بيتفضّى والبيانات تضيع)
+  if(!saveAll()){ if(isNewIr) irRecords.pop(); renderIR(); return; }
+  if(!isNewIr){irEditingId=null;document.getElementById('ir-edit-banner').classList.remove('show');document.getElementById('ir-save-btn').textContent='✅ تسجيل IR';showToast('✏️ تم تعديل IR');}
+  else showToast('✅ تم تسجيل IR بنجاح!');
+  renderIR();renderSummary();clearIRForm();
 }
 function clearIRForm(){document.getElementById('ir-item').value='';document.getElementById('ir-place').value='';document.getElementById('ir-inspector').value='';document.getElementById('ir-status').value='';document.getElementById('ir-notes').value='';document.getElementById('ir-date').value=todayYMD();}
 function editIR(id){const r=irRecords.find(x=>x.id===id);if(!r)return;irEditingId=id;document.getElementById('ir-date').value=r.date;document.getElementById('ir-item').value=r.item;document.getElementById('ir-place').value=r.place;document.getElementById('ir-inspector').value=r.inspector;document.getElementById('ir-status').value=r.status;document.getElementById('ir-notes').value=r.notes;document.getElementById('ir-edit-banner').classList.add('show');document.getElementById('ir-save-btn').textContent='💾 حفظ تعديل IR';window.scrollTo({top:0,behavior:'smooth'});}
@@ -2527,6 +2548,19 @@ function exportSelectionHint(){
     : '⚠ إختار مقاول من فلتر "👷 كل المقاولين" أعلى الصفحة الأول';
 }
 
+// ورقة الكشف المعتمد أسبوع واحد بالظبط (7 صفوف من بداية الأسبوع) — فالسجلات لازم تتقصّ على نفس الأسبوع.
+// من غير كده (مع "كل السجلات" مفتوحة مثلًا): السطور برّه الأسبوع بتقع من الملف في صمت، بينما الإجمالي
+// وعدد السجلات اللي بيتبعتوا مع الكشف بيفضلوا شاملينها → كشف رسمي بإجمالي مش مطابق لسطوره.
+function clampExportToWeek(exp, weekBounds){
+  const s=toYMD(weekBounds.start), en=toYMD(weekBounds.end);
+  const inWeek=exp.filter(r=>r.date>=s && r.date<=en);
+  return {inWeek, dropped: exp.length-inWeek.length, s, en};
+}
+// الحساب كله (مرساة الأسبوع + القصّ) لازم يتم على اللي هيتصدّر فعلًا — يعني من غير السجلات المعلّم
+// عليها 🚫 (بيتشالوا جوّه buildApprovedWorkbook). من غير كده: سجل مستبعَد قديم بيخطف مرساة الأسبوع
+// فالقصّ يرمي كل السجلات الحقيقية، والعدّاد بيحذّر من سجلات المهندس مستبعدها بإيده أصلًا.
+function exportableRecords(exp){ return exp.filter(r=>!r.done); }
+
 async function exportApprovedExcel(){
   const {nq,pq,dq,cq}=getRecordFilters();
   syncExportChipsFromTopFilter();
@@ -2559,11 +2593,19 @@ async function exportApprovedExcel(){
   exp.sort((a,b)=>a.date.localeCompare(b.date));
 
   // أسبوع الجدول: لو فيه تاريخ محدد ناخد أسبوعه، غير كده الأسبوع المعروض،
-  // أو لو "كل السجلات" مفعّلة ناخد أسبوع أقدم سجل في النتائج
+  // أو لو "كل السجلات" مفعّلة ناخد أسبوع أقدم سجل **هيتصدّر فعلًا** في النتائج
+  exp = exportableRecords(exp);
+  if(!exp.length){showToast('⚠ كل السجلات دي معلّم عليها 🚫 (مستبعَدة من الإكسيل المعتمد)',true);return;}
   let weekBounds;
   if(dq) weekBounds = getWeekBoundsForDate(dq);
   else if(!showAll) weekBounds = getWeekBounds(weekOffset);
   else weekBounds = getWeekBoundsForDate(exp[0].date);
+
+  const wk = clampExportToWeek(exp, weekBounds);
+  // التحذير كان توست بيتمسح بعد جزء من الثانية بتوست "تم التنزيل" (عنصر توست واحد في الصفحة)،
+  // يعني المهندس كان بينزّل كشف ناقص أيام وهو فاكره كامل. نفس أسلوب الإرسال: يوقف ويسأل.
+  if(wk.dropped && !confirm('الكشف بياخد أسبوع واحد بس ('+wk.s+' → '+wk.en+').\n\nفيه '+wk.dropped+' سجل برّه الأسبوع ده مش هيتحطّوا في الملف — نزّلهم في كشف تاني لأسبوعهم.\n\nتنزّل بالأسبوع ده؟')) return;
+  exp = wk.inWeek;
 
   const built = await buildApprovedWorkbook(exp, weekBounds, pq);
   if(!built) return;
@@ -2674,13 +2716,20 @@ async function submitApprovedForReview(){
   if(exportPlaceChips.length)      exp=exp.filter(r=>exportPlaceChips.includes(r.place));
   if(!exp.length){showToast('⚠ لا يوجد بيانات بالفلتر ده',true);return;}
   exp.sort((a,b)=>a.date.localeCompare(b.date));
+  exp = exportableRecords(exp); // المرساة والقصّ على اللي هيتصدّر فعلًا (بدون المعلّم عليها 🚫)
+  if(!exp.length){showToast('⚠ كل السجلات دي معلّم عليها 🚫 (مستبعَدة من الإكسيل المعتمد)',true);return;}
   let weekBounds;
   if(dq) weekBounds = getWeekBoundsForDate(dq);
   else if(!showAll) weekBounds = getWeekBounds(weekOffset);
   else weekBounds = getWeekBoundsForDate(exp[0].date);
+  // كشف رسمي بيمشي على 3 مديرين — السطر اللي برّه أسبوع الورقة ما ينفعش يقع في صمت،
+  // ولا ينفع يتحسب في الإجمالي/العدد اللي بيتبعتوا مع الكشف. لازم المهندس يعرف ويوافق.
+  const wk = clampExportToWeek(exp, weekBounds);
+  if(wk.dropped && !confirm('الكشف بياخد أسبوع واحد بس ('+wk.s+' → '+wk.en+').\n\nفيه '+wk.dropped+' سجل برّه الأسبوع ده — مش هيتبعتوا ولا هيتحسبوا في الإجمالي. ابعتهم في كشف تاني لأسبوعهم.\n\nتكمل الإرسال بالأسبوع ده؟')) return;
+  exp = wk.inWeek;
   const built = await buildApprovedWorkbook(exp, weekBounds, pq);
   if(!built) return;
-  const expSent = exp.filter(r=>!r.done); // اللي هيتصدّر فعلاً — المعاينة والعدّ زي الملف بالظبط
+  const expSent = exp; // اتقصّت على الأسبوع وبدون المستبعَد — المعاينة والعدّ زي الملف بالظبط
   _pendingSubmission = {built, exp:expSent};
   openSubmitReview(built, expSent);
 }
@@ -2910,15 +2959,16 @@ function saveEquipment(){
   if(!timeFrom||!timeTo){showToast('⚠ حدد الوقت من وإلى',true);return;}
   const day=dayNameOf(date), minutes=eqMinutes(timeFrom,timeTo);
   const data={date,day,contractor,equipment,place,timeFrom,timeTo,minutes,works,notes,deductOn,deductNote};
-  if(eqEditingId!==null){
+  const isNewEq = eqEditingId===null;
+  if(!isNewEq){
     const idx=equipmentRecords.findIndex(r=>r.id===eqEditingId);
     if(idx!==-1) equipmentRecords[idx]={...equipmentRecords[idx],...data};
-    showToast('✅ تم حفظ التعديل');
   } else {
     equipmentRecords.push({id:Date.now(), ...data});
-    showToast('✅ تم تسجيل يوم التشغيل');
   }
-  if(!saveAll()) return;
+  // زي السركي بالظبط: الحفظ فشل → شيل السجل من الذاكرة عشان الدوسة الجاية ما تعملش نسخة تانية
+  if(!saveAll()){ if(isNewEq) equipmentRecords.pop(); return; }
+  showToast(isNewEq ? '✅ تم تسجيل يوم التشغيل' : '✅ تم حفظ التعديل');
   cancelEqEdit();
   // الشهر المعروض يتبع تاريخ اليوم اللي اتسجل — عشان المعاينة تتحدث فورًا
   const b=getEqMonthBoundsForDate(date), cur=getEqMonthBounds(0);
@@ -4217,18 +4267,22 @@ function saveTodo() {
   const place    = document.getElementById('todo-place').value;
   const priority = document.getElementById('todo-priority').value;
   if(!notes){showToast('⚠ اكتب بيان الأعمال',true);return;}
-  if(todoEditingId !== null){
+  const isNewTodo = todoEditingId === null;
+  if(!isNewTodo){
     const idx = todos.findIndex(t=>t.id===todoEditingId);
     if(idx!==-1) todos[idx] = {...todos[idx], date, notes, place, priority};
+  } else {
+    todos.push({id:Date.now(), date, notes, place, priority, done:false});
+  }
+  // الحفظ فشل → شيل الجديدة من الذاكرة وسيب النموذج مليان (كان بيتفضّى والمهمة تضيع)
+  if(!saveAll()){ if(isNewTodo) todos.pop(); renderTodo(); return; }
+  if(!isNewTodo){
     todoEditingId = null;
     document.getElementById('todo-edit-banner').classList.remove('show');
     document.getElementById('todo-save-btn').textContent = '✅ إضافة المهمة';
     showToast('✏️ تم التعديل');
-  } else {
-    todos.push({id:Date.now(), date, notes, place, priority, done:false});
-    showToast('✅ تم إضافة المهمة');
-  }
-  saveAll(); renderTodo(); clearTodoForm();
+  } else showToast('✅ تم إضافة المهمة');
+  renderTodo(); clearTodoForm();
 }
 
 function clearTodoForm(){
@@ -4627,18 +4681,23 @@ function saveDailyRecord(){
   const place     =document.getElementById('daily-place').value.trim();
   const photo     =dailyPhotoData||null;
   if(!date||!contractor||!work){showToast('⚠ التاريخ والمقاول وبيان الأعمال مطلوبين',true);return;}
-  if(dailyEditingId!==null){
+  const isNewDaily = dailyEditingId===null;
+  if(!isNewDaily){
     const idx=dailyRecords.findIndex(r=>r.id===dailyEditingId);
     if(idx!==-1) dailyRecords[idx]={...dailyRecords[idx],date,day,contractor,spec,work,place,photo};
+  } else {
+    dailyRecords.push({id:Date.now(),date,day,contractor,spec,work,place,photo});
+  }
+  // أخطر فورم في الموضوع ده: الصور هي أشهر سبب لامتلاء الذاكرة، وكان بيمسح النموذج والصورة
+  // بعد الحفظ الفاشل — يعني التقرير والصورة يضيعوا مع بعض. دلوقتي بنسيبهم عشان يعيد المحاولة.
+  if(!saveAll()){ if(isNewDaily) dailyRecords.pop(); renderDaily(''); return; }
+  if(!isNewDaily){
     dailyEditingId=null;
     document.getElementById('daily-edit-banner').style.display='none';
     document.getElementById('daily-save-btn').textContent='✅ حفظ التقرير اليومي';
     showToast('✏️ تم التعديل');
-  } else {
-    dailyRecords.push({id:Date.now(),date,day,contractor,spec,work,place,photo});
-    showToast('✅ تم حفظ التقرير اليومي');
-  }
-  saveAll(); clearDailyForm();
+  } else showToast('✅ تم حفظ التقرير اليومي');
+  clearDailyForm();
   renderDaily('');
 }
 
@@ -5284,6 +5343,9 @@ function isoDateMonthsAgo(months){
 let _syncSnap=JSON.parse(localStorage.getItem('cea_sync_snapshot')||'{}');
 function saveSyncSnap(){ localStorage.setItem('cea_sync_snapshot', JSON.stringify(_syncSnap)); }
 function snapOf(entity){ if(!_syncSnap[entity]) _syncSnap[entity]={}; return _syncSnap[entity]; }
+// كل الكيانات اللي ليها snapshot (mirrorPushById + mirrorPushByName) — تُستخدم في تفضية الـsnapshot
+// بعد الاستعادة من ملف من غير ما نمسح الأوبچكت نفسه (initialSync بيفرّق بين الاتنين)
+const SYNC_ENTITIES=['records','ir','equipment','todos','exec','daily','contractors','places','inspectors','items'];
 
 // hash نصي بسيط (djb2) — كافي لاكتشاف التغيير، مش للأمان
 function syncHash(obj){
@@ -6159,7 +6221,20 @@ function applyRestoreData(jsonStr){
     if(IT) items        = IT.map(it=>({cat:str(it.cat), name:str(it.name), stages:stages(it.stages)}));
     if(D)  dailyRecords = D.map(x=>withId({...x, photo:isDataImg(x.photo)?x.photo:null, photoFileId:x.photoFileId!=null?num(x.photoFileId,null):null}));
     if(E)  execRecords  = E.map(x=>withId({...x, pct:num(x.pct,0), stages:stages(x.stages), stageDone:Array.isArray(x.stageDone)?x.stageDone.map(Boolean):[]}));
+    // ⚠ الاستعادة بتستبدل بيانات الجهاز بالكامل — لازم snapshot المزامنة يتفضّى الأول.
+    // من غير كده أول مزامنة بعدها بتلاقي سجلات في الـsnapshot ومش في الملف فتعتبرها "اتحذفت"
+    // وتبعت DELETE للسيرفر: استعادة نسخة من أسبوعين كانت بتمسح الأسبوعين دول من السحابة كمان.
+    // مهم: بنفضّي كل كيان لوحده ومابنمسحش الأوبچكت نفسه ({}) — لأن initialSync بيعتبر
+    // snapshot فاضي خالص = "أول اتصال بالسيرفر" فيعرض ديالوج الترحيل اللي "موافق" فيه
+    // بتعمل pullAll وتلغي الاستعادة اللي المهندس لسه عاملها. الحماية من الحذف بتفضل زي ما هي
+    // لأن حلقة الـDELETE بتلف على مفاتيح كيان فاضي = صفر حذف.
+    SYNC_ENTITIES.forEach(k=>{ _syncSnap[k]={}; });
+    saveSyncSnap();
+    _suppressAutoSync=true;
     saveAll();
+    _suppressAutoSync=false;
+    // نجدول مزامنة عشان الـsnapshot يتبني تاني فورًا (زي ما resetAllApp بيعمل pullAll بعد المسح)
+    scheduleSync();
     populateDropdowns();
     renderRecords();
     renderIR();
@@ -6183,7 +6258,7 @@ function restoreFromFile(input){
 }
 
 function restoreData() {
-  if(!confirm('هل أنت متأكد؟ ستُستبدل كل البيانات الحالية بالنسخة الاحتياطية!')) return;
+  if(!confirm('⚠ استعادة نسخة احتياطية من ملف\n\n• بيانات الجهاز الحالية كلها هتتستبدل بمحتوى الملف.\n• نسختك على السيرفر مش هتتمسح.\n• أول مزامنة هترجّع المقاولين والأماكن والبنود وطلبات الفحص والمهام والموقف التنفيذي والمعدات.\n• السراكي الأقدم من أقدم تاريخ في الملف بترجع بزرار "⬇️ تحميل سجلات أقدم"، والتقارير اليومية بترجع من زرار "استعادة" في الإعدادات.\n\nتكمل؟')) return;
   if(window.isCapacitor){
     // Use Capacitor FilePicker plugin
     if(window.Capacitor.Plugins.FilePicker){
