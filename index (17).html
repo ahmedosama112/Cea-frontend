@@ -197,8 +197,12 @@
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
 
-    <div class="subhead" style="margin-top:0">🪪 المسمى الوظيفي والصلاحية</div>
+    <div class="subhead" style="margin-top:0">🪪 الاسم والمسمى الوظيفي والصلاحية</div>
     <div class="add-row" style="margin-top:0">
+      <input type="text" id="admin-user-name" placeholder="الاسم بالعربي (يظهر في التسليمات والاعتمادات وجوجل شيت)" maxlength="120">
+      <button class="btn btn-navy btn-inline" onclick="adminSaveName()">💾 حفظ</button>
+    </div>
+    <div class="add-row" style="margin-top:6px">
       <input type="text" id="admin-user-jobtitle" placeholder="المسمى (مثال: مهندس تنفيذ / مهندس مكتب فني / مساح)" maxlength="100">
       <button class="btn btn-navy btn-inline" onclick="adminSaveTitle()">💾 حفظ</button>
     </div>

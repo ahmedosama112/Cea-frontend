@@ -1464,7 +1464,7 @@ async function renderAdmin(){
     list.innerHTML = _adminUsers.map(u=>`
       <div class="setting-item">
         <div style="flex:1;min-width:0">
-          <div class="setting-name" style="direction:ltr;text-align:right">${esc(u.email)} ${presenceDot(u.lastSeenAt)}</div>
+          <div class="setting-name" style="text-align:right">${u.displayName?esc(u.displayName)+' <span style="font-weight:600;color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(u.email)+'</span>':'<span style="direction:ltr;unicode-bidi:embed">'+esc(u.email)+'</span>'} ${presenceDot(u.lastSeenAt)}</div>
           <div class="setting-sub">${esc(u.title||(u.role==='ADMIN'?'مدير النظام':'مستخدم'))}${u.role==='ADMIN'&&u.title?' · مدير نظام':''}${u.project?' · '+(u.project==='تجاري'?'🏪':'🏠')+' '+esc(u.project):''} · 🏗️ ${esc(siteName(u.site))} · ${presenceText(u.lastSeenAt)}</div>
           <div class="setting-sub" style="margin-top:3px">${adminSyncLine(u)}</div>
         </div>
@@ -1491,6 +1491,7 @@ async function adminOpenUser(id){
   document.getElementById('admin-user-title').textContent='⚙️ '+_adminSelected.email;
   document.getElementById('admin-user-card').style.display='block';
   document.getElementById('admin-user-jobtitle').value=_adminSelected.title||'';
+  document.getElementById('admin-user-name').value=_adminSelected.displayName||'';
   document.getElementById('admin-user-role').value=_adminSelected.role||'ENGINEER';
   document.getElementById('admin-user-project').value=_adminSelected.project||'سكني';
   document.getElementById('admin-user-site').value=String(_adminSelected.site||1);
@@ -1704,6 +1705,18 @@ async function adminClearSignature(){
 }
 
 // ── المسمى الوظيفي والصلاحية ──
+// اسم الشخص للعرض: الاسم بالعربي (displayName) → اللقب → أول الإيميل
+function personName(u){ if(!u) return ''; return u.displayName || u.title || String(u.email||'').split('@')[0]; }
+async function adminSaveName(){
+  if(!_adminSelected) return;
+  const displayName=document.getElementById('admin-user-name').value.trim();
+  try{
+    const r=await api('PATCH',`/api/admin/users/${_adminSelected.id}`,{displayName:displayName||null});
+    _adminSelected.displayName=r.data.displayName;
+    showToast(displayName?'✅ تم حفظ الاسم: '+displayName:'✅ اتشال الاسم — هيظهر أول الإيميل');
+    renderAdmin();
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
 async function adminSaveTitle(){
   if(!_adminSelected) return;
   const title=document.getElementById('admin-user-jobtitle').value.trim();
@@ -1811,7 +1824,7 @@ function adminFillGradeAndApprovers(){
   box.innerHTML=chain.map(l=>{
     const ui=APR_LEVEL_UI[l]; const cur=u[ui.field]?String(u[ui.field]):'';
     const opts=(_aprMeta.approvers||[]).filter(a=>a.grade===l&&String(a.id)!==String(u.id))
-      .map(a=>`<option value="${esc(String(a.id))}"${String(a.id)===cur?' selected':''}>${esc(a.title||a.email.split('@')[0])} — ${esc(a.email)}</option>`).join('');
+      .map(a=>`<option value="${esc(String(a.id))}"${String(a.id)===cur?' selected':''}>${esc(personName(a))} — ${esc(a.email)}</option>`).join('');
     // مدير المشروع الوحيد في النظام بيتحدد تلقائيًا من غير إسناد صريح
     const auto = l==='project manager' && !cur && _aprMeta.solePmId;
     const empty = auto ? '<option value="">(تلقائي — مدير المشروع الوحيد)</option>' : '<option value="">— مش محدد (المستوى ده هيتخطى) —</option>';
@@ -2682,7 +2695,7 @@ function openSubmitReview(b, exp){
       <div class="modal-head">📤 مراجعة الكشف قبل الإرسال</div>
       <div class="modal-body">
         <div class="hint-box" style="margin-bottom:10px">
-          <div><strong>المهندس:</strong> ${esc(getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
+          <div><strong>المهندس:</strong> ${esc(localStorage.getItem('cea_user_name')||getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
           <div><strong>المقاول:</strong> ${esc(ctrLabel)}</div>
           ${b.placesLabel?'<div><strong>المكان:</strong> '+esc(b.placesLabel)+'</div>':''}
           <div><strong>الأسبوع:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)}</div>
@@ -3136,7 +3149,7 @@ function openEquipmentReview(b, exp, canSend){
       <div class="modal-head">${canSend?'📤 مراجعة الكشف الشهري قبل الإرسال':'👁 معاينة الكشف الشهري'}</div>
       <div class="modal-body">
         <div class="hint-box" style="margin-bottom:10px">
-          <div><strong>المهندس:</strong> ${esc(getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
+          <div><strong>المهندس:</strong> ${esc(localStorage.getItem('cea_user_name')||getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
           <div><strong>المعدة:</strong> ${esc(b.placesLabel||'')} · <strong>المقاول:</strong> ${esc(b.contractorNames.join('، '))}</div>
           <div><strong>الشهر:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)} · <strong>الموقع:</strong> ${esc(b.siteLabel||'')}</div>
           <div><strong>أيام التشغيل:</strong> ${b.monthDays} · <strong>إجمالي الساعات:</strong> ${fmtMinutes(b.monthMinutes)}</div>
@@ -3268,7 +3281,7 @@ function aprLevelCell(r, level){
   const last=rv[rv.length-1];
   if(last){
     // مين اعتمد وإمتى — بيتعرض هنا برّه الشيت (قرار 8 سبتمبر: الشيت نفسه يفضل نضيف بالتوقيع بس)
-    const who=last.byUser ? (last.byUser.title || String(last.byUser.email||'').split('@')[0]) : '';
+    const who=personName(last.byUser);
     const when=last.createdAt ? new Date(last.createdAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) : '';
     const by = who ? '<br><small class="apr-by">بواسطة '+esc(who)+(when?' · '+esc(when):'')+'</small>' : '';
     if(last.decision==='REJECTED') return '<span class="apr-pill apr-rej">❌ مرفوض</span>'+by;
@@ -3324,7 +3337,7 @@ function aprBuildTable(){
     const mine=r.canAct?' class="mine"':'';
     return '<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
-      +'<td class="apr-eng">'+esc(r.user?.email?.split('@')[0]||'')+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
+      +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
       +'<td><button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 مراجعة</button><button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button></td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
@@ -3341,7 +3354,7 @@ function aprBuildTable(){
 // مراجعة = معاينة الملف جوه التطبيق (جدول) من غير تحميل — نفس محرك معاينة الكشوف
 async function aprReview(id){
   const r=_aprRows.find(x=>String(x.id)===String(id));
-  const name=r?.user?.email?.split('@')[0]||'الكشف';
+  const name=personName(r?.user)||'الكشف';
   showToast('⏳ جاري فتح الملف للمراجعة...');
   try{
     await ensureExcelJS();
@@ -3385,7 +3398,7 @@ function aprOpenPreview(title, wb, r){
       <div class="modal-head">${esc(title)}</div>
       <div class="modal-body">
         <div class="hint-box" style="margin-bottom:10px">
-          <div><strong>المهندس:</strong> ${esc(r.user?.email||'')}${r.user?.title?' — '+esc(r.user.title):''}</div>
+          <div><strong>المهندس:</strong> ${esc(personName(r.user))}${r.user?.displayName?' <span style="color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(r.user.email||'')+'</span>':''}${r.user?.title?' — '+esc(r.user.title):''}</div>
           <div><strong>المقاول:</strong> ${esc(r.contractorName||'')}</div>
           ${r.placeName?'<div><strong>المكان:</strong> '+esc(r.placeName)+'</div>':''}
           <div><strong>الأسبوع:</strong> من ${esc(r.weekStart)} إلى ${esc(r.weekEnd)}</div>
@@ -3901,7 +3914,7 @@ function subRow(s, adminView){
       + struckRows.map(x=>'✕ <b>سطر مشطوب:</b> '+esc(x.label)+' — <b>'+esc(x.level)+'</b>'+(x.note?': '+esc(x.note):'')).join('<br>')
       + (s.reviewState==='IN_REVIEW'||s.reviewState==='SENT' ? '<br><span style="font-weight:600">الكشف كمّل اعتماده من غير السطور دي (اتشالت من الإجمالي).</span>' : '')+'</div>'
     : '';
-  const who = adminView ? '<div class="s">👤 '+esc(s.user?.email||'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
+  const who = adminView ? '<div class="s">👤 '+esc(personName(s.user))+(s.user?.displayName?' <span style="color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(s.user.email||'')+'</span>':'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
   return `<div class="setting-item" style="flex-direction:column;align-items:stretch;gap:6px">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">
       <div style="min-width:0;flex:1 1 240px">
@@ -4031,7 +4044,7 @@ async function renderActivityTable(){
         ? '<b style="color:var(--warn-fg)">'+u.errors+'</b>'+(u.errTop?'<br><small class="text-muted">'+esc(String(u.errTop.status))+' · '+esc(String(u.errTop.path||'').replace('/api/',''))+'</small>':'')
         : '0';
       return '<tr>'
-        +'<td class="apr-eng" style="text-align:right">'+esc(u.email.split('@')[0])+'<small>'+esc(u.title||u.grade||'')+'</small></td>'
+        +'<td class="apr-eng" style="text-align:right">'+esc(personName(u))+'<small>'+esc(u.title||u.grade||'')+'</small></td>'
         +'<td><span class="apr-pill" style="background:'+v.b+';color:'+v.c+'">'+esc(v.t)+'</span></td>'
         +'<td>'+esc(actWhen(u.lastSeenAt))+'</td>'
         +'<td>'+(u.loginOk||0)+'</td>'
@@ -5031,6 +5044,7 @@ function saveSession(data){
     localStorage.setItem('cea_user_email', data.user.email);
     localStorage.setItem('cea_user_role',  data.user.role || 'ENGINEER');
     if(data.user.title!==undefined) localStorage.setItem('cea_user_title', data.user.title||'');
+    if(data.user.displayName!==undefined) localStorage.setItem('cea_user_name', data.user.displayName||'');
   }
 }
 function clearSession(){
@@ -5111,7 +5125,7 @@ async function verifySession(token){
     const res=await fetch(API_URL+'/api/auth/me',{headers:{'Authorization':'Bearer '+token}});
     if(res.ok){
       const d=await res.json();
-      if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); applyFormButtons(); }
+      if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_name', d.data.displayName||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); applyFormButtons(); }
       return 'ok';
     }
     // 429 (ضغط طلبات) أو خطأ سيرفر مؤقت = مش انتهاء جلسة — نعتبره مشكلة شبكة ونكمل أوفلاين
