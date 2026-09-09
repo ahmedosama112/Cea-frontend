@@ -3473,7 +3473,7 @@ function aprStatusPill(r){
     const rej=(r.reviews||[]).filter(x=>x.decision==='REJECTED').pop();
     return '<span class="apr-pill apr-rej">❌ رجع للمهندس'+(rej?' من '+esc(rej.level):'')+'</span>'+aprHideBtn(r);
   }
-  if(r.reviewState==='SENT') return '<span class="apr-pill apr-ok">✅ اتبعت للتوقيع</span>'+aprHideBtn(r);
+  if(r.reviewState==='SENT') return '<span class="apr-pill apr-ok">✅ اتبعت لمراجعة الـ DC</span>'+aprHideBtn(r);
   if(r.canAct) return '<div class="apr-acts">'
     + '<button class="apr-a apr-a-ok" onclick="aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED\')">!</span></button>'
     + '<button class="apr-a apr-a-notes" onclick="aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED_NOTES\')">!</span></button>'
