@@ -1339,7 +1339,9 @@ function switchTab(name){
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   const panel=document.getElementById('tab-'+name); if(panel) panel.classList.add('active');
   const title=document.getElementById('header-title'); if(title) title.textContent=TAB_TITLES[name]||'CEA';
-  if(name==='home')renderHome();
+  if(name==='home'){renderHome(); loadWindows();}
+  // تاب السراكي والاعتمادات محتاجين حالة المواعيد عشان يقفلوا الأزرار
+  if(name==='records'||name==='approvals') loadWindows();
   if(name==='submissions'&&typeof renderMySubmissions==='function')renderMySubmissions();
   if(name==='inventory')renderInventory();
   if(name==='approvals')renderApprovals();
@@ -1491,6 +1493,7 @@ async function renderAdmin(){
   if(!isAdmin()) { switchTab('home'); return; }
   await loadSiteNames(); // الأول — عشان أسماء المواقع تظهر صح في labels الفيتشرز والدروب داون
   loadAprLevelsAdmin();
+  renderWindowsAdmin();
   renderActivityTable();
   loadBackupStatus();
   adminModuleCheckboxes('admin-create-modules', ['records','submissions','todo','summary'], DEFAULT_FEATURES);
@@ -3230,6 +3233,173 @@ function sheetTimeline(s){
     + '<span style="font-weight:800;color:'+color+'">'+icon+' '+(st?esc(st):'قيد الاعتماد')+'</span><br>'
     + steps.join('<br>') + '</div>';
 }
+/* ═══════════ مواعيد الإرسال والاعتماد (9 سبتمبر 2026) ═══════════
+   الأدمن بيحدد نافذة أسبوعية لكل عملية (مثال: الإرسال من التلات 8ص للأربع 5م).
+   ⚠ القفل الحقيقي في السيرفر (requireWindow) — اللي هنا إخفاء وتوضيح بس:
+   المستخدم يشوف الميعاد والعدّاد بدل ما يضغط ويتفاجئ برفض.
+
+   ساعة الجهاز مش مصدر موثوق (ممكن تكون غلط أو يغيّرها عمدًا)، فبنحسب فرقها عن
+   وقت السيرفر مرة واحدة (_winSkew) ونعوّضه في العدّاد. القرار نفسه من السيرفر دايمًا. */
+let _winStates=null, _winSkew=0, _winTimer=null, _winLoading=false;
+
+function winNow(){ return Date.now()+_winSkew; }
+function winState(kind){ return _winStates ? _winStates[kind] : null; }
+/* مفتوح؟ لو لسه ما جبناش الحالة بنقول "مفتوح" — ما نقفلش على المستخدم بسبب بطء تحميل،
+   والسيرفر هو اللي هيرفض فعلًا لو مقفول. */
+function winOpen(kind){ const s=winState(kind); return !s || s.open; }
+
+async function loadWindows(){
+  if(_winLoading || !getAccessToken() || !navigator.onLine) return;
+  _winLoading=true;
+  try{
+    const r=await api('GET','/api/windows');
+    _winStates=r.data;
+    if(r.serverNow) _winSkew=new Date(r.serverNow).getTime()-Date.now();
+    renderWindowCards();
+    applyWindowLocks();
+  }catch(e){ /* الشبكة وقعت — نسيب آخر حالة معروفة */ }
+  finally{ _winLoading=false; }
+}
+
+/* فرق زمني بالعربي: "يومين و3 ساعات" · "5 ساعات و12 دقيقة" · "00:04:31" لما يقرّب */
+function winCountdown(ms){
+  if(ms<0) ms=0;
+  const s=Math.floor(ms/1000), d=Math.floor(s/86400), h=Math.floor(s%86400/3600), m=Math.floor(s%3600/60), ss=s%60;
+  if(d>0) return d+' يوم و '+h+' ساعة';
+  if(h>0) return h+' ساعة و '+m+' دقيقة';
+  return String(m).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+}
+function winCardHtml(st){
+  if(!st || !st.enabled) return '';
+  const left = st.nextChangeAt ? (new Date(st.nextChangeAt).getTime()-winNow()) : 0;
+  const cls = st.open ? (left<60*60*1000 ? 'win-soon' : 'win-open') : 'win-shut';
+  const icon= st.open ? (st.overrideOpen?'🔓':'🟢') : '🔒';
+  const head= st.open
+    ? (st.overrideOpen ? st.label+' مفتوح استثنائيًا' : st.label+' مفتوح دلوقتي')
+    : st.label+' مقفول';
+  return '<div class="win-card '+cls+'" data-win="'+st.kind+'">'
+    + '<div class="win-head"><span>'+icon+' '+esc(head)+'</span><span class="win-sub">'+esc(st.nextChangeLabel||'')+'</span></div>'
+    + '<div class="win-time" data-at="'+esc(st.nextChangeAt||'')+'">'+(st.nextChangeAt?winCountdown(left):'—')+'</div>'
+    + '<div class="win-foot">'+esc(winScheduleText(st))+'</div>'
+    + '</div>';
+}
+const WIN_DAYS=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+function winScheduleText(st){
+  if(!st.windows || !st.windows.length) return '';
+  return st.windows.map(w=>'من '+WIN_DAYS[w.from.day]+' '+w.from.time+' إلى '+WIN_DAYS[w.to.day]+' '+w.to.time).join(' · ');
+}
+/* الكارت بيظهر للي الوحدة مفعّلة له بس: الإرسال لأصحاب وحدة التسليمات، والاعتماد لأصحاب وحدة الاعتمادات */
+function renderWindowCards(){
+  const box=document.getElementById('win-cards'); if(!box) return;
+  if(!_winStates){ box.innerHTML=''; return; }
+  let html='';
+  if(moduleEnabled('submissions')) html+=winCardHtml(_winStates.submit);
+  if(moduleEnabled('approvals'))   html+=winCardHtml(_winStates.approve);
+  box.innerHTML=html;
+  if(html && !_winTimer) _winTimer=setInterval(winTick,1000);
+  if(!html && _winTimer){ clearInterval(_winTimer); _winTimer=null; }
+}
+/* العدّاد بيتحدّث محليًا كل ثانية؛ ولما يوصل صفر بنسأل السيرفر تاني عن الحالة الجديدة */
+function winTick(){
+  const els=document.querySelectorAll('#win-cards .win-time[data-at]');
+  if(!els.length) return;
+  let flipped=false;
+  els.forEach(el=>{
+    const at=el.dataset.at; if(!at) return;
+    const left=new Date(at).getTime()-winNow();
+    el.textContent=winCountdown(left);
+    if(left<=0) flipped=true;
+    const card=el.closest('.win-card');
+    if(card && card.classList.contains('win-open') && left<60*60*1000){ card.classList.remove('win-open'); card.classList.add('win-soon'); }
+  });
+  if(flipped) loadWindows();
+}
+
+/* قفل الأزرار: زرار الإرسال في تاب السراكي، وأزرار القرار في تاب الاعتمادات.
+   بنحط سبب واضح مكان الزرار بدل ما نخفيه — المستخدم يعرف بيفتح امتى. */
+function applyWindowLocks(){
+  const sub=document.getElementById('submit-review-btn');
+  if(sub){
+    const st=winState('submit'), locked=st&&st.enabled&&!st.open&&!isAdmin();
+    sub.disabled=!!locked;
+    sub.classList.toggle('is-locked', !!locked);
+    if(locked) sub.textContent='🔒 '+st.nextChangeLabel;
+    else sub.textContent='📤 مراجعة وإرسال الكشف للاعتماد';
+    const hint=document.getElementById('submit-window-hint');
+    if(hint) hint.innerHTML = locked ? '⏰ '+esc(st.reason)+' — تقدر تسجّل سراكي عادي، الإرسال بس هو اللي مقفول.' : '';
+  }
+  if(typeof aprBuildTable==='function' && _aprRows && _aprRows.length) aprBuildTable();
+}
+/* ── إدارة المواعيد (الأدمن) ──
+   نافذة واحدة لكل عملية في الواجهة. التخزين في السيرفر مصفوفة، فلو احتجنا نافذتين
+   في الأسبوع بعدين نزوّد صف هنا من غير ما نلمس الباك اند ولا شكل التخزين. */
+let _winAdmin=null;
+async function renderWindowsAdmin(){
+  const box=document.getElementById('windows-admin'); if(!box) return;
+  if(!navigator.onLine){ box.innerHTML='<div class="home-empty">بيانات حية — محتاج اتصال بالنت</div>'; return; }
+  try{
+    const r=await api('GET','/api/windows');
+    _winAdmin=r.data;
+    if(r.serverNow) _winSkew=new Date(r.serverNow).getTime()-Date.now();
+    box.innerHTML=['submit','approve'].map(winAdminBlock).join('');
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+function winDayOptions(sel){
+  return WIN_DAYS.map((d,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+d+'</option>').join('');
+}
+function winAdminBlock(kind){
+  const st=_winAdmin[kind], w=(st.windows&&st.windows[0])||{from:{day:2,time:'08:00'},to:{day:3,time:'17:00'}};
+  const status = st.enabled
+    ? (st.open
+        ? '<div class="win-status" style="background:var(--ok-bg);color:var(--ok-fg)">🟢 مفتوح دلوقتي'+(st.overrideOpen?' (فتح استثنائي)':'')+' — '+esc(st.nextChangeLabel)+'</div>'
+        : '<div class="win-status" style="background:var(--danger-bg);color:var(--danger-fg)">🔒 مقفول — '+esc(st.nextChangeLabel)+'</div>')
+    : '<div class="win-status" style="background:var(--input);color:var(--muted)">⚪ متعطّل — مفتوح على طول (زي ما كان قبل الميزة)</div>';
+  return '<div class="subhead" style="margin-top:10px">'+(kind==='submit'?'📤 إرسال السراكي':'🖋️ الاعتماد')+'</div>'
+    + status
+    + '<label class="win-row" style="cursor:pointer"><input type="checkbox" id="win-'+kind+'-on"'+(st.enabled?' checked':'')+' style="width:auto;flex:0 0 auto"> <span class="lbl">فعّل الميعاد لهذه العملية</span></label>'
+    + '<div class="win-row"><span class="lbl">من</span>'
+      + '<select id="win-'+kind+'-fd">'+winDayOptions(w.from.day)+'</select>'
+      + '<input type="time" id="win-'+kind+'-ft" value="'+esc(w.from.time)+'"></div>'
+    + '<div class="win-row"><span class="lbl">إلى</span>'
+      + '<select id="win-'+kind+'-td">'+winDayOptions(w.to.day)+'</select>'
+      + '<input type="time" id="win-'+kind+'-tt" value="'+esc(w.to.time)+'"></div>'
+    + '<div class="win-row">'
+      + '<button class="btn btn-navy btn-inline" onclick="winSave(\''+kind+'\')">💾 حفظ</button>'
+      + '<button class="btn btn-gold btn-inline" onclick="winOpenFor(\''+kind+'\',60)">🔓 افتح ساعة</button>'
+      + '<button class="btn btn-gold btn-inline" onclick="winOpenFor(\''+kind+'\',24*60)">🔓 افتح 24 ساعة</button>'
+      + (st.openUntil ? '<button class="btn btn-danger btn-inline" onclick="winOpenFor(\''+kind+'\',0)">✕ ألغِ الفتح الاستثنائي</button>' : '')
+    + '</div>';
+}
+function winReadForm(kind){
+  const v=id=>{const e=document.getElementById(id);return e?e.value:'';};
+  return {
+    enabled: !!document.getElementById('win-'+kind+'-on')?.checked,
+    windows: [{
+      from:{ day:Number(v('win-'+kind+'-fd')), time:v('win-'+kind+'-ft')||'08:00' },
+      to:  { day:Number(v('win-'+kind+'-td')), time:v('win-'+kind+'-tt')||'17:00' },
+    }],
+    openUntil: _winAdmin[kind].openUntil || null,
+  };
+}
+async function winSave(kind){
+  try{
+    const r=await api('PATCH','/api/admin/windows',{[kind]:winReadForm(kind)});
+    _winAdmin=r.data; _winStates=r.data;
+    showToast('✅ اتحفظ الميعاد');
+    renderWindowsAdmin(); renderWindowCards(); applyWindowLocks();
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+/* فتح استثنائي: بيغيّر openUntil بس — المواعيد الأساسية زي ما هي. minutes=0 معناها إلغاء. */
+async function winOpenFor(kind, minutes){
+  try{
+    const cfg=winReadForm(kind);
+    cfg.openUntil = minutes>0 ? new Date(winNow()+minutes*60000).toISOString() : null;
+    const r=await api('PATCH','/api/admin/windows',{[kind]:cfg});
+    _winAdmin=r.data; _winStates=r.data;
+    showToast(minutes>0 ? '🔓 اتفتح لحد '+new Date(cfg.openUntil).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'}) : '✕ اتلغى الفتح الاستثنائي');
+    renderWindowsAdmin(); renderWindowCards(); applyWindowLocks();
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
 /* ═══════════ اعتمادات المديرين (وحدة approvals — أونلاين فقط) ═══════════
    سلسلة مراجعة داخل التطبيق قبل ما الكشف ينزل جوجل شيت. */
 let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false, _aprMyId='';
@@ -3441,6 +3611,11 @@ function aprStatusPill(r){
     return '<span class="apr-pill apr-rej">❌ رجع للمهندس'+(rej?' من '+esc(rej.level):'')+'</span>'+aprHideBtn(r);
   }
   if(r.reviewState==='SENT') return '<span class="apr-pill apr-ok">✅ اتبعت لمراجعة الـ DC</span>'+aprHideBtn(r);
+  // برّه ميعاد الاعتماد: بنوري الميعاد مكان الأزرار (والسيرفر رافض برضو). الأدمن مستثنى.
+  if(r.canAct && !winOpen('approve') && !isAdmin()){
+    const st=winState('approve');
+    return '<span class="apr-pill apr-lock" title="'+esc(st?st.reason:'')+'">🔒 '+esc(st?st.nextChangeLabel:'مقفول')+'</span>'+aprHideBtn(r);
+  }
   if(r.canAct) return '<div class="apr-acts">'
     + '<button class="apr-a apr-a-ok" onclick="aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED\')">!</span></button>'
     + '<button class="apr-a apr-a-notes" onclick="aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED_NOTES\')">!</span></button>'
@@ -5500,6 +5675,8 @@ function onAuthReady(offline){
   const banner=document.getElementById('offline-banner');
   if(banner) banner.style.display=offline?'block':'none';
   if(offline) showToast('⚠ وضع أوفلاين — الاتصال بالخادم غير متاح دلوقتي، شغلك بيتحفظ محليًا وهيتزامن أول ما النت يرجع', true);
+  // مواعيد الإرسال/الاعتماد — محتاجينها من أول لحظة عشان الكارت يبان والأزرار تتقفل قبل ما المستخدم يدوس
+  if(!offline) loadWindows();
   setTimeout(()=>{const s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(()=>s.remove(),700);}},600);
   const today=todayYMD();
   document.getElementById('f-date').value=today; autoSetDay(today);

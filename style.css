@@ -725,6 +725,24 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-table tr.mine { background:linear-gradient(90deg,rgba(201,168,76,.14),transparent); }
 /* عمود "الإجراء / الحالة" (آخر عمود = أقصى الشمال في RTL) بيتحرّك عادي مع الجدول —
    كان مثبّتًا (sticky) فكان بيفضل واقف مكانه وقت التمرير والزوم. اتشال بقرار صاحب المشروع (9 سبتمبر 2026). */
+/* ═══ عدّاد مواعيد الإرسال والاعتماد (9 سبتمبر 2026) ═══
+   كارت كبير فوق الرئيسية: أخضر = مفتوح · أصفر = فاضل أقل من ساعة · أحمر = مقفول. */
+.win-card { border-radius:var(--radius,14px); padding:12px 14px; margin-bottom:8px; color:#fff; box-shadow:0 4px 14px rgba(0,0,0,.18); }
+.win-open { background:linear-gradient(135deg,#1B5E20,#2E7D32); }
+.win-soon { background:linear-gradient(135deg,#8A6D1D,#C9A84C); color:#1A2640; }
+.win-shut { background:linear-gradient(135deg,#8E1B1B,#C62828); }
+.win-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; font-weight:900; font-size:13px; }
+.win-sub { font-size:11px; font-weight:700; opacity:.85; }
+.win-time { font-size:30px; font-weight:900; line-height:1.25; margin-top:2px; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+.win-foot { font-size:11px; font-weight:700; opacity:.85; margin-top:2px; }
+/* زرار مقفول بسبب الميعاد — شكل مختلف عن المعطّل العادي عشان يبان إنه مؤقت */
+.btn.is-locked { background:var(--input) !important; color:var(--muted) !important; border:1px dashed var(--border-strong) !important; box-shadow:none !important; cursor:not-allowed; }
+/* قسم المواعيد في إدارة الحسابات */
+.win-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:6px; }
+.win-row select, .win-row input[type=time] { flex:1 1 100px; min-width:90px; }
+.win-row .lbl { font-size:12px; font-weight:800; color:var(--muted); flex:0 0 auto; }
+.win-status { font-size:12px; font-weight:800; padding:6px 10px; border-radius:8px; margin-top:8px; }
+
 /* ═══ أكورديون تاب إدارة الحسابات (9 سبتمبر 2026) ═══
    التاب كان ٢٠٠٠+ بيكسل تمرير: ٨ كروت مفتوحة فوق بعض طول الوقت. بقوا عناوين
    تفتحها لما تحتاجها — واختيارك بيتحفظ على الجهاز. المحتوى جوّه زي ما هو بالظبط. */

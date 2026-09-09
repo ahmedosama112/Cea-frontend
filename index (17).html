@@ -146,6 +146,9 @@
     <div class="home-greet-date" id="home-date"></div>
   </div>
 
+  <!-- عدّاد مواعيد الإرسال والاعتماد — بيتبني من /api/windows، ومبيظهرش خالص لو المواعيد متعطّلة -->
+  <div id="win-cards"></div>
+
   <div class="stat-grid" data-feature="home_stats">
     <button class="stat" onclick="switchTab('records')">
       <div class="stat-l">سراكي اليوم</div>
@@ -516,7 +519,15 @@
     </details>
   </div>
 
-  <details class="acc" data-acc="sites">
+    <details class="acc" data-acc="windows">
+    <summary class="acc-head"><span class="acc-t">⏰ مواعيد الإرسال والاعتماد</span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();renderWindowsAdmin()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
+      <p class="hint" style="margin-top:0">نافذة أسبوعية لكل عملية — بتبدأ في يوم وتخلص في يوم (مثال: التلات 8:00 → الأربع 17:00). <b>المواعيد بتوقيت القاهرة</b> والتوقيت الصيفي محسوب تلقائيًا. <b>الأدمن مستثنى دايمًا.</b></p>
+      <div id="windows-admin"><div class="home-empty">⏳</div></div>
+    </div>
+  </details>
+
+<details class="acc" data-acc="sites">
     <summary class="acc-head"><span class="acc-t">🏗️ أسماء المواقع</span><span class="acc-caret">▾</span></summary>
     <div class="acc-body">
     <p class="hint" style="margin-top:0">الأسماء دي بتظهر في كل قوائم اختيار "الموقع" هنا في لوحة الإدارة.</p>
@@ -763,7 +774,8 @@
 
   <div data-module="submissions">
   <div class="section-title"><span>📤</span> إرسال السركي للاعتماد</div>
-  <button class="btn btn-gold" onclick="submitApprovedForReview()">📤 مراجعة وإرسال الكشف للاعتماد</button>
+  <button class="btn btn-gold" id="submit-review-btn" onclick="submitApprovedForReview()">📤 مراجعة وإرسال الكشف للاعتماد</button>
+  <p class="hint" id="submit-window-hint" style="margin-top:6px;color:var(--danger-fg);font-weight:700"></p>
   <p class="hint" style="margin-top:6px">بيبني كشف الأسبوع للمقاولين/الأماكن المحددة، تراجعه وتوافق، ويتبعت مباشرة — من غير تنزيل ولا Google Form.</p>
   </div>
   <details style="margin-top:10px">
