@@ -340,7 +340,9 @@
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
 
-    <div class="subhead" style="margin-top:0">🪪 الاسم والمسمى الوظيفي والصلاحية</div>
+    <details class="acc acc-sub" data-acc="u-id" open>
+      <summary class="acc-head"><span class="acc-t">🪪 الاسم والمسمى الوظيفي والصلاحية</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div class="add-row" style="margin-top:0">
       <input type="text" id="admin-user-name" placeholder="الاسم بالعربي (يظهر في التسليمات والاعتمادات وجوجل شيت)" maxlength="120">
       <button class="btn btn-navy btn-inline" onclick="adminSaveName()">💾 حفظ</button>
@@ -372,33 +374,54 @@
       <button class="btn btn-navy btn-inline" onclick="adminSaveSite()">💾 حفظ الموقع</button>
     </div>
     <p class="hint" style="margin-top:4px">كل موقع ليه جوجل شيت واعتمادات مديرين مختلفة — كشوف المهندس بتروح لشيت موقعه.</p>
-    <div class="subhead" style="margin-top:8px">🎖️ الدرجة (بتحدد مين يعتمد له)</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-grade">
+      <summary class="acc-head"><span class="acc-t">🎖️ الدرجة (بتحدد مين يعتمد له)</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div class="add-row" style="margin-top:2px">
       <select id="admin-user-grade"></select>
       <button class="btn btn-navy btn-inline" onclick="adminSaveGrade()">💾 حفظ الدرجة</button>
     </div>
     <p class="hint" id="admin-grade-hint" style="margin-top:4px"></p>
 
-    <div class="subhead" style="margin-top:8px">🖋️ المعتمدون لهذا الحساب</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-approvers">
+      <summary class="acc-head"><span class="acc-t">🖋️ المعتمدون لهذا الحساب</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-user-approvers"></div>
     <p class="hint" style="margin-top:4px">لو الحساب درجته من درجات الاعتماد، فعّل له كمان وحدة "اعتمادات المديرين" من القائمة تحت عشان التاب يظهرله.</p>
 
-    <div class="subhead">🧩 الوحدات الظاهرة لهذا الحساب</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-modules">
+      <summary class="acc-head"><span class="acc-t">🧩 الوحدات الظاهرة لهذا الحساب</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-user-modules"></div>
     <button class="btn btn-primary mt8" onclick="adminSaveModules()">💾 حفظ الوحدات</button>
 
-    <div class="subhead">📄 كشوفه (التسليمات)</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-subs">
+      <summary class="acc-head"><span class="acc-t">📄 كشوفه (التسليمات)</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <p class="hint" style="margin-top:0">الحذف من هنا فقط — المهندس مابقاش يقدر يحذف كشفه بعد الإرسال.</p>
     <div id="admin-user-subs" class="list-scroll" style="max-height:220px"></div>
 
-    <div class="subhead between" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-      <span>📜 سجل النشاط (آخر 14 يوم)</span>
-      <button class="link-btn" onclick="adminLoadActivity()">🔄 تحديث</button>
-    </div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-activity">
+      <summary class="acc-head"><span class="acc-t">📜 سجل النشاط (آخر 14 يوم)</span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();adminLoadActivity()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <p class="hint" style="margin-top:0">دخول ناجح/فاشل، المزامنات، وأي خطأ رجع للجهاز — بيفرّق إذا كانت المشكلة من السيرفر ولا من عند المهندس.</p>
     <div id="admin-user-activity" class="list-scroll" style="max-height:240px"></div>
 
-    <div class="subhead">📍 أماكنه</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-places">
+      <summary class="acc-head"><span class="acc-t">📍 أماكنه</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-user-places" class="list-scroll" style="max-height:180px"></div>
     <div class="add-row">
       <input type="text" id="admin-new-place" placeholder="إسم المكان الجديد">
@@ -416,7 +439,11 @@
       <button class="btn btn-ghost btn-inline" onclick="adminPickPlace()">إضافة</button>
     </div>
 
-    <div class="subhead">👷 مقاولوه</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-contractors">
+      <summary class="acc-head"><span class="acc-t">👷 مقاولوه</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-user-contractors" class="list-scroll" style="max-height:220px"></div>
     <div class="hint" style="margin-top:8px">اكتب مقاول جديد (مش لازم يكون موجود عندك):</div>
     <div class="inline-form" style="margin-top:6px">
@@ -437,7 +464,11 @@
       <button class="btn btn-navy btn-inline" onclick="adminPickContractor()">➕ إضافة</button>
     </div>
 
-    <div class="subhead">✍️ التوقيع على كشوفه المعتمدة</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-sig">
+      <summary class="acc-head"><span class="acc-t">✍️ التوقيع على كشوفه المعتمدة</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-sig-preview" class="hint" style="margin-bottom:8px">—</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;row-gap:8px">
       <button class="btn btn-navy btn-inline" onclick="adminUseMySignature()">👤 استخدم توقيعي</button>
@@ -446,14 +477,22 @@
       <input type="file" id="admin-sig-file" accept="image/*" style="display:none" onchange="adminUploadSignature(this)">
     </div>
 
-    <div class="subhead">🔑 كلمة المرور</div>
+      </div>
+    </details>
+    <details class="acc acc-sub" data-acc="u-pass">
+      <summary class="acc-head"><span class="acc-t">🔑 كلمة المرور</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div class="add-row" style="margin-top:0">
       <input type="text" id="admin-new-pass" placeholder="كلمة مرور جديدة (8 أحرف على الأقل)" autocomplete="off">
       <button class="btn btn-ghost btn-inline" onclick="adminResetPassword()">🔄 إعادة تعيين</button>
     </div>
     <p class="hint" style="margin-top:6px">بعد التعيين، سلّم كلمة المرور للمهندس — وهيتسجّل خروجه من كل أجهزته تلقائيًا.</p>
 
-    <div class="subhead" style="color:var(--red)">⚠ حذف الحساب نهائيًا</div>
+      </div>
+    </details>
+    <details class="acc acc-sub acc-danger" data-acc="u-delete">
+      <summary class="acc-head"><span class="acc-t">⚠ حذف الحساب نهائيًا</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
     <div id="admin-delete-step0">
       <button class="btn btn-danger" onclick="adminDeleteStep1()">🗑 حذف هذا الحساب وكل بياناته</button>
     </div>
@@ -473,6 +512,8 @@
         <button class="btn btn-ghost btn-inline" onclick="adminDeleteCancel()">إلغاء</button>
       </div>
     </div>
+      </div>
+    </details>
   </div>
 
   <details class="acc" data-acc="sites">

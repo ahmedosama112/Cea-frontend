@@ -741,6 +741,18 @@ body.dark-mode .xl-wrap { background:#fff; }
 .acc-t .pill { flex:0 0 auto; }   /* جوّه flex الشارة كانت بتتمدّ لآخر السطر */
 .acc-body { padding:12px 14px 14px; }
 .acc-body > .hint:first-child { margin-top:0; }
+/* أكورديون متداخل جوّه كارت الحساب المختار: أخف من الأقسام الرئيسية — مفيش خلفية كارت
+   (إحنا جوّه كارت أصلًا)، حد واحد فوق كل قسم بدل البرواز الكامل، وعنوان أصغر شوية. */
+.acc-sub { background:transparent; border:none; border-top:1px solid var(--border); border-radius:0; margin-bottom:0; }
+.acc-sub:first-of-type { border-top:none; }
+.acc-sub > .acc-head { padding:11px 2px; font-size:13px; }
+.acc-sub > .acc-head:hover { background:transparent; color:var(--navy-text,var(--navy)); }
+.acc-sub[open] > .acc-head { border-bottom:none; background:transparent; }
+.acc-sub > .acc-body { padding:0 2px 12px; }
+/* قسم الحذف — عنوان أحمر زي ما كان قبل التحويل */
+.acc-danger > .acc-head, .acc-danger > .acc-head .acc-caret { color:var(--red); }
+.acc-danger > .acc-head:hover { color:var(--danger-fg); }
+
 
 /* ═══ تاب التسليمات: كروت مقسّمة بمجموعات (9 سبتمبر 2026) ═══
    الشكل القديم كان تيار كروت مسطّح: الكشف اللي محتاج تعديل النهارده جنب كشف اتعتمد من شهر بنفس الحجم،
