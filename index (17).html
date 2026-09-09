@@ -773,6 +773,18 @@
     <button id="gform-btn-1" class="btn btn-ghost" onclick="window.open('https://forms.gle/VjYxT2BkGj8UdkPY8','_blank')">📤 رفع ملف السركي على Google Form</button>
     <button id="gform-btn-2" class="btn btn-ghost" style="display:none" onclick="window.open('https://forms.gle/58VnYeRS69DgctbQ8','_blank')">📤 رفع ملف السركي على Google Form</button>
   </details>
+
+  <!-- بيان أعمال المقاول (غير رسمي) — منطوي، وفيتشر مستقل يقدر الأدمن يخفيه لأي حساب -->
+  <details style="margin-top:10px" data-feature="records_statement">
+    <summary class="hint" style="cursor:pointer">📋 بيان أعمال مقاول عن فترة (PDF غير رسمي)</summary>
+    <p class="hint" style="margin-top:8px">ورقة تديها للمقاول عشان يعرف عمل شغل بكام — كل يوم ببيانه وسعره وعدده وإجماليه. <b>مش بديل عن كشف السركي المعتمد.</b></p>
+    <div class="search-bar" style="margin-top:6px">
+      <div class="date-hint" data-ph="📅 من تاريخ"><input type="date" id="stmt-from" title="من تاريخ" onchange="this.closest('.date-hint').classList.toggle('has-val',!!this.value)"></div>
+      <div class="date-hint" data-ph="📅 إلى تاريخ"><input type="date" id="stmt-to" title="إلى تاريخ" onchange="this.closest('.date-hint').classList.toggle('has-val',!!this.value)"></div>
+    </div>
+    <p class="hint" style="margin-top:4px">سيب الخانتين فاضيين = كل السجلات. لتحديد مقاول أو مكان معيّن، استخدم فلاتر البحث فوق.</p>
+    <button class="btn btn-navy mt8" onclick="exportWorkStatement()">📋 طلّع بيان الأعمال</button>
+  </details>
 </div>
 
 <!-- ══ APPROVALS — اعتمادات المديرين (وحدة قابلة للتفعيل، أونلاين فقط) ══ -->

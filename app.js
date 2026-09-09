@@ -1258,6 +1258,7 @@ const ALL_FEATURES=[
   {key:'records_search',    label:'فلتر البحث',                 group:'السراكي'},
   {key:'records_sort',      label:'فلتر الترتيب',               group:'السراكي'},
   {key:'records_export_chips', label:'مقاولين وأماكن محددين للتصدير المعتمد', group:'السراكي'},
+  {key:'records_statement', label:'بيان أعمال المقاول (PDF غير رسمي)', group:'السراكي'},
   // الاعتمادات — زرار Google Form لكل موقع (الاسم بيتحدث تلقائيًا من أسماء المواقع)
   {key:'gform_site1',       label:'زرار Google Form — الموقع الأول', group:'الاعتمادات'},
   {key:'gform_site2',       label:'زرار Google Form — الموقع الثاني', group:'الاعتمادات'},
@@ -2099,6 +2100,161 @@ async function exportExcel(){
     XLSX.writeFile(wb, fileName);
     showToast(`📥 تم تنزيل ${exp.length} سجل!`);
   }
+}
+/* ═══════════ بيان أعمال المقاول (غير رسمي) — 9 سبتمبر 2026 ═══════════
+   الفرق عن exportPDF (السركي الرسمي): ده مش كشف اعتماد — مفيش خانات توقيع ولا اعتماد،
+   وبيشتغل على مدى تواريخ حر (من → إلى) مش أسبوع واحد، عشان المقاول يعرف عمل شغل بكام
+   في فترة معينة ومن مكان معين. نفس آلية exportPDF في الإخراج: صفحة HTML بـCSS طباعة،
+   والمستخدم يختار "حفظ كـ PDF" — مفيش مكتبة PDF، فالعربي بيطلع سليم. */
+function stmtVal(id){ const el=document.getElementById(id); return el?(el.value||'').trim():''; }
+/* سجلات البيان: مدى التواريخ الخاص بالبيان + فلاتر المكان/المقاول اللي على الشاشة.
+   ⚠ مش بنستخدم getFilteredRecords() لأنها بتفرض أسبوع الشاشة أو يوم واحد — وده عكس فكرة "فترة". */
+function stmtRecords(){
+  const {nq,pq,cq}=getRecordFilters();
+  const from=stmtVal('stmt-from'), to=stmtVal('stmt-to');
+  let f=records.filter(r=>{
+    if(from && r.date<from) return false;
+    if(to   && r.date>to)   return false;
+    if(nq && !(r.contractor||'').toLowerCase().includes(nq)) return false;
+    if(pq && r.place!==pq) return false;
+    if(cq && r.contractor!==cq) return false;
+    if(exportContractorChips.length && !exportContractorChips.includes(r.contractor)) return false;
+    if(exportPlaceChips.length && !exportPlaceChips.includes(r.place)) return false;
+    return true;
+  });
+  // مقاول ورا مقاول، وكل مقاول بالتاريخ من الأقدم للأحدث
+  f.sort((a,b)=> String(a.contractor||'').localeCompare(String(b.contractor||''),'ar') || String(a.date).localeCompare(String(b.date)));
+  return f;
+}
+function stmtMoney(n){ return Number(n||0).toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function exportWorkStatement(){
+  const exp=stmtRecords();
+  if(!exp.length){ showToast('⚠ مفيش سجلات في الفترة والفلاتر دي',true); return; }
+  const from=stmtVal('stmt-from'), to=stmtVal('stmt-to');
+  const {pq}=getRecordFilters();
+
+  // أعمدة اختيارية: بتظهر بس لو فيها بيانات فعلًا — عشان الورقة ما تتزحمش بأعمدة فاضية
+  const onePlace = pq || (exportPlaceChips.length===1 ? exportPlaceChips[0] : (new Set(exp.map(r=>r.place||'')).size===1 ? (exp[0].place||'') : ''));
+  const showPlace = !onePlace;
+  const showDisc  = exp.some(r=>Number(r.discount)>0);
+  const showNotes = exp.some(r=>(r.notes||'').trim());
+
+  const byContractor=new Map();
+  exp.forEach(r=>{ const k=r.contractor||'—'; if(!byContractor.has(k)) byContractor.set(k,[]); byContractor.get(k).push(r); });
+
+  const heads=['#','التاريخ','اليوم','البيان']
+    .concat(showPlace?['المكان']:[])
+    .concat(['العدد','السعر'])
+    .concat(showDisc?['خصم']:[])
+    .concat(['الإجمالي'])
+    .concat(showNotes?['ملاحظات']:[]);
+  const colCount=heads.length;
+
+  let grand=0;
+  const sections=[...byContractor.entries()].map(([name,rows])=>{
+    let sub=0;
+    const body=rows.map((r,i)=>{
+      sub+=Number(r.total)||0;
+      return '<tr>'
+        +'<td class="c">'+(i+1)+'</td>'
+        +'<td class="c">'+esc(r.date)+'</td>'
+        +'<td class="c">'+esc(r.day||'')+'</td>'
+        +'<td>'+esc(r.spec||'—')+'</td>'
+        +(showPlace?'<td>'+esc(r.place||'')+'</td>':'')
+        +'<td class="c">'+esc(String(r.qty||0))+' '+esc(r.qtyType||'')+'</td>'
+        +'<td class="n">'+stmtMoney(r.price)+'</td>'
+        +(showDisc?'<td class="n red">'+(Number(r.discount)>0?stmtMoney(r.discount):'—')+'</td>':'')
+        +'<td class="n bold green">'+stmtMoney(r.total)+'</td>'
+        +(showNotes?'<td>'+esc(r.notes||'')+'</td>':'')
+        +'</tr>';
+    }).join('');
+    grand+=sub;
+    return '<div class="grp">'
+      + '<div class="grp-h">👷 '+esc(name)+' <small>'+rows.length+' سجل</small></div>'
+      + '<table><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead>'
+      + '<tbody>'+body+'</tbody>'
+      + '<tfoot><tr><td colspan="'+(colCount-1)+'">إجمالي أعمال '+esc(name)+'</td><td class="n">'+stmtMoney(sub)+' ج.م</td></tr></tfoot>'
+      + '</table></div>';
+  }).join('');
+
+  const periodTxt = (from||to)
+    ? ('من '+esc(from||'البداية')+' إلى '+esc(to||'النهاية'))
+    : 'كل السجلات المسجّلة';
+  const today=new Date().toLocaleDateString('ar-EG');
+  const html='<!DOCTYPE html>\n<html lang="ar" dir="rtl"><head><meta charset="UTF-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<title>بيان أعمال — '+esc([...byContractor.keys()].join(' · ').slice(0,60))+'</title><style>'
+    + "@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');"
+    + '*{box-sizing:border-box;margin:0;padding:0}'
+    + "body{font-family:'Cairo',sans-serif;direction:rtl;background:#fff;color:#1A2640;padding:10px}"
+    + '.head{border-top:3px solid #1F3864;border-bottom:3px solid #C9A84C;background:#EBF1FB;padding:10px 14px;margin-bottom:10px}'
+    + '.head h1{font-size:17px;color:#1F3864}'
+    + '.head .sub{font-size:10px;color:#8A6D1D;font-weight:700;margin-top:2px}'
+    + '.head .meta{margin-top:6px;display:flex;gap:16px;flex-wrap:wrap;font-size:11px}'
+    + '.head .meta b{color:#1F3864}'
+    + '.grp{margin-bottom:14px}'
+    + '.grp-h{background:#1F3864;color:#fff;font-weight:900;font-size:12px;padding:6px 10px;border-radius:6px 6px 0 0}'
+    + '.grp-h small{font-weight:600;opacity:.75;font-size:10px}'
+    + 'table{width:100%;border-collapse:collapse;font-size:10px}'
+    + 'thead tr{background:#2F5496;color:#fff}'
+    + 'thead th{padding:5px 4px;border:1px solid #2F5496;font-size:10px}'
+    + 'tbody tr:nth-child(even){background:#F5F8FF}'
+    + 'tbody td{padding:5px 4px;border:1px solid #D5E1F0;line-height:1.4;word-break:break-word}'
+    + 'td.c{text-align:center}td.n{text-align:left;direction:ltr}'
+    + '.bold{font-weight:900}.green{color:#1B5E20}.red{color:#C62828}'
+    + 'tfoot tr{background:#EBF1FB}'
+    + 'tfoot td{padding:6px;font-weight:900;font-size:11px;border:1px solid #C5D3E8;text-align:left;direction:ltr}'
+    + 'tfoot td:first-child{text-align:right;direction:rtl}'
+    + '.grand{margin-top:6px;background:#1B5E20;color:#fff;padding:9px 14px;border-radius:8px;display:flex;justify-content:space-between;font-weight:900;font-size:13px}'
+    + '.note{margin-top:10px;font-size:10px;color:#6B7A99;border-right:3px solid #C9A84C;padding:4px 8px}'
+    + '.foot{margin-top:10px;text-align:center;font-size:9px;color:#aaa;border-top:2px solid #C9A84C;padding-top:6px}'
+    + '.print-btn{position:fixed;bottom:16px;left:16px;background:#1F3864;color:#fff;border:none;border-radius:8px;'
+    + "padding:10px 16px;font-family:'Cairo',sans-serif;font-weight:900;font-size:13px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.25)}"
+    // الطباعة: A4 طولي مع السماح بتعدد الصفحات — البيان ممكن يكون شهر كامل.
+    // صف العناوين بيتكرر في كل صفحة، والصف الواحد ما ينقسمش بين صفحتين.
+    + '@media print{@page{size:A4 portrait;margin:8mm}'
+    + 'html,body{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0}'
+    + 'thead{display:table-header-group}tfoot{display:table-row-group}'
+    + 'tr{page-break-inside:avoid}.grp{page-break-inside:auto}'
+    + '.print-btn{display:none}}'
+    + '</style></head><body>'
+    + '<div class="head"><h1>📋 بيان أعمال</h1>'
+    + '<div class="sub">غير رسمي — للاطلاع فقط، مش بديل عن كشف السركي المعتمد</div>'
+    + '<div class="meta">'
+    + '<div><b>الفترة:</b> '+periodTxt+'</div>'
+    + (onePlace?'<div><b>المكان:</b> '+esc(onePlace)+'</div>':'')
+    + '<div><b>عدد السجلات:</b> '+exp.length+'</div>'
+    + '<div><b>تاريخ الطباعة:</b> '+esc(today)+'</div>'
+    + '</div></div>'
+    + sections
+    + (byContractor.size>1 ? '<div class="grand"><span>الإجمالي العام ('+byContractor.size+' مقاولين)</span><span style="direction:ltr">'+stmtMoney(grand)+' ج.م</span></div>' : '')
+    + '<div class="note">البيان ده اتولّد من سجلات التطبيق في التاريخ الموضّح. أي تعديل على السجلات بعد كده مش هيظهر فيه — اطبع نسخة جديدة.</div>'
+    + '<div class="foot">Civil Engineer Assistant (CEA) — by Eng / Ahmed Osama — '+esc(today)+'</div>'
+    + '<button class="print-btn" onclick="window.print()">🖨 اطبع / احفظ PDF</button>'
+    + '</body></html>';
+
+  const who=[...byContractor.keys()].join('_').slice(0,40);
+  const fileName=('CEA_بيان_أعمال_'+who+'_'+todayYMD()+'.html').replace(/[^a-zA-Z0-9؀-ۿ_.-]/g,'_');
+  stmtDeliver(html, fileName, exp.length);
+}
+/* نفس مسار exportPDF: أندرويد = ملف في الكاش + share sheet · المتصفح = تاب جديد (وتنزيل لو المنبثق متمنوع) */
+function stmtDeliver(html, fileName, count){
+  if(window.isCapacitor){
+    const b64=utf8ToBase64(html);
+    window.Capacitor.Plugins.Filesystem.writeFile({path:fileName,data:b64,directory:'CACHE',recursive:true})
+      .then(()=>window.Capacitor.Plugins.Filesystem.getUri({path:fileName,directory:'CACHE'}))
+      .then(u=>window.Capacitor.Plugins.Share.share({title:'بيان أعمال — CEA',text:count+' سجل',url:u.uri,dialogTitle:'افتح أو احفظ الـ PDF'}))
+      .then(()=>showToast('🖨 '+count+' سجل — اختار "طباعة" أو "حفظ PDF"'))
+      .catch(e=>showToast('⚠ خطأ: '+e.message,true));
+    return;
+  }
+  const win=window.open('','_blank');
+  if(win){ win.document.write(html); win.document.close(); showToast('🖨 '+count+' سجل — اضغط "اطبع / احفظ PDF"'); return; }
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=fileName; a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇️ اتنزّل الملف — افتحه واطبعه كـ PDF');
 }
 function exportPDF(){
   const {pq,dq,cq}=getRecordFilters();

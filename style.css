@@ -489,6 +489,8 @@ select {
   content:"📅 ابحث بالتاريخ"; position:absolute; inset-block:0; inset-inline-start:12px;
   display:flex; align-items:center; color:var(--muted); opacity:.6; pointer-events:none; font-size:13px; z-index:1;
 }
+/* نص مخصّص للحقل (بدل "ابحث بالتاريخ") — لحقول زي "من تاريخ" و"إلى تاريخ" في بيان الأعمال */
+.date-hint[data-ph]:not(.has-val):not(:focus-within)::before { content:attr(data-ph); }
 /* صناديق التصدير المعتمد — نفس هوية زرار "مراجعة وإرسال الكشف": تدرج دهبي + كلام أبيض */
 .filter-box { margin:8px 0; padding:10px; background:linear-gradient(135deg,#8A6D1D,var(--gold)); border-radius:var(--radius-sm); border:none; box-shadow:0 4px 14px rgba(201,168,76,.3); }
 .filter-box-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
