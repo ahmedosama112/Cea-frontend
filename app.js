@@ -1123,7 +1123,7 @@ function getRecordFilters(){
   const val=id=>{const el=document.getElementById(id);return el?(el.value||'').trim():'';};
   return { nq:val('search-name').toLowerCase(), pq:val('search-place'), dq:val('search-day'), cq:val('search-contractor-filter') };
 }
-// نفس الفلاتر + نفس الترتيب اللي على الشاشة — بتستخدمها renderRecords و exportExcel و exportPDF
+// نفس الفلاتر + نفس الترتيب اللي على الشاشة — بتستخدمها renderRecords و exportExcel
 function getFilteredRecords(){
   const {nq,pq,dq,cq}=getRecordFilters();
   let f=[...records].reverse();
@@ -2102,9 +2102,9 @@ async function exportExcel(){
   }
 }
 /* ═══════════ بيان أعمال المقاول (غير رسمي) — 9 سبتمبر 2026 ═══════════
-   الفرق عن exportPDF (السركي الرسمي): ده مش كشف اعتماد — مفيش خانات توقيع ولا اعتماد،
+   ده مش كشف اعتماد — مفيش خانات توقيع ولا اعتماد،
    وبيشتغل على مدى تواريخ حر (من → إلى) مش أسبوع واحد، عشان المقاول يعرف عمل شغل بكام
-   في فترة معينة ومن مكان معين. نفس آلية exportPDF في الإخراج: صفحة HTML بـCSS طباعة،
+   في فترة معينة ومن مكان معين. الإخراج: صفحة HTML بـCSS طباعة،
    والمستخدم يختار "حفظ كـ PDF" — مفيش مكتبة PDF، فالعربي بيطلع سليم. */
 function stmtVal(id){ const el=document.getElementById(id); return el?(el.value||'').trim():''; }
 /* سجلات البيان: مدى التواريخ الخاص بالبيان + فلاتر المكان/المقاول اللي على الشاشة.
@@ -2237,7 +2237,7 @@ function exportWorkStatement(){
   const fileName=('CEA_بيان_أعمال_'+who+'_'+todayYMD()+'.html').replace(/[^a-zA-Z0-9؀-ۿ_.-]/g,'_');
   stmtDeliver(html, fileName, exp.length);
 }
-/* نفس مسار exportPDF: أندرويد = ملف في الكاش + share sheet · المتصفح = تاب جديد (وتنزيل لو المنبثق متمنوع) */
+/* التسليم: أندرويد = ملف في الكاش + share sheet · المتصفح = تاب جديد (وتنزيل لو المنبثق متمنوع) */
 function stmtDeliver(html, fileName, count){
   if(window.isCapacitor){
     const b64=utf8ToBase64(html);
@@ -2256,209 +2256,8 @@ function stmtDeliver(html, fileName, count){
   URL.revokeObjectURL(url);
   showToast('⬇️ اتنزّل الملف — افتحه واطبعه كـ PDF');
 }
-function exportPDF(){
-  const {pq,dq,cq}=getRecordFilters();
-  const exp=getFilteredRecords(); // نفس الفلتر ونفس الترتيب اللي على الشاشة بالظبط
-  if(!exp.length){showToast('⚠ لا يوجد بيانات بالفلتر ده',true);return;}
-
-  const totalAmt = exp.reduce((s,r)=>s+r.total,0);
-  const filterLabel = cq||pq||(dq?`تاريخ: ${dq}`:'')||scopeLabel(' ');
-  const today = new Date().toLocaleDateString('ar-EG');
-
-  const sigCell = engineerSignature
-    ? `<img src="${engineerSignature}" style="height:14px;max-width:40px;display:block;margin:auto;object-fit:contain">`
-    : '';
-
-  const rows = exp.map((r,i) => {
-    const da=deductList(r);
-    return `
-    <tr>
-      <td style="text-align:center">${i+1}</td>
-      <td style="text-align:center">${esc(r.date)}</td>
-      <td style="text-align:center">${esc(r.day)}</td>
-      <td>${esc(r.contractor)}</td>
-      <td>${esc(r.spec)}</td>
-      <td style="text-align:center">${esc(r.qty||0)} ${esc(r.qtyType||'')}</td>
-      <td style="text-align:left;direction:ltr">${Number(r.price||0).toLocaleString('ar-EG',{minimumFractionDigits:2})}</td>
-      <td style="text-align:left;direction:ltr;color:#C62828">${r.discount>0?Number(r.discount).toLocaleString('ar-EG',{minimumFractionDigits:2}):'-'}</td>
-      <td style="text-align:left;direction:ltr;font-weight:900;color:#1B5E20">${Number(r.total||0).toLocaleString('ar-EG',{minimumFractionDigits:2})}</td>
-      <td>${esc(r.notes)}</td>
-      <td>${da.length?`<span style="color:#C62828;font-weight:700">${esc(da.join(' ، '))}</span>${r.deductNote?`<br><small style="color:#888">${esc(r.deductNote)}</small>`:''}`:''}</td>
-      <td style="text-align:center;vertical-align:middle">${sigCell}</td>
-    </tr>`;}).join('');
-
-  const html = `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<title>CEA — سجل السراكي</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:'Cairo',sans-serif; direction:rtl; background:#fff; color:#1A2640; }
-
-  .meta-bar {
-    background:#EBF1FB; padding:8px 16px;
-    display:flex; gap:20px; align-items:center;
-    border-bottom:3px solid #C9A84C; flex-wrap:wrap;
-    border-top:3px solid #1F3864;
-  }
-  .meta-bar .item { font-size:11px; }
-  .meta-bar .item span { font-weight:900; color:#1F3864; }
-  .meta-bar .total-big { font-size:13px; font-weight:900; color:#1B5E20; margin-right:auto; }
-
-  table {
-    width:100%; border-collapse:collapse; font-size:8.5px;
-    margin-top:0; table-layout:fixed;
-  }
-  thead tr { background:#1F3864; color:#fff; }
-  thead th {
-    padding:5px 4px; font-weight:700; font-size:8.5px;
-    border:1px solid #2F5496; text-align:center;
-    word-break:break-word;
-  }
-  tbody tr:nth-child(even) { background:#F5F8FF; }
-  tbody tr:nth-child(odd)  { background:#fff; }
-  tbody td {
-    padding:5px 4px; border:1px solid #D5E1F0;
-    vertical-align:middle; line-height:1.3;
-    word-break:break-word; overflow-wrap:break-word;
-  }
-  tfoot tr { background:#EBF1FB; }
-  tfoot td { padding:6px 4px; font-weight:900; font-size:9px; border:1px solid #C5D3E8; }
-
-  .pm-sig {
-    margin-top:10px; padding:0 8px;
-    display:flex; justify-content:flex-start;
-  }
-  .pm-sig-inner {
-    font-size:9px; color:#6B7A99;
-    border-top:1px solid #1F3864;
-    padding-top:4px; min-width:160px; text-align:center;
-  }
-
-  .pdf-footer {
-    margin-top:8px; text-align:center;
-    font-size:9px; color:#aaa; padding-bottom:8px;
-    border-top:3px solid #C9A84C; padding-top:6px;
-  }
-
-  @media print {
-    @page { size:A4 landscape; margin:3mm; }
-    html, body {
-      -webkit-print-color-adjust:exact; print-color-adjust:exact;
-      overflow:hidden;
-    }
-    * { page-break-inside:avoid !important; page-break-after:avoid !important; page-break-before:avoid !important; }
-    table { font-size:6px !important; }
-    thead th { font-size:6px !important; padding:2px 2px !important; line-height:1.2 !important; }
-    tbody td  { font-size:6px !important; padding:2px 2px !important; line-height:1.2 !important; max-height:18px !important; overflow:hidden !important; }
-    tfoot td  { font-size:6px !important; padding:2px 2px !important; }
-    tbody tr  { max-height:18px !important; }
-    tbody td img { height:12px !important; max-width:35px !important; }
-    .meta-bar { padding:3px 8px !important; }
-    .meta-bar .item { font-size:8px !important; }
-    .meta-bar .total-big { font-size:10px !important; }
-    .pm-sig { margin-top:3px !important; }
-    .pm-sig-inner { font-size:7px !important; min-width:100px !important; }
-    .pdf-footer { margin-top:2px !important; padding:2px 0 !important; font-size:6px !important; border-top-width:1px !important; }
-    .no-print { display:none !important; }
-  }
-
-  .print-btn {
-    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-    background:linear-gradient(135deg,#1F3864,#2F5496);
-    color:#fff; border:none; padding:14px 36px;
-    border-radius:50px; font-family:'Cairo',sans-serif;
-    font-size:15px; font-weight:900; cursor:pointer;
-    box-shadow:0 6px 20px rgba(31,56,100,.4); z-index:999;
-  }
-</style>
-</head>
-<body>
-
-<div class="meta-bar">
-  <div class="item">🔍 الفلتر: <span>${esc(filterLabel)}</span></div>
-  <div class="item">📋 عدد السجلات: <span>${exp.length}</span></div>
-  <div class="item">📅 <span>${today}</span></div>
-  <div class="total-big">💰 الإجمالي: ${Number(totalAmt).toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م</div>
-</div>
-
-<table>
-  <thead>
-    <tr>
-      <th style="width:3%">#</th>
-      <th style="width:8%">التاريخ</th>
-      <th style="width:6%">اليوم</th>
-      <th style="width:11%">إسم المقاول</th>
-      <th style="width:8%">التخصص</th>
-      <th style="width:5%">مقط/يومية</th>
-      <th style="width:7%">السعر</th>
-      <th style="width:6%">الخصم</th>
-      <th style="width:8%">الإجمالي</th>
-      <th style="width:20%">بيان الأعمال</th>
-      <th style="width:10%">الخصم على / ملاحظة</th>
-      <th style="width:8%">توقيع المهندس المسئول</th>
-    </tr>
-  </thead>
-  <tbody>${rows}</tbody>
-  <tfoot>
-    <tr>
-      <td colspan="8" style="text-align:left">الإجمالي الكلي</td>
-      <td style="text-align:left;direction:ltr;color:#1B5E20">
-        ${Number(totalAmt).toLocaleString('ar-EG',{minimumFractionDigits:2})} ج.م
-      </td>
-      <td colspan="3"></td>
-    </tr>
-  </tfoot>
-</table>
-
-<div class="pm-sig">
-  <div class="pm-sig-inner">توقيع مدير التنفيذ</div>
-</div>
-
-<div class="pdf-footer">
-  Civil Engineer Assistant (CEA) — by Eng / Ahmed Osama — ${today}
-</div>
-
-<button class="print-btn no-print" onclick="window.print()">🖨 اطبع / احفظ PDF</button>
-
-</body></html>`;
-
-  const label = (cq||pq||dq||scopeLabel()).replace(/[^a-zA-Z0-9\u0600-\u06FF_-]/g,'_');
-  const fileName = `CEA_Saraki_${label}_${todayYMD()}.html`;
-
-  if(window.isCapacitor){
-    // Save as HTML file and share via Android share sheet
-    const b64 = utf8ToBase64(html);
-    window.Capacitor.Plugins.Filesystem.writeFile({
-      path: fileName, data: b64, directory: 'CACHE', recursive: true
-    })
-    .then(()=>window.Capacitor.Plugins.Filesystem.getUri({path:fileName,directory:'CACHE'}))
-    .then(u=>window.Capacitor.Plugins.Share.share({
-      title: 'سجل السراكي — CEA',
-      text: `${exp.length} سجل`,
-      url: u.uri,
-      dialogTitle: 'افتح أو احفظ الـ PDF'
-    }))
-    .then(()=>showToast(`🖨 ${exp.length} سجل — اختار "طباعة" أو "حفظ PDF"`))
-    .catch(e=>showToast('⚠ خطأ: '+e.message,true));
-  } else {
-    // Browser: open in new tab
-    const win = window.open('','_blank');
-    if(win){ win.document.write(html); win.document.close(); }
-    else {
-      // Fallback: download as HTML file
-      const blob = new Blob([html],{type:'text/html;charset=utf-8'});
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href=url; a.download=fileName; a.click();
-      URL.revokeObjectURL(url);
-    }
-    showToast(`🖨 جاهز للطباعة — ${exp.length} سجل`);
-  }
-}
-
+// (9 سبتمبر 2026) اتشالت `exportPDF()` — كانت كود ميت من يوم ما اتشال زرارها من الـ HTML.
+// بديلها للطباعة دلوقتي: exportWorkStatement() (بيان أعمال المقاول) — والكشف الرسمي بيتبني في السيرفر ويطلع PDF من جوجل شيت.
 function getWeekBoundsForDate(dateVal){
   const d = (dateVal instanceof Date) ? new Date(dateVal) : new Date(dateVal+'T00:00:00');
   d.setHours(0,0,0,0);
@@ -3424,7 +3223,7 @@ function sheetTimeline(s){
     // الشيت (بعد تحديث سبتمبر 2026): خانة D = اعتماد DC (توقيعين + PDF)، F = الاعتماد الإداري (بيتملي تلقائيًا من التطبيق)، G = سلسلة الاعتماد
     if(sh.pmApproval) steps.push('✅ الاعتماد الإداري: '+esc(sh.pmApproval));
     steps.push((sh.execApproval?('✅ DC: '+esc(sh.execApproval)):'⏳ بانتظار DC (التوقيع والـ PDF)'));
-    if(sh.execNotes) steps.push('📝 ملاحظات DC: '+esc(sh.execNotes));
+    // ملاحظة DC مبقتش هنا — طلعت بلوك بارز فوق (dcNotesBox) لأنها أهم حاجة للمهندس وكانت ضايعة جوّه القايمة
     if(sh.pmNotes) steps.push('🖋 سلسلة الاعتماد: '+esc(sh.pmNotes));
   }
   return '<div class="s" style="font-size:11px;margin-top:4px;padding:6px 8px;background:var(--input);border-radius:8px;line-height:1.8">'
@@ -4211,6 +4010,18 @@ const SUB_STATUS={SUBMITTED:{t:'⏳ مُرسَل — بانتظار المراج
    need = رجع له (رفض من المديرين أو من DC في الشيت) → لازم يعدّل ويعيد الإرسال
    prog = ماشي في السلسلة أو عند DC → متابعة بس
    done = معتمد بالكامل ونزل الشيت */
+/* ملاحظة DC (عمود E في جوجل شيت) — بلوك بارز مش سطر خافت.
+   كانت جوّه قايمة خطوات الشيت بخط 11px رمادي، وهي آخر مرحلة وأهم ملاحظة بتوصل للمهندس.
+   لو DC رفض → أحمر (ده سبب الرفض)، غير كده أصفر. */
+function dcNotesBox(s){
+  const note=String(s.sheet?.execNotes||'').trim();
+  if(!note) return '';
+  const rejected=String(s.sheet?.status||'').includes('مرفوض');
+  const bg=rejected?'var(--danger-bg)':'var(--warn-bg)', fg=rejected?'var(--danger-fg)':'var(--warn-fg)';
+  const head=rejected?'⛔ <b>DC رجّع الكشف</b> — السبب:':'📝 <b>ملاحظة من DC:</b>';
+  return '<div class="s" style="font-size:11.5px;padding:6px 8px;background:'+bg+';color:'+fg+';border-radius:8px;line-height:1.7">'
+    + head+' '+esc(note)+'</div>';
+}
 function subBucket(s){
   const sh=String(s.sheet?.status||'');
   if(s.reviewState==='RETURNED' || s.status==='REJECTED' || sh.includes('مرفوض')) return 'need';
@@ -4296,7 +4107,7 @@ function subRow(s, adminView){
       <span class="pill" style="background:${st.bg};color:${st.c};font-size:10.5px;padding:3px 8px;border-radius:999px;white-space:normal;max-width:100%;flex:0 1 auto;font-weight:800">${st.t}</span>
     </div>
     ${subChainBar(s)}
-    ${rejBox}${struckBox}
+    ${rejBox}${struckBox}${dcNotesBox(s)}
     <details class="sub-more"><summary>التفاصيل ▾</summary><div class="sub-mbody">${detail}</div></details>
     <div class="sub-acts">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
