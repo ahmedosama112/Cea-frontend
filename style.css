@@ -730,7 +730,9 @@ body.dark-mode .xl-wrap { background:#fff; }
 .win-card { border-radius:var(--radius,14px); padding:12px 14px; margin-bottom:8px; color:#fff; box-shadow:0 4px 14px rgba(0,0,0,.18); }
 .win-open { background:linear-gradient(135deg,#1B5E20,#2E7D32); }
 .win-soon { background:linear-gradient(135deg,#8A6D1D,#C9A84C); color:#1A2640; }
-.win-shut { background:linear-gradient(135deg,#8E1B1B,#C62828); }
+/* مقفول = الكحلي بتاع هوية التطبيق (كان أحمر فاقع — قرار صاحب المشروع).
+   المقفول مش خطأ — ده الوضع الطبيعي معظم الأسبوع، فماينفعش يبقى إنذار أحمر. */
+.win-shut { background:linear-gradient(135deg,var(--navy),var(--blue)); }
 .win-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; font-weight:900; font-size:13px; }
 .win-sub { font-size:11px; font-weight:700; opacity:.85; }
 .win-time { font-size:30px; font-weight:900; line-height:1.25; margin-top:2px; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
