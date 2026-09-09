@@ -4039,52 +4039,98 @@ async function invSetPurchase(id, status){
 }
 
 const SUB_STATUS={SUBMITTED:{t:'⏳ مُرسَل — بانتظار المراجعة',c:'var(--warn-fg)',bg:'var(--warn-bg)'}, APPROVED:{t:'✅ معتمد',c:'var(--ok-fg)',bg:'var(--ok-bg)'}, REJECTED:{t:'❌ مرفوض — يُعاد',c:'var(--danger-fg)',bg:'var(--danger-bg)'}};
+/* ── تصنيف الكشف: هو محتاج شغل من المهندس، ولا ماشي، ولا خلص؟ ──
+   need = رجع له (رفض من المديرين أو من DC في الشيت) → لازم يعدّل ويعيد الإرسال
+   prog = ماشي في السلسلة أو عند DC → متابعة بس
+   done = معتمد بالكامل ونزل الشيت */
+function subBucket(s){
+  const sh=String(s.sheet?.status||'');
+  if(s.reviewState==='RETURNED' || s.status==='REJECTED' || sh.includes('مرفوض')) return 'need';
+  if(sh.includes('معتمد بالكامل')) return 'done';
+  return 'prog';
+}
+/* شريط السلسلة المصغّر — نفس اللي بيشوفه المدير في أعمدة تاب الاعتمادات، بس في سطر واحد للمهندس.
+   ⚠ المستويات الجاية مش معروفة في رد /mine (السيرفر بيرجّع اللي عدّى والمستوى الحالي بس)،
+   فبنحط "…" مكانها بدل ما نخمّن سلسلة غلط. آخر خطوة دايمًا DC وحالتها من جوجل شيت. */
+function subChainBar(s){
+  const rev=Number(s.revision||0);
+  const seen=[];
+  (s.reviews||[]).forEach(x=>{ if(Number(x.revision)===rev && x.decision!=='REJECTED' && seen.indexOf(x.level)<0) seen.push(x.level); });
+  const steps=seen.map(l=>'<span class="sc-step sc-done">✅ '+esc(l)+'</span>');
+  if(s.reviewState==='RETURNED'){
+    const rej=(s.reviews||[]).filter(x=>x.decision==='REJECTED').pop();
+    steps.push('<span class="sc-step sc-rej">❌ '+esc(rej?rej.level:'مرفوض')+'</span>');
+    steps.push('<span class="sc-step sc-wait">↩ رجع لك</span>');
+    return '<div class="sub-chain">'+steps.join('<span class="sc-sep">›</span>')+'</div>';
+  }
+  if(s.reviewState==='IN_REVIEW'){
+    if(s.currentLevel) steps.push('<span class="sc-step sc-now">⏳ '+esc(s.currentLevel)+'</span>');
+    steps.push('<span class="sc-step sc-wait" title="ممكن يكون فيه مستويات تانية قبل DC">…</span>');
+  }
+  const shStat=String(s.sheet?.status||'');
+  let dc='<span class="sc-step sc-wait">🖋 DC</span>';
+  if(s.reviewState==='SENT'){
+    if(shStat.includes('معتمد بالكامل'))   dc='<span class="sc-step sc-done">✅ DC</span>';
+    else if(shStat.includes('مرفوض'))      dc='<span class="sc-step sc-rej">❌ DC</span>';
+    else                                    dc='<span class="sc-step sc-now">⏳ DC</span>';
+  }
+  steps.push(dc);
+  return '<div class="sub-chain">'+steps.join('<span class="sc-sep">›</span>')+'</div>';
+}
 function subRow(s, adminView){
   let st=SUB_STATUS[s.status]||SUB_STATUS.SUBMITTED;
-  // حالة جوجل شيت الحية بتغلب "بانتظار المراجعة" المحلية — لو المديرين اعتمدوا (أو رفضوا) في الشيت،
-  // الشارة الرئيسية تعكس ده فورًا بدل ما تفضل "مُرسَل" رغم إن الكشف خلص اعتماد
+  // حالة جوجل شيت الحية بتغلب "بانتظار المراجعة" المحلية
   const shStat=String(s.sheet?.status||'');
   if(s.status!=='REJECTED'){
     if(shStat.includes('معتمد بالكامل'))      st={t:'✅ معتمد بالكامل',c:'var(--ok-fg)',bg:'var(--ok-bg)'};
     else if(shStat.includes('مرفوض'))         st={t:'❌ '+shStat,c:'var(--danger-fg)',bg:'var(--danger-bg)'};
   }
-  // ── حالة سلسلة اعتمادات المديرين (بتغلب حالة جوجل القديمة طالما لسه في المراجعة أو مرفوض) ──
+  // ── حالة سلسلة اعتمادات المديرين ──
   let rejBox='';
   if(s.reviewState==='IN_REVIEW'){ st={t:'⏳ قيد مراجعة المديرين'+(s.currentLevel?' — مع '+s.currentLevel:''),c:'var(--warn-fg)',bg:'var(--warn-bg)'}; }
   else if(s.reviewState==='RETURNED'){
     const rej=(s.reviews||[]).filter(x=>x.decision==='REJECTED').pop();
     st={t:'❌ مرفوض — أعد الإرسال',c:'var(--danger-fg)',bg:'var(--danger-bg)'};
-    if(rej) rejBox='<div class="s" style="font-size:11.5px;color:var(--danger-fg);margin-top:2px;font-weight:700">❌ تم الرفض من '+esc(rej.level)+(rej.note?' — السبب: '+esc(rej.note):'')+'</div>';
+    if(rej) rejBox='<div class="s" style="font-size:11.5px;color:var(--danger-fg);font-weight:700">❌ تم الرفض من '+esc(rej.level)+(rej.note?' — السبب: '+esc(rej.note):'')+'</div>';
   }
-  else if(s.reviewState==='SENT'){ /* عدّى المديرين — نسيب حالة جوجل (DC) زي ما هي فوق */ }
-  // ملاحظات المعتمدين على النسخة الحالية (اعتماد بملاحظات): بتتسجل وبتكمل السلسلة — وبتظهر للمهندس هنا عشان يعرفها
+  // عدّى المديرين ولسه عند DC: الشارة كانت لسه بتقول "مُرسَل — بانتظار المراجعة" وهي حالة محلية قديمة
+  // ومضلّلة — المديرين خلصوا خلاص. دلوقتي بتقول الحقيقة: الكشف عند DC.
+  else if(s.reviewState==='SENT' && !shStat.includes('معتمد بالكامل') && !shStat.includes('مرفوض')){
+    st={t:'🖋 عند DC — التوقيع والـ PDF',c:'var(--warn-fg)',bg:'var(--warn-bg)'};
+  }
+  // ملاحظات المعتمدين على النسخة الحالية
   const notes=(s.reviews||[]).filter(x=>x.revision===(s.revision||0) && x.decision==='APPROVED_NOTES' && x.note);
   const notesBox = notes.length
-    ? '<div class="s" style="font-size:11.5px;margin-top:3px;padding:6px 8px;background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;line-height:1.7">'
+    ? '<div class="s" style="font-size:11.5px;padding:6px 8px;background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;line-height:1.7">'
       + notes.map(x=>'📝 <b>'+esc(x.level)+'</b> اعتمد بملاحظة: '+esc(x.note)).join('<br>')+'</div>'
     : '';
-  // سطور مشطوبة من المعتمدين (رفض جزئي) في النسخة الحالية — المهندس يشوف السطر والسبب
+  // سطور مشطوبة من المعتمدين (رفض جزئي) في النسخة الحالية
   const struckRows=(s.rowRejections||[]).filter(x=>Number(x.revision)===Number(s.revision||0));
   const struckBox = struckRows.length
-    ? '<div class="s" style="font-size:11.5px;margin-top:3px;padding:6px 8px;background:var(--danger-bg);color:var(--danger-fg);border-radius:8px;line-height:1.7">'
+    ? '<div class="s" style="font-size:11.5px;padding:6px 8px;background:var(--danger-bg);color:var(--danger-fg);border-radius:8px;line-height:1.7">'
       + struckRows.map(x=>'✕ <b>سطر مشطوب:</b> '+esc(x.label)+' — <b>'+esc(x.level)+'</b>'+(x.note?': '+esc(x.note):'')).join('<br>')
       + (s.reviewState==='IN_REVIEW'||s.reviewState==='SENT' ? '<br><span style="font-weight:600">الكشف كمّل اعتماده من غير السطور دي (اتشالت من الإجمالي).</span>' : '')+'</div>'
     : '';
-  const who = adminView ? '<div class="s">👤 '+esc(personName(s.user))+(s.user?.displayName?' <span style="color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(s.user.email||'')+'</span>':'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
-  return `<div class="setting-item" style="flex-direction:column;align-items:stretch;gap:6px">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">
-      <div style="min-width:0;flex:1 1 240px">
-        <div class="setting-name" style="white-space:normal;line-height:1.5">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
-        <div class="setting-sub">${s.kind==='equipment' ? '🚜 كشف معدات · الشهر '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' يوم تشغيل · '+fmtMinutes(Math.round(Number(s.total)*60))+' ساعة' : 'الأسبوع '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' سجل · '+fmt(s.total)+' ج.م'}</div>
+  const who = adminView ? '<div class="sub-meta">👤 '+esc(personName(s.user))+(s.user?.displayName?' <span style="direction:ltr;unicode-bidi:embed">'+esc(s.user.email||'')+'</span>':'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
+  const bucket=subBucket(s);
+  // التفاصيل مطوية افتراضيًا — دي كانت أكتر حاجة بتطوّل الكارت
+  const detail = '<div class="sub-meta">أُرسل '+esc(new Date(s.createdAt).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}))+(s.engineerNote?' · 📝 '+esc(s.engineerNote):'')+'</div>'
+    + notesBox
+    + (s.reviewNote?'<div class="s" style="font-size:11.5px;color:var(--text)">💬 رد المراجعة: '+esc(s.reviewNote)+'</div>':'')
+    + (s.reviewState==='SENT'?sheetTimeline(s):'');
+  return `<div class="sub-card ${bucket==='need'?'c-need':''}">
+    <div class="sub-top">
+      <div style="min-width:0;flex:1 1 220px">
+        <div class="sub-name">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
+        <div class="sub-meta">${s.kind==='equipment' ? '🚜 كشف معدات · الشهر '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' يوم تشغيل · '+fmtMinutes(Math.round(Number(s.total)*60))+' ساعة' : 'الأسبوع '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' سجل · '+fmt(s.total)+' ج.م'}</div>
         ${who}
-        <div class="s" style="font-size:11px;color:var(--muted)">أُرسل ${esc(new Date(s.createdAt).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}))}${s.engineerNote?' · 📝 '+esc(s.engineerNote):''}</div>
-        ${rejBox}${notesBox}${struckBox}
-        ${s.reviewNote?'<div class="s" style="font-size:11.5px;color:var(--text);margin-top:2px">💬 رد المراجعة: '+esc(s.reviewNote)+'</div>':''}
-        ${s.reviewState==='SENT'?sheetTimeline(s):''}
       </div>
       <span class="pill" style="background:${st.bg};color:${st.c};font-size:10.5px;padding:3px 8px;border-radius:999px;white-space:normal;max-width:100%;flex:0 1 auto;font-weight:800">${st.t}</span>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
+    ${subChainBar(s)}
+    ${rejBox}${struckBox}
+    <details class="sub-more"><summary>التفاصيل ▾</summary><div class="sub-mbody">${detail}</div></details>
+    <div class="sub-acts">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
       ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled && subSentLongAgo(s) ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
@@ -4092,12 +4138,43 @@ function subRow(s, adminView){
     </div>
   </div>`;
 }
+/* تجميع الكروت في ٣ مجموعات بعناوين وعدّادات. "خلصت" مطوية افتراضيًا
+   عشان الكشوف القديمة ما تزحمش اللي محتاج شغل. مجموعة فاضية ما بتظهرش أصلًا. */
+function subGroupsHtml(rows, adminView){
+  const G=[
+    {k:'need', open:true,  t:adminView?'🔴 راجعة للمهندس':'🔴 محتاج منك إجراء', h:adminView?'مرفوضة — عند المهندس عشان يعدّل ويعيد الإرسال':'عدّلها وأعد إرسالها'},
+    {k:'prog', open:true,  t:'⏳ في الطريق', h:adminView?'ماشية في الاعتمادات أو عند DC':'ماشية في الاعتمادات — مفيش حاجة مطلوبة منك'},
+    {k:'done', open:false, t:'✅ خلصت', h:'اعتمدت بالكامل ونزلت الشيت'},
+  ];
+  return G.map(g=>{
+    const list=rows.filter(r=>subBucket(r)===g.k);
+    if(!list.length) return '';
+    return '<details class="sub-group g-'+g.k+'"'+(g.open?' open':'')+'>'
+      + '<summary><span>'+g.t+'</span><span class="sub-gcount">'+list.length+'</span>'
+      + '<span class="sub-ghint">'+g.h+'</span><span class="sub-gcaret">▾</span></summary>'
+      + '<div class="sub-gbody">'+list.map(r=>subRow(r,adminView)).join('')+'</div></details>';
+  }).join('');
+}
+/* بحث بسيط: المقاول · المكان · تواريخ الأسبوع */
+function subMatch(s,q){
+  if(!q) return true;
+  return ((s.contractorName||'')+' '+(s.placeName||'')+' '+(s.weekStart||'')+' '+(s.weekEnd||'')).toLowerCase().indexOf(q)>=0;
+}
+// الصفوف بتتحفظ عشان البحث يفلتر من غير طلب جديد للسيرفر مع كل حرف
+let _mySubRows=[], _mySubQ='';
+function subSearchMine(v){ _mySubQ=String(v||'').trim().toLowerCase(); subPaintMine(); }
+function subPaintMine(){
+  const el=document.getElementById('my-submissions'); if(!el) return;
+  if(!_mySubRows.length){ el.innerHTML='<div class="home-empty">مفيش تسليمات بعد — ابعت أول كشف من زرار "إرسال للاعتماد"</div>'; return; }
+  const rows=_mySubRows.filter(r=>subMatch(r,_mySubQ));
+  el.innerHTML = rows.length ? subGroupsHtml(rows,false) : '<div class="home-empty">مفيش كشف مطابق للبحث</div>';
+}
 async function renderMySubmissions(){
   const el=document.getElementById('my-submissions'); if(!el) return;
   if(!getAccessToken()||!navigator.onLine){ el.innerHTML='<div class="home-empty">محتاج نت لعرض التسليمات</div>'; return; }
   try{
-    const rows=(await api('GET','/api/submissions/mine')).data;
-    el.innerHTML = rows.length ? rows.map(s=>subRow(s,false)).join('') : '<div class="home-empty">مفيش تسليمات بعد — ابعت أول كشف من زرار "إرسال للاعتماد"</div>';
+    _mySubRows=(await api('GET','/api/submissions/mine')).data;
+    subPaintMine();
   }catch(e){ el.innerHTML='<div class="home-empty">⚠ تعذر التحميل</div>'; }
 }
 // base: '/api/submissions' (صاحب الملف/الأدمن) أو '/api/approvals' (المعتمدين من تاب الاعتمادات)
@@ -4262,7 +4339,7 @@ async function renderAdminSubmissions(){
     const rows=(await api('GET','/api/submissions'+(_subFilter?'?status='+_subFilter:''))).data;
     const pending=rows.filter(r=>r.status==='SUBMITTED').length;
     const cnt=document.getElementById('admin-sub-count'); if(cnt) cnt.textContent = pending ? pending+' بانتظار المراجعة' : '';
-    el.innerHTML = rows.length ? rows.map(s=>subRow(s,true)).join('') : '<div class="home-empty">لا توجد تسليمات'+(_subFilter?' بالحالة دي':'')+'</div>';
+    el.innerHTML = rows.length ? subGroupsHtml(rows,true) : '<div class="home-empty">لا توجد تسليمات'+(_subFilter?' بالحالة دي':'')+'</div>';
   }catch(e){ el.innerHTML='<div class="home-empty">⚠ تعذر التحميل</div>'; }
 }
 function setSubFilter(v){ _subFilter=v; document.querySelectorAll('.sub-filter').forEach(b=>b.classList.toggle('active', b.dataset.v===v)); renderAdminSubmissions(); }

@@ -525,6 +525,7 @@
   <div class="card">
     <div class="card-title between"><span class="t">📬 تسليماتي</span><button class="link-btn" onclick="renderMySubmissions()">🔄 تحديث</button></div>
     <p class="hint">كل كشف بعته للاعتماد وحالته. لإرسال كشف جديد: من شاشة السراكي ← "مراجعة وإرسال الكشف للاعتماد".</p>
+    <input type="search" class="sub-search" id="my-sub-search" placeholder="🔍 بحث بالمقاول أو المكان أو تاريخ الأسبوع..." oninput="subSearchMine(this.value)">
     <div id="my-submissions" class="list-scroll" style="max-height:none"><div class="home-empty">⏳</div></div>
   </div>
   <button class="btn btn-gold" onclick="switchTab('records')">📤 إرسال كشف جديد من السراكي</button>

@@ -717,6 +717,47 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-table tr.mine { background:linear-gradient(90deg,rgba(201,168,76,.14),transparent); }
 /* عمود "الإجراء / الحالة" (آخر عمود = أقصى الشمال في RTL) بيتحرّك عادي مع الجدول —
    كان مثبّتًا (sticky) فكان بيفضل واقف مكانه وقت التمرير والزوم. اتشال بقرار صاحب المشروع (9 سبتمبر 2026). */
+/* ═══ تاب التسليمات: كروت مقسّمة بمجموعات (9 سبتمبر 2026) ═══
+   الشكل القديم كان تيار كروت مسطّح: الكشف اللي محتاج تعديل النهارده جنب كشف اتعتمد من شهر بنفس الحجم،
+   والكارت الواحد بيوصل ٥ بلوكات فوق بعض فشاشة الموبايل بتاخد كشفين. دلوقتي:
+   مجموعات بعناوين وعدّادات · شريط سلسلة مصغّر بيوري الكشف واقف عند مين · التفاصيل مطوية. */
+.sub-group { margin-top:10px; }
+.sub-group > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; background:var(--input); border:1px solid var(--border); font-weight:800; font-size:12.5px; color:var(--text); }
+.sub-group > summary::-webkit-details-marker { display:none; }
+.sub-group > summary:hover { border-color:var(--border-strong); }
+.sub-group[open] > summary { border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.sub-gcount { background:var(--navy); color:#fff; border-radius:999px; padding:1px 8px; font-size:11px; font-weight:900; min-width:22px; text-align:center; }
+.sub-group.g-need > summary { background:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-fg); }
+.sub-group.g-need .sub-gcount { background:var(--danger-fg); }
+.sub-ghint { flex:1; font-weight:600; font-size:11px; color:var(--muted); }
+.sub-group.g-need .sub-ghint { color:var(--danger-fg); opacity:.85; }
+.sub-gcaret { font-size:11px; opacity:.7; transition:transform .15s; }
+.sub-group[open] .sub-gcaret { transform:rotate(180deg); }
+.sub-gbody { border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; padding:6px; display:flex; flex-direction:column; gap:6px; }
+
+/* الكارت: سطرين ظاهرين دايمًا + الباقي جوه "التفاصيل" */
+.sub-card { border:1px solid var(--border); border-radius:10px; padding:9px 10px; background:var(--card); display:flex; flex-direction:column; gap:6px; }
+.sub-card.c-need { border-color:var(--danger-fg); box-shadow:inset 3px 0 0 var(--danger-fg); }
+.sub-top { display:flex; justify-content:space-between; gap:8px; align-items:flex-start; flex-wrap:wrap; }
+.sub-name { font-weight:800; font-size:13px; line-height:1.5; white-space:normal; }
+.sub-meta { font-size:11px; color:var(--muted); line-height:1.6; }
+
+/* شريط السلسلة المصغّر — نفس معلومة أعمدة تاب الاعتمادات بس في سطر واحد */
+.sub-chain { display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:10.5px; }
+.sc-step { border-radius:999px; padding:2px 8px; font-weight:800; white-space:nowrap; }
+.sc-done { background:var(--ok-bg); color:var(--ok-fg); }
+.sc-now  { background:var(--warn-bg); color:var(--warn-fg); }
+.sc-wait { background:var(--input); color:var(--muted); }
+.sc-rej  { background:var(--danger-bg); color:var(--danger-fg); }
+.sc-sep  { color:var(--muted); font-weight:900; }
+
+.sub-more > summary { list-style:none; cursor:pointer; font-size:11px; font-weight:800; color:var(--muted); padding:2px 0; }
+.sub-more > summary::-webkit-details-marker { display:none; }
+.sub-more > summary:hover { color:var(--text); }
+.sub-more[open] > summary { color:var(--text); }
+.sub-mbody { display:flex; flex-direction:column; gap:4px; padding-top:4px; }
+.sub-acts { display:flex; gap:6px; flex-wrap:wrap; }
+.sub-search { width:100%; margin-top:6px; }
 .apr-eng { font-weight:800; } .apr-eng small { display:block; color:var(--muted); font-weight:600; font-size:10.5px; }
 .apr-when { color:var(--muted); font-size:10.5px; }
 .apr-fbtn { border:1px solid var(--border-strong); background:var(--input); border-radius:7px; padding:4px 8px; font-family:inherit; font-size:11px; font-weight:700; cursor:pointer; margin:1px; color:var(--text); }
