@@ -293,8 +293,9 @@
 
 <!-- ══ ADMIN — إدارة الحسابات (أدمن فقط) ══ -->
 <div id="tab-admin" class="panel">
-  <div class="card">
-    <div class="card-title between"><span class="t">📬 التسليمات <span id="admin-sub-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn" onclick="renderAdminSubmissions()">🔄 تحديث</button></div>
+  <details class="acc" data-acc="subs">
+    <summary class="acc-head"><span class="acc-t">📬 التسليمات <span id="admin-sub-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();renderAdminSubmissions()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
       <button class="pill sub-filter active" data-v="" onclick="setSubFilter('')">الكل</button>
       <button class="pill sub-filter" data-v="SUBMITTED" onclick="setSubFilter('SUBMITTED')">⏳ بانتظار</button>
@@ -302,16 +303,20 @@
       <button class="pill sub-filter" data-v="REJECTED" onclick="setSubFilter('REJECTED')">❌ مرفوض</button>
     </div>
     <div id="admin-submissions" class="list-scroll" style="max-height:420px"><div class="home-empty">⏳</div></div>
-  </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <div class="card-title"><span>👥</span> الحسابات</div>
+  <details class="acc" data-acc="users" open>
+    <summary class="acc-head"><span class="acc-t">👥 الحسابات</span><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <p class="hint">كل مهندس له حسابه وبياناته. من هنا تحدد لكل حساب الوحدات اللي تظهر له، وأماكنه، وتعيد تعيين كلمة سره.</p>
     <div id="admin-users-list" class="list-scroll"><div class="home-empty">⏳ جاري التحميل...</div></div>
-  </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <div class="card-title between"><span class="t">📊 نشاط الحسابات <span id="act-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn" onclick="renderActivityTable()">🔄 تحديث</button></div>
+  <details class="acc" data-acc="activity">
+    <summary class="acc-head"><span class="acc-t">📊 نشاط الحسابات <span id="act-count" class="pill" style="font-size:10px;background:var(--warn-bg);color:var(--warn-fg);padding:2px 8px;border-radius:999px;margin-right:6px"></span></span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();renderActivityTable()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <p class="hint" style="margin-top:0">كل الحسابات — الدخول والمزامنة وأي خطأ رجع للجهاز مترجم لمعناه. الحسابات الجديدة بتظهر هنا تلقائيًا.</p>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
       <button class="pill act-days active" data-v="7" onclick="setActDays(7)">آخر 7 أيام</button>
@@ -319,15 +324,18 @@
       <button class="pill act-days" data-v="14" onclick="setActDays(14)">آخر 14 يوم</button>
     </div>
     <div class="apr-scroll act-scroll"><div id="act-table"><div class="home-empty">⏳</div></div></div>
-  </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <div class="card-title between"><span class="t">🗄 النسخة الاحتياطية</span><button class="link-btn" onclick="loadBackupStatus()">🔄 تحديث</button></div>
+  <details class="acc" data-acc="backup">
+    <summary class="acc-head"><span class="acc-t">🗄 النسخة الاحتياطية</span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();loadBackupStatus()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <p class="hint" style="margin-top:0">نسخة كاملة للقاعدة (28 جدول) بتروح Google Drive كل يوم بعد الفجر. لو فشلت أو اتأخرت هتلاقي تنبيه في الجرس كمان.</p>
     <div id="backup-status"><div class="home-empty">⏳</div></div>
     <button class="btn btn-navy mt8" id="backup-now-btn" onclick="runBackupNow()">💾 خد نسخة دلوقتي</button>
     <p class="hint" style="margin-top:6px">النسخة اليدوية بتاخد لحد دقيقتين حسب حجم القاعدة — سيب الشاشة مفتوحة.</p>
-  </div>
+    </div>
+  </details>
 
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
@@ -467,26 +475,31 @@
     </div>
   </div>
 
-  <div class="card">
-    <div class="card-title"><span>🏗️</span> أسماء المواقع</div>
+  <details class="acc" data-acc="sites">
+    <summary class="acc-head"><span class="acc-t">🏗️ أسماء المواقع</span><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <p class="hint" style="margin-top:0">الأسماء دي بتظهر في كل قوائم اختيار "الموقع" هنا في لوحة الإدارة.</p>
     <div class="add-row"><span class="hint" style="white-space:nowrap">الموقع الأول:</span><input type="text" id="site1-name-input" maxlength="60"></div>
     <div class="add-row" style="margin-top:6px"><span class="hint" style="white-space:nowrap">الموقع الثاني:</span><input type="text" id="site2-name-input" maxlength="60"></div>
     <button class="btn btn-navy btn-inline mt8" onclick="adminSaveSiteNames()">💾 حفظ الأسماء</button>
-  </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <div class="card-title"><span>🖋️</span> سلسلة الاعتماد حسب الدرجة</div>
+  <details class="acc" data-acc="chain">
+    <summary class="acc-head"><span class="acc-t">🖋️ سلسلة الاعتماد حسب الدرجة</span><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <p class="hint" style="margin-top:0">لكل درجة اختار المستويات اللي كشوفها بتعدّي عليها. الترتيب دايمًا: مدير الفريق ← مدير التنفيذ ← مدير المشروع. الشخص نفسه في كل مستوى بيتحدد لكل حساب على حدة من كارت الحساب فوق.</p>
     <div id="apr-matrix"></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
       <button class="btn btn-primary btn-inline" id="apr-matrix-save" style="display:none" onclick="aprMatrixSave()">💾 حفظ السلسلة</button>
       <button class="btn btn-ghost btn-inline" onclick="aprMatrixReset()">↩️ رجوع للمحفوظ</button>
     </div>
-  </div>
+    </div>
+  </details>
 
-  <div class="card">
-    <div class="card-title"><span>➕</span> إنشاء حساب مهندس</div>
+  <details class="acc" data-acc="create">
+    <summary class="acc-head"><span class="acc-t">➕ إنشاء حساب مهندس</span><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
     <input type="email" id="admin-new-email" placeholder="الإيميل" class="mb7" inputmode="email" autocomplete="off">
     <input type="text" id="admin-new-password" placeholder="كلمة المرور (8 أحرف على الأقل)" class="mb7" autocomplete="off">
     <input type="text" id="admin-new-title" placeholder="المسمى الوظيفي (مثال: مهندس تنفيذ) — اختياري" class="mb7" maxlength="100">
@@ -517,7 +530,8 @@
       <button class="btn btn-navy btn-inline mt8" onclick="adminCopyCreated()">📋 نسخ البيانات</button>
       <div class="hint" style="margin-top:6px">أول دخول له لازم يكون فيه نت. كلمة المرور مش هتظهر تاني بعد ما تقفل الصندوق ده — لو اتنسيت، أعد تعيينها من كارت الحساب.</div>
     </div>
-  </div>
+    </div>
+  </details>
 </div>
 
 <!-- ══ SUBMISSIONS — التسليمات ══ -->

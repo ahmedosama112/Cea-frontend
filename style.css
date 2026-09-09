@@ -676,7 +676,13 @@ select {
 .modal-actions { padding:12px 16px calc(12px + env(safe-area-inset-bottom)); border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-start; flex-wrap:wrap; }
 body.modal-open { overflow:hidden; }
 .sub-filter { cursor:pointer; font-family:inherit; }
+/* أزرار الفلترة جوّه الكروت (فلتر التسليمات ومدة نشاط الحسابات): كلاس .pill الأساسي
+   معمول للخلفية الكحلي (خط أبيض على أبيض شفاف)، ففوق الكارت الأبيض كانوا مختفيين خالص.
+   (مشكلة قديمة بانت وقت اختبار أكورديون إدارة الحسابات — 9 سبتمبر 2026) */
+.sub-filter, .act-days { background:var(--input); border-color:var(--border-strong); color:var(--text); }
 .sub-filter.active { background:var(--navy); color:#fff; border-color:var(--navy); }
+.act-days { cursor:pointer; font-family:inherit; }
+.act-days.active { background:var(--navy); color:#fff; border-color:var(--navy); }
 
 /* ─── معاينة شيت Excel داخل التطبيق (قبل الإرسال) ─── */
 .xl-wrap { overflow:auto; max-height:52vh; border:1px solid var(--border); border-radius:10px; background:#fff; padding:6px; }
@@ -717,6 +723,25 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-table tr.mine { background:linear-gradient(90deg,rgba(201,168,76,.14),transparent); }
 /* عمود "الإجراء / الحالة" (آخر عمود = أقصى الشمال في RTL) بيتحرّك عادي مع الجدول —
    كان مثبّتًا (sticky) فكان بيفضل واقف مكانه وقت التمرير والزوم. اتشال بقرار صاحب المشروع (9 سبتمبر 2026). */
+/* ═══ أكورديون تاب إدارة الحسابات (9 سبتمبر 2026) ═══
+   التاب كان ٢٠٠٠+ بيكسل تمرير: ٨ كروت مفتوحة فوق بعض طول الوقت. بقوا عناوين
+   تفتحها لما تحتاجها — واختيارك بيتحفظ على الجهاز. المحتوى جوّه زي ما هو بالظبط. */
+.acc { background:var(--card); border:1px solid var(--border); border-radius:var(--radius-sm,12px); margin-bottom:10px; overflow:hidden; }
+.acc-head { list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px; padding:13px 14px; font-weight:800; font-size:14px; color:var(--text); user-select:none; }
+.acc-head::-webkit-details-marker { display:none; }
+.acc-head:hover { background:var(--input); }
+.acc-t { flex:1; min-width:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.acc-caret { font-size:12px; color:var(--muted); transition:transform .18s ease; flex:0 0 auto; }
+.acc[open] > .acc-head { border-bottom:1px solid var(--border); background:var(--input); }
+.acc[open] > .acc-head .acc-caret { transform:rotate(180deg); }
+/* زرار "تحديث" جوّه العنوان: بيوقف الفتح/القفل من onclick — ودي مساحة لمس مريحة */
+.acc-act { flex:0 0 auto; padding:4px 6px; }
+/* شارة العدّاد في العنوان (مثلًا "٢ محتاج نظرة"): فاضية → تختفي خالص بدل ما تبان شريط أصفر فارغ */
+.acc-t .pill:empty { display:none; }
+.acc-t .pill { flex:0 0 auto; }   /* جوّه flex الشارة كانت بتتمدّ لآخر السطر */
+.acc-body { padding:12px 14px 14px; }
+.acc-body > .hint:first-child { margin-top:0; }
+
 /* ═══ تاب التسليمات: كروت مقسّمة بمجموعات (9 سبتمبر 2026) ═══
    الشكل القديم كان تيار كروت مسطّح: الكشف اللي محتاج تعديل النهارده جنب كشف اتعتمد من شهر بنفس الحجم،
    والكارت الواحد بيوصل ٥ بلوكات فوق بعض فشاشة الموبايل بتاخد كشفين. دلوقتي:

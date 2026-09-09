@@ -1474,6 +1474,18 @@ async function adminSaveSiteNames(){
     renderAdmin();
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
+/* أكورديون تاب إدارة الحسابات: بيفتكر أنهي أقسام فتحتها على الجهاز عشان
+   ما تفتحهمش تاني كل مرة. بيتنادى مرة واحدة بعد ما الصفحة تتحمّل. */
+function accRestore(){
+  document.querySelectorAll('#tab-admin details.acc[data-acc]').forEach(d=>{
+    const k='cea_acc_'+d.dataset.acc;
+    try{ const v=localStorage.getItem(k); if(v!==null) d.open=(v==='1'); }catch(e){}
+    d.addEventListener('toggle', ()=>{ try{ localStorage.setItem(k, d.open?'1':'0'); }catch(e){} });
+  });
+}
+document.addEventListener('DOMContentLoaded', accRestore);
+/* فتح قسم معيّن برمجيًا (مثلًا لما يتفتح حساب من قائمة الحسابات) */
+function accOpen(key){ const d=document.querySelector('#tab-admin details.acc[data-acc="'+key+'"]'); if(d && !d.open) d.open=true; return d; }
 async function renderAdmin(){
   if(!isAdmin()) { switchTab('home'); return; }
   await loadSiteNames(); // الأول — عشان أسماء المواقع تظهر صح في labels الفيتشرز والدروب داون
