@@ -960,3 +960,10 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-note { font-size:10.5px; font-weight:700; line-height:1.55; white-space:pre-wrap; word-break:break-word; background:var(--input); color:var(--text); border:1px solid var(--border); border-inline-start:3px solid var(--gold); border-radius:7px; padding:4px 7px; max-width:280px; }
 .apr-note-rej { border-inline-start-color:var(--danger-bg); }
 .apr-by { display:block; font-size:10px; color:var(--muted); font-weight:700; margin-top:2px; white-space:nowrap; }
+
+/* ── الإعدادات: كل كارت مطوي (زي أقسام إدارة الحسابات) ── */
+#tab-settings .card-title.set-head { cursor:pointer; user-select:none; }
+#tab-settings .set-chev { margin-inline-start:auto; font-size:12px; font-weight:700; opacity:.6; transition:transform .15s; }
+#tab-settings .card.set-closed .set-body { display:none; }
+#tab-settings .card.set-closed .card-title.set-head { margin-bottom:0; padding-bottom:0; border-bottom:none; }
+#tab-settings .card.set-closed .set-chev { transform:rotate(-90deg); }

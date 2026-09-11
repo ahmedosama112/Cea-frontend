@@ -458,7 +458,40 @@ function togglePlaceNoteBox(){
 
 let editingContractorIdx = null;
 
+// ── الإعدادات: كل كارت بيبقى مطوي زي أقسام إدارة الحسابات ──
+// بيتعمل مرة واحدة لكل كارت (data-set-key علامة الاكتمال) — محتوى الكارت بيتلف في .set-body
+// بنقل العناصر نفسها مش بإعادة كتابة HTML، فكل الـids والمراجع الموجودة بتفضل شغّالة.
+// الكروت المخفية بـdisplay:none (فورمات التعديل اللي الجافاسكربت بيفتحها) بتتساب زي ما هي.
+function setOpenState(){ try{ return JSON.parse(localStorage.getItem('cea_set_open')||'{}'); }catch(e){ return {}; } }
+function toggleSetCard(head){
+  const card=head.closest('.card'); if(!card) return;
+  card.classList.toggle('set-closed');
+  const st=setOpenState(); st[card.dataset.setKey]=!card.classList.contains('set-closed');
+  try{ localStorage.setItem('cea_set_open', JSON.stringify(st)); }catch(e){}
+}
+function enhanceSettingsAccordion(){
+  const panel=document.getElementById('tab-settings'); if(!panel) return;
+  const st=setOpenState();
+  panel.querySelectorAll(':scope > .card').forEach((card,i)=>{
+    if(card.dataset.setKey) return;
+    const head=card.firstElementChild;
+    if(!head || !head.classList.contains('card-title')) return;
+    if((card.getAttribute('style')||'').replace(/\s/g,'').includes('display:none')) return;
+    const key=card.dataset.feature || card.id || ('i'+i);
+    card.dataset.setKey=key;
+    const body=document.createElement('div');
+    body.className='set-body';
+    while(head.nextSibling) body.appendChild(head.nextSibling);
+    card.appendChild(body);
+    head.classList.add('set-head');
+    head.insertAdjacentHTML('beforeend','<span class="set-chev">▾</span>');
+    head.addEventListener('click', function(){ toggleSetCard(this); });
+    if(st[key]!==true) card.classList.add('set-closed');
+  });
+}
+
 function renderSettings() {
+  enhanceSettingsAccordion();
   document.querySelectorAll('.admin-only').forEach(el=>{ el.style.display = isAdmin() ? '' : 'none'; });
   const rateTypeLabel = {ساعة:'ساعة',يومية:'يومية',مقطوعية:'مقطوعية'};
   const emptyP = txt => `<p class="hint" style="padding:8px 0;margin:0">${txt}</p>`;
