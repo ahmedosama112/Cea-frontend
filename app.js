@@ -3841,7 +3841,7 @@ async function aprConfirm(){
     }
     await api('POST','/api/approvals/'+id+'/decide',{decision, note});
     aprCloseModal();
-    showToast(decision==='REJECTED'?'❌ اترفض ورجع للمهندس':(decision==='APPROVED_NOTES'?'📝 اتعتمد بملاحظات':'✅ اتعتمد'));
+    showToast(decision==='REJECTED'?'❌ اترفض ورجع للمهندس':(decision==='APPROVED_NOTES'?'📝 تم الإعتماد بملاحظات':'✅ تم الإعتماد'));
     renderApprovals();
   }catch(e){ ok.disabled=false; showToast('⚠ '+e.message, true); }
 }
