@@ -1066,9 +1066,9 @@ function dayNameOf(dateVal){
   if(!y||!m||!d) return '';
   return AR_DAYS[new Date(y, m-1, d).getDay()];
 }
-function autoSetDay(dateVal){
+function autoSetDay(dateVal, selId='f-day'){
   const dayName = dayNameOf(dateVal); if(!dayName) return;
-  const sel = document.getElementById('f-day');
+  const sel = document.getElementById(selId);
   for(let i=0;i<sel.options.length;i++){
     if(normDay(sel.options[i].value) === normDay(dayName)){ sel.selectedIndex=i; return; }
   }
@@ -1088,7 +1088,8 @@ function autoSetDateFromDay(dayName, dateInputId='f-date'){
   const inp = document.getElementById(dateInputId);
   if(inp) inp.value = d;
 }
-function calcTotal(){const q=parseFloat(document.getElementById('f-qty').value)||0,p=parseFloat(document.getElementById('f-price').value)||0,d=parseFloat(document.getElementById('f-discount').value)||0,t=q*p-d;document.getElementById('f-total').value=t>=0?fmt(t)+' ج.م':'---';}
+function calcTotal(qId='f-qty',pId='f-price',dId='f-discount',tId='f-total'){const q=parseFloat(document.getElementById(qId).value)||0,p=parseFloat(document.getElementById(pId).value)||0,d=dId?(parseFloat(document.getElementById(dId).value)||0):0,t=q*p-d;document.getElementById(tId).value=t>=0?fmt(t)+' ج.م':'---';}
+function rrCalcTotal(){ calcTotal('rr-qty','rr-price',null,'rr-total'); }
 
 function saveRecord(){
   const day=document.getElementById('f-day').value.trim(),date=document.getElementById('f-date').value.trim(),contractor=document.getElementById('f-contractor').value.trim(),spec=document.getElementById('f-spec').value.trim(),qty=parseFloat(document.getElementById('f-qty').value)||0,price=parseFloat(document.getElementById('f-price').value)||0,discount=parseFloat(document.getElementById('f-discount').value)||0,total=qty*price-discount,place=document.getElementById('f-place').value.trim(),notes=document.getElementById('f-notes').value.trim();
@@ -1270,10 +1271,10 @@ function renderSummary(){
 
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
-const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics','rent_requests'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)', rent_requests:'طلبات الإيجار (طلب معدات/عمالة + اعتماد مدير المشروع)'};
+const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics','rent_requests','rent_approvals'];
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)', rent_requests:'طلبات الإيجار (طلب معدات/عمالة + اعتماد مدير المشروع)', rent_approvals:'اعتماد طلبات الإيجار (مراجعة واعتماد طلبات المعدات والعمالة)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
-const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics', rent_requests:'rent_requests'};
+const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics', rent_requests:'rent_requests', rent_approvals:'rent_approvals'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
 function setEnabledModules(list){
   enabledModules=Array.isArray(list)?list.filter(m=>ALL_MODULES.includes(m)):[];
@@ -1350,7 +1351,9 @@ function applyModuleVisibility(){
   });
   // تبويبات "الموقف": لو واحدة بس مفعّلة، نخفي شريط التبويبات ونفتحها مباشرة
   const dailyOn=moduleEnabled('site_daily'), execOn=moduleEnabled('site_exec');
-  const stabs=document.querySelectorAll('.stab[data-stab]');
+  // ⚠ مقصورة على تاب الموقع: شاشات تانية (طلبات الإيجار) بتستخدم نفس كلاس .stab بقيم data-stab مختلفة،
+  // والاستعلام العام كان بيخفي زرايرها لأنها مش daily/exec.
+  const stabs=document.querySelectorAll('#tab-site .stab[data-stab]');
   stabs.forEach(b=>{ const k=b.dataset.stab; b.style.display = ((k==='daily'&&dailyOn)||(k==='exec'&&execOn)) ? '' : 'none'; });
   // لو الشاشة الحالية اتقفلت — ارجع للرئيسية
   const cur=document.querySelector('.panel.active');
@@ -1358,7 +1361,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', rent_requests:'طلبات الإيجار', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', rent_requests:'طلبات الإيجار', rent_approvals:'اعتماد طلبات الإيجار', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1381,6 +1384,7 @@ function switchTab(name){
   if(name==='analytics')renderAnalytics();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
   if(name==='rent_requests'){populateDropdowns();renderRentRequests();}
+  if(name==='rent_approvals'){renderRentApprovals();}
   if(name==='notify')renderNotifyAdmin();
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
   if(name==='settings'){renderSettings(); renderEqSettings(); eqLoadSiteNames();}
@@ -3900,56 +3904,105 @@ async function renderRentRequests(){
 }
 function rrRenderList(){
   const list=document.getElementById('rr-list'); if(!list) return;
-  const rows=_rrRequests.filter(r=>!_rrStatusFilter||r.status===_rrStatusFilter);
+  let rows=_rrRequests.filter(r=>!_rrStatusFilter||r.status===_rrStatusFilter);
+  if(!rrShowAll){
+    const {start,end}=getWeekBounds(rrWeekOffset);
+    const s=toYMD(start), e=toYMD(end);
+    rows=rows.filter(r=>r.date>=s && r.date<=e);
+  }
   const cnt=document.getElementById('rr-count'); if(cnt) cnt.textContent=rows.length+' طلب';
   if(!rows.length){ list.innerHTML='<div class="home-empty">'+(_rrRequests.length?'لا يوجد طلب بالفلتر ده':'لا يوجد طلبات إيجار بعد')+'</div>'; return; }
-  const canDecide=rrCanDecide();
+  // سجل المهندس بقى للعرض بس — القرار (اعتماد/رفض) اتنقل لتاب "اعتماد طلبات الإيجار" المستقل
   list.innerHTML=rows.map(r=>{
     const st=RR_STATUS_LABEL[r.status]||RR_STATUS_LABEL.PENDING;
     const rv=r.reviews||[]; const lastReview=rv[rv.length-1];
     return `<div class="record-card">
       <div class="record-head">
-        <div class="record-title"><div class="record-name">${esc(r.requestNo)} · ${esc(r.placeName)}</div><div class="record-spec">${RR_RESOURCE_LABEL[r.resourceType]||r.resourceType} × ${esc(r.qty)} · 👷 ${esc(r.contractorName)}</div></div>
+        <div class="record-title"><div class="record-name">${esc(r.requestNo)} · ${RR_RESOURCE_LABEL[r.resourceType]||r.resourceType}</div><div class="record-spec">👷 ${esc(r.contractorName)} · 📍 ${esc(r.placeName)}</div></div>
         <div class="record-side"><span class="badge" style="background:${st.bg};color:${st.c}">${st.t}</span></div>
       </div>
-      <div class="record-meta">${r.dateFrom?'<span class="badge">📅 '+esc(r.dateFrom)+(r.dateTo?' → '+esc(r.dateTo):'')+'</span>':''}</div>
+      <div class="record-meta"><span class="badge">📅 ${esc(r.date)} (${esc(r.day)})</span> <span class="badge">${esc(r.qty)} ${esc(r.qtyType)} × ${fmt(r.price)} ج.م</span> <span class="badge">💰 ${fmt(r.total)} ج.م</span></div>
+      <div class="record-notes">📝 ${esc(r.statementOfWork)}</div>
+      ${lastReview&&lastReview.note?'<div class="record-notes">💬 '+esc(lastReview.note)+'</div>':''}
+    </div>`;
+  }).join('');
+}
+function rrValidate(resourceType, date, contractorId, placeId, qty, price, statementOfWork){
+  if(!resourceType){ showToast('⚠ اختر نوع المطلوب', true); return false; }
+  if(!date){ showToast('⚠ اختر التاريخ', true); return false; }
+  if(!contractorId){ showToast('⚠ اختر المقاول / المورد', true); return false; }
+  if(!placeId){ showToast('⚠ اختر المكان', true); return false; }
+  if(!(qty>0)){ showToast('⚠ أدخل الكمية', true); return false; }
+  if(!(price>=0)){ showToast('⚠ أدخل السعر', true); return false; }
+  if(!statementOfWork){ showToast('⚠ اكتب بيان الأعمال', true); return false; }
+  return true;
+}
+async function saveRentRequest(){
+  const resourceType=document.getElementById('rr-resource-type').value;
+  const date=document.getElementById('rr-date').value;
+  const day=document.getElementById('rr-day').value;
+  const contractorId=document.getElementById('rr-contractor').value;
+  const placeId=document.getElementById('rr-place').value;
+  const qty=Number(document.getElementById('rr-qty').value);
+  const qtyType=document.getElementById('rr-qty-type').value;
+  const price=Number(document.getElementById('rr-price').value);
+  const statementOfWork=document.getElementById('rr-sow').value.trim();
+  if(!rrValidate(resourceType, date, contractorId, placeId, qty, price, statementOfWork)) return;
+  try{
+    await api('POST','/api/rent-requests',{contractorId, placeId, resourceType, day, date, qty, qtyType, price, statementOfWork});
+    showToast('✅ اترسل طلب الإيجار');
+    document.getElementById('rr-qty').value=''; document.getElementById('rr-price').value=''; document.getElementById('rr-total').value=''; document.getElementById('rr-sow').value='';
+    renderRentRequests();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر إرسال الطلب'), true); }
+}
+// ── اعتماد طلبات الإيجار — تاب مستقل لمدير المشروع/الأدمن (وحدة rent_approvals، أونلاين فقط) ──
+// القرار كان جوّه سجل المهندس نفسه، بقى هنا بس — سجل المهندس (rrRenderList) بقى للعرض بس.
+let _raRequests=[], _raStatusFilter='';
+function raSetStatusFilter(status){
+  _raStatusFilter=status;
+  document.querySelectorAll('#ra-status-filter .inv-cat').forEach(b=>b.classList.toggle('active', b.dataset.status===status));
+  raRenderList();
+}
+async function renderRentApprovals(){
+  const list=document.getElementById('ra-list'); if(!list) return;
+  if(!getAccessToken()||!navigator.onLine){ list.innerHTML='<div class="home-empty">اعتماد طلبات الإيجار بيانات حية — محتاج اتصال بالنت</div>'; return; }
+  try{
+    const q=await api('GET','/api/rent-requests');
+    _raRequests=q.data;
+    raRenderList();
+  }catch(e){ list.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+function raRenderList(){
+  const list=document.getElementById('ra-list'); if(!list) return;
+  const rows=_raRequests.filter(r=>!_raStatusFilter||r.status===_raStatusFilter);
+  const cnt=document.getElementById('ra-count'); if(cnt) cnt.textContent=rows.length+' طلب';
+  if(!rows.length){ list.innerHTML='<div class="home-empty">'+(_raRequests.length?'لا يوجد طلب بالفلتر ده':'لا يوجد طلبات إيجار بعد')+'</div>'; return; }
+  const canDecide=rrCanDecide();
+  list.innerHTML=rows.map(r=>{
+    const st=RR_STATUS_LABEL[r.status]||RR_STATUS_LABEL.PENDING;
+    const rv=r.reviews||[]; const lastReview=rv[rv.length-1];
+    const when=new Date(r.createdAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
+    return `<div class="record-card">
+      <div class="record-head">
+        <div class="record-title"><div class="record-name">${esc(r.requestNo)}</div><div class="record-spec">🕐 ${esc(when)} · 👤 ${esc(personName(r.user))}</div></div>
+        <div class="record-side"><span class="badge" style="background:${st.bg};color:${st.c}">${st.t}</span></div>
+      </div>
+      <div class="hint-box">
+        <div><strong>نوع الإيجار:</strong> ${RR_RESOURCE_LABEL[r.resourceType]||r.resourceType}</div>
+        <div><strong>الكمية:</strong> ${esc(r.qty)} ${esc(r.qtyType)}</div>
+      </div>
+      <div class="record-meta"><span class="badge">👷 ${esc(r.contractorName)}</span> <span class="badge">📍 ${esc(r.placeName)}</span> <span class="badge">💰 ${fmt(r.total)} ج.م</span></div>
       <div class="record-notes">📝 ${esc(r.statementOfWork)}</div>
       ${lastReview&&lastReview.note?'<div class="record-notes">💬 '+esc(lastReview.note)+'</div>':''}
       ${(canDecide&&r.status==='PENDING')?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-navy btn-inline" onclick="rrDecide('${r.id}','APPROVED')">✅ اعتماد</button>
-        <button class="btn btn-gold btn-inline" onclick="rrDecide('${r.id}','APPROVED_NOTES')">📝 اعتماد بملاحظات</button>
-        <button class="btn btn-danger btn-inline" onclick="rrDecide('${r.id}','REJECTED')">⛔ رفض</button>
+        <button class="btn btn-navy btn-inline" onclick="raDecide('${r.id}','APPROVED')">✅ اعتماد</button>
+        <button class="btn btn-gold btn-inline" onclick="raDecide('${r.id}','APPROVED_NOTES')">📝 اعتماد بملاحظات</button>
+        <button class="btn btn-danger btn-inline" onclick="raDecide('${r.id}','REJECTED')">⛔ رفض</button>
       </div>`:''}
     </div>`;
   }).join('');
 }
-function rrValidate(contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo){
-  if(!contractorId){ showToast('⚠ اختر المقاول / المورد', true); return false; }
-  if(!placeId){ showToast('⚠ اختر المكان', true); return false; }
-  if(!resourceType){ showToast('⚠ اختر نوع المطلوب', true); return false; }
-  if(!Number.isInteger(qty) || qty<1){ showToast('⚠ الكمية لازم تكون رقم صحيح 1 أو أكتر', true); return false; }
-  if(!statementOfWork){ showToast('⚠ اكتب بيان الأعمال', true); return false; }
-  if(dateFrom && dateTo && dateTo<dateFrom){ showToast('⚠ تاريخ "إلى" لازم يكون بعد أو يساوي تاريخ "من"', true); return false; }
-  return true;
-}
-async function saveRentRequest(){
-  const contractorId=document.getElementById('rr-contractor').value;
-  const placeId=document.getElementById('rr-place').value;
-  const resourceType=document.getElementById('rr-resource-type').value;
-  const qty=Number(document.getElementById('rr-qty').value);
-  const statementOfWork=document.getElementById('rr-sow').value.trim();
-  const dateFrom=document.getElementById('rr-from').value||undefined;
-  const dateTo=document.getElementById('rr-to').value||undefined;
-  if(!rrValidate(contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo)) return;
-  try{
-    await api('POST','/api/rent-requests',{contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo});
-    showToast('✅ اترسل طلب الإيجار');
-    document.getElementById('rr-qty').value=''; document.getElementById('rr-sow').value='';
-    document.getElementById('rr-from').value=''; document.getElementById('rr-to').value='';
-    renderRentRequests();
-  }catch(e){ showToast('⚠ '+(e.message||'تعذر إرسال الطلب'), true); }
-}
-async function rrDecide(id, decision){
+async function raDecide(id, decision){
   let note;
   if(decision!=='APPROVED'){
     note=prompt(decision==='REJECTED' ? 'سبب الرفض (إلزامي):' : 'الملاحظة (إلزامية):');
@@ -3960,7 +4013,7 @@ async function rrDecide(id, decision){
   try{
     await api('POST','/api/rent-requests/'+id+'/decide',{decision, note:note||undefined});
     showToast('✅ اتسجل القرار');
-    renderRentRequests();
+    renderRentApprovals();
   }catch(e){ showToast('⚠ '+(e.message||'تعذر تسجيل القرار'), true); }
 }
 
@@ -5073,6 +5126,56 @@ function resetWeek() {
 
 // Init week nav on load
 renderWeekNav();
+
+// ── RENT REQUESTS — week nav (نفس منطق سجل السراكي، حالة مستقلة) ────────────
+let rrWeekOffset = 0;
+let rrShowAll = false;
+
+function rrSyncShowAllUI(){
+  const btn = document.getElementById('rr-show-all-btn');
+  const nav = document.getElementById('rr-week-nav');
+  if(btn){ btn.classList.toggle('on', rrShowAll); btn.textContent = rrShowAll ? '✅ كل الطلبات' : '📋 كل الطلبات'; }
+  if(nav) nav.classList.toggle('all-mode', rrShowAll);
+}
+function rrToggleShowAll(){
+  rrShowAll = !rrShowAll;
+  rrSyncShowAllUI();
+  rrRenderList();
+}
+function rrRenderWeekNav(){
+  const {start, end} = getWeekBounds(rrWeekOffset);
+  const label = rrWeekOffset === 0 ? '📅 الأسبوع الحالي' : rrWeekOffset === -1 ? '📅 الأسبوع الماضي' : rrWeekOffset < 0 ? `📅 قبل ${Math.abs(rrWeekOffset)} أسابيع` : `📅 بعد ${rrWeekOffset} أسابيع`;
+  const fmtD = d => d.toLocaleDateString('ar-EG', {day:'numeric', month:'short'});
+  document.getElementById('rr-week-label').textContent = label;
+  document.getElementById('rr-week-range').textContent = `${fmtD(start)}  ←  ${fmtD(end)}`;
+}
+function rrShiftWeek(dir){
+  rrShowAll = false; rrSyncShowAllUI();
+  rrWeekOffset += dir;
+  rrRenderWeekNav();
+  rrRenderList();
+}
+function rrResetWeek(){
+  rrWeekOffset = 0;
+  rrShowAll = false; rrSyncShowAllUI();
+  rrRenderWeekNav();
+  rrRenderList();
+}
+rrRenderWeekNav();
+
+// ── RENT REQUESTS — sub-tabs (نفس منطق switchSiteTab) ────────────────────────
+let currentRentTab = 'log';
+function switchRentTab(name){
+  currentRentTab = name;
+  document.getElementById('rstab-log').style.display = name==='log'?'block':'none';
+  document.getElementById('rstab-new').style.display = name==='new'?'block':'none';
+  document.getElementById('rstab-log-btn').classList.toggle('active', name==='log');
+  document.getElementById('rstab-new-btn').classList.toggle('active', name==='new');
+}
+{
+  const rd=document.getElementById('rr-date');
+  if(rd){ rd.value=todayYMD(); autoSetDay(todayYMD(),'rr-day'); }
+}
 
 // ── SITE SUB-TABS ────────────────────────────────────────────────────────────
 let currentSiteTab = 'daily';

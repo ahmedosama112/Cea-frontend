@@ -127,6 +127,7 @@
     <button class="drawer-item" data-tab="inventory" onclick="switchTab('inventory')"><span class="ico">📦</span><span>المخازن</span></button>
     <button class="drawer-item" data-tab="equipment" onclick="switchTab('equipment')"><span class="ico">🚜</span><span>سراكي معدات (شهري)</span></button>
     <button class="drawer-item" data-tab="rent_requests" onclick="switchTab('rent_requests')"><span class="ico">📋</span><span>طلبات الإيجار</span></button>
+    <button class="drawer-item" data-tab="rent_approvals" onclick="switchTab('rent_approvals')"><span class="ico">✅</span><span>اعتماد طلبات الإيجار</span></button>
     <button class="drawer-item" data-tab="analytics" onclick="switchTab('analytics')"><span class="ico">📈</span><span>تحليلات المشروع</span></button>
     <button class="drawer-item" data-tab="summary"  onclick="switchTab('summary')"><span class="ico">📊</span><span>الملخص</span></button>
     <div class="drawer-sep"></div>
@@ -1041,27 +1042,85 @@
 
 <!-- ══ RENT REQUESTS — طلبات الإيجار (معدات/عمالة + اعتماد مدير المشروع، وحدة قابلة للتفعيل، أونلاين فقط) ══ -->
 <div id="tab-rent_requests" class="panel">
+
+  <div class="subtabs">
+    <button id="rstab-log-btn" class="subtab stab active" data-stab="log" onclick="switchRentTab('log')">📋 سجل الطلبات</button>
+    <button id="rstab-new-btn" class="subtab stab"        data-stab="new" onclick="switchRentTab('new')">➕ طلب إيجار جديد</button>
+  </div>
+
+  <!-- ══ NEW REQUEST PANEL ══ -->
+  <div id="rstab-new" style="display:none">
   <div class="card">
     <div class="card-title"><span>➕</span> طلب إيجار جديد</div>
-    <div class="field">
-      <label>المقاول / المورد <span class="req">*</span></label>
-      <select id="rr-contractor"><option value="">-- اختر المقاول / المورد --</option></select>
-    </div>
     <div class="field">
       <label>نوع المطلوب <span class="req">*</span></label>
       <select id="rr-resource-type"><option value="EQUIPMENT">🚜 معدة</option><option value="LABOR">👷 عمالة</option></select>
     </div>
-    <div class="field"><label>الكمية <span class="req">*</span></label><input type="number" id="rr-qty" min="1" step="1" placeholder="1"></div>
+    <div class="field">
+      <label>التاريخ <span class="req">*</span></label>
+      <input type="date" id="rr-date" onchange="autoSetDay(this.value,'rr-day')">
+    </div>
+    <div class="field">
+      <label>اليوم <span class="req">*</span></label>
+      <select id="rr-day" onchange="autoSetDateFromDay(this.value,'rr-date')">
+        <option value="">-- اختر اليوم --</option>
+        <option>الأحد</option><option>الاثنين</option><option>الثلاثاء</option>
+        <option>الأربعاء</option><option>الخميس</option><option>الجمعة</option><option>السبت</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>إسم المقاول / المورد <span class="req">*</span></label>
+      <input type="search" class="select-search" id="rr-contractor-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('rr-contractor-search','rr-contractor')">
+      <div class="select-search-empty" id="rr-contractor-search-empty">لا يوجد مقاول بهذا الاسم</div>
+      <select id="rr-contractor"><option value="">-- اختر المقاول / المورد --</option></select>
+    </div>
     <div class="field">
       <label>المكان <span class="req">*</span></label>
+      <input type="search" class="select-search" id="rr-place-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('rr-place-search','rr-place')">
+      <div class="select-search-empty" id="rr-place-search-empty">لا يوجد مكان بهذا الاسم</div>
       <select id="rr-place"><option value="">-- اختر المكان --</option></select>
     </div>
-    <div class="field"><label>بيان الأعمال <span class="req">*</span></label><textarea id="rr-sow" rows="2" placeholder="وصف الأعمال المطلوبة"></textarea></div>
-    <div style="display:flex;gap:8px">
-      <div class="field" style="flex:1"><label>من (اختياري)</label><input type="date" id="rr-from"></div>
-      <div class="field" style="flex:1"><label>إلى (اختياري)</label><input type="date" id="rr-to"></div>
+    <div class="field">
+      <label>يومية / مقطوعية / ساعة / عدد <span class="req">*</span></label>
+      <div class="row">
+        <input type="number" id="rr-qty" class="grow2" placeholder="0" min="0" step="any" inputmode="decimal" oninput="rrCalcTotal()">
+        <select id="rr-qty-type">
+          <option value="يومية" selected>يومية</option>
+          <option value="مقطوعية">مقطوعية</option>
+          <option value="ساعة">ساعة</option>
+          <option value="عدد">عدد</option>
+        </select>
+      </div>
     </div>
+    <div class="field">
+      <label>السعر <span class="req">*</span></label>
+      <input type="number" id="rr-price" placeholder="0.00" min="0" step="0.01" inputmode="decimal" oninput="rrCalcTotal()">
+    </div>
+    <div class="field">
+      <label>الإجمالي</label>
+      <input type="text" id="rr-total" class="total-field" readonly placeholder="0.00">
+    </div>
+    <div class="field"><label>بيان الأعمال <span class="req">*</span></label><textarea id="rr-sow" rows="2" placeholder="وصف الأعمال المطلوبة"></textarea></div>
     <button class="btn btn-primary" onclick="saveRentRequest()">📤 إرسال الطلب</button>
+  </div>
+  </div>
+
+  <!-- ══ LOG PANEL ══ -->
+  <div id="rstab-log">
+
+  <div id="rr-week-nav" class="week-nav">
+    <div class="week-nav-row">
+      <button class="wk-arrow" onclick="rrShiftWeek(-1)" aria-label="الأسبوع السابق">‹</button>
+      <div class="week-nav-mid">
+        <div id="rr-week-label"></div>
+        <div id="rr-week-range"></div>
+      </div>
+      <button class="wk-arrow" onclick="rrShiftWeek(1)" aria-label="الأسبوع التالي">›</button>
+    </div>
+    <div class="week-nav-actions">
+      <button class="pill gold" onclick="rrResetWeek()" id="rr-week-today-btn">📅 الأسبوع الحالي</button>
+      <button class="pill" onclick="rrToggleShowAll()" id="rr-show-all-btn">📋 كل الطلبات</button>
+    </div>
   </div>
 
   <div class="inv-cats" id="rr-status-filter">
@@ -1076,6 +1135,24 @@
     <div class="records-count" id="rr-count">0 طلب</div>
   </div>
   <div id="rr-list"></div>
+  </div>
+</div>
+
+<!-- ══ RENT APPROVALS — اعتماد طلبات الإيجار (تاب مستقل لمدير المشروع/الأدمن، وحدة قابلة للتفعيل، أونلاين فقط) ══ -->
+<div id="tab-rent_approvals" class="panel">
+  <div class="inv-cats" id="ra-status-filter">
+    <button class="inv-cat active" data-status="" onclick="raSetStatusFilter('')">الكل</button>
+    <button class="inv-cat" data-status="PENDING" onclick="raSetStatusFilter('PENDING')">⏳ معلّق</button>
+    <button class="inv-cat" data-status="APPROVED" onclick="raSetStatusFilter('APPROVED')">✅ معتمد</button>
+    <button class="inv-cat" data-status="APPROVED_NOTES" onclick="raSetStatusFilter('APPROVED_NOTES')">📝 بملاحظات</button>
+    <button class="inv-cat" data-status="REJECTED" onclick="raSetStatusFilter('REJECTED')">⛔ مرفوض</button>
+  </div>
+
+  <div class="records-header">
+    <div class="rh-title">اعتماد طلبات الإيجار</div>
+    <div class="records-count" id="ra-count">0 طلب</div>
+  </div>
+  <div id="ra-list"></div>
 </div>
 
 <!-- ══ IR ══ -->
