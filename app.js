@@ -1237,10 +1237,10 @@ function renderSummary(){
 
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
-const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)'};
+const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics','rent_requests'];
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)', rent_requests:'طلبات الإيجار (طلب معدات/عمالة + اعتماد مدير المشروع)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
-const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics'};
+const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics', rent_requests:'rent_requests'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
 function setEnabledModules(list){
   enabledModules=Array.isArray(list)?list.filter(m=>ALL_MODULES.includes(m)):[];
@@ -1325,7 +1325,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', rent_requests:'طلبات الإيجار', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1347,6 +1347,7 @@ function switchTab(name){
   if(name==='approvals')renderApprovals();
   if(name==='analytics')renderAnalytics();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
+  if(name==='rent_requests'){populateDropdowns();renderRentRequests();}
   if(name==='notify')renderNotifyAdmin();
   if(name==='admin'){renderAdmin(); if(typeof renderAdminSubmissions==='function') renderAdminSubmissions();}
   if(name==='settings'){renderSettings(); renderEqSettings(); eqLoadSiteNames();}
@@ -3832,6 +3833,104 @@ function invQty(v){ const n=Number(v); return n.toLocaleString('ar-EG',{maximumF
 function invItem(id){ return _invItems.find(i=>String(i.id)===String(id)); }
 function invLow(i){ return Number(i.minQty)>0 && Number(i.qty)<=Number(i.minQty); }
 
+// ── طلبات الإيجار — طلب معدات/عمالة من المهندس + اعتماد مدير المشروع (وحدة قابلة للتفعيل، أونلاين فقط) ──
+let _rrContractors=[], _rrPlaces=[], _rrRequests=[], _rrStatusFilter='';
+const RR_RESOURCE_LABEL={EQUIPMENT:'🚜 معدة', LABOR:'👷 عمالة'};
+const RR_STATUS_LABEL={
+  PENDING:{t:'⏳ معلّق', c:'var(--warn-fg)', bg:'var(--warn-bg)'},
+  APPROVED:{t:'✅ معتمد', c:'var(--ok-fg)', bg:'var(--ok-bg)'},
+  APPROVED_NOTES:{t:'📝 معتمد بملاحظات', c:'var(--navy-text)', bg:'var(--info-bg)'},
+  REJECTED:{t:'⛔ مرفوض', c:'var(--danger-fg)', bg:'var(--danger-bg)'},
+};
+function rrCanDecide(){ return isAdmin() || isProjectManager(); }
+async function rrLoadRefData(){
+  const [ctr, pl]=await Promise.all([api('GET','/api/contractors'), api('GET','/api/places')]);
+  _rrContractors=ctr.data; _rrPlaces=pl.data;
+  const cSel=document.getElementById('rr-contractor'), pSel=document.getElementById('rr-place');
+  if(cSel){ const v=cSel.value; cSel.innerHTML='<option value="">-- اختر المقاول / المورد --</option>'+_rrContractors.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join(''); if(v) cSel.value=v; }
+  if(pSel){ const v=pSel.value; pSel.innerHTML='<option value="">-- اختر المكان --</option>'+_rrPlaces.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join(''); if(v) pSel.value=v; }
+}
+function rrSetStatusFilter(status){
+  _rrStatusFilter=status;
+  document.querySelectorAll('#rr-status-filter .inv-cat').forEach(b=>b.classList.toggle('active', b.dataset.status===status));
+  rrRenderList();
+}
+async function renderRentRequests(){
+  const list=document.getElementById('rr-list'); if(!list) return;
+  if(!getAccessToken()||!navigator.onLine){ list.innerHTML='<div class="home-empty">طلبات الإيجار بيانات حية — محتاج اتصال بالنت</div>'; return; }
+  try{
+    await rrLoadRefData();
+    const q=await api('GET','/api/rent-requests');
+    _rrRequests=q.data;
+    rrRenderList();
+  }catch(e){ list.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+function rrRenderList(){
+  const list=document.getElementById('rr-list'); if(!list) return;
+  const rows=_rrRequests.filter(r=>!_rrStatusFilter||r.status===_rrStatusFilter);
+  const cnt=document.getElementById('rr-count'); if(cnt) cnt.textContent=rows.length+' طلب';
+  if(!rows.length){ list.innerHTML='<div class="home-empty">'+(_rrRequests.length?'لا يوجد طلب بالفلتر ده':'لا يوجد طلبات إيجار بعد')+'</div>'; return; }
+  const canDecide=rrCanDecide();
+  list.innerHTML=rows.map(r=>{
+    const st=RR_STATUS_LABEL[r.status]||RR_STATUS_LABEL.PENDING;
+    const rv=r.reviews||[]; const lastReview=rv[rv.length-1];
+    return `<div class="record-card">
+      <div class="record-head">
+        <div class="record-title"><div class="record-name">${esc(r.requestNo)} · ${esc(r.placeName)}</div><div class="record-spec">${RR_RESOURCE_LABEL[r.resourceType]||r.resourceType} × ${esc(r.qty)} · 👷 ${esc(r.contractorName)}</div></div>
+        <div class="record-side"><span class="badge" style="background:${st.bg};color:${st.c}">${st.t}</span></div>
+      </div>
+      <div class="record-meta">${r.dateFrom?'<span class="badge">📅 '+esc(r.dateFrom)+(r.dateTo?' → '+esc(r.dateTo):'')+'</span>':''}</div>
+      <div class="record-notes">📝 ${esc(r.statementOfWork)}</div>
+      ${lastReview&&lastReview.note?'<div class="record-notes">💬 '+esc(lastReview.note)+'</div>':''}
+      ${(canDecide&&r.status==='PENDING')?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-navy btn-inline" onclick="rrDecide('${r.id}','APPROVED')">✅ اعتماد</button>
+        <button class="btn btn-gold btn-inline" onclick="rrDecide('${r.id}','APPROVED_NOTES')">📝 اعتماد بملاحظات</button>
+        <button class="btn btn-danger btn-inline" onclick="rrDecide('${r.id}','REJECTED')">⛔ رفض</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+}
+function rrValidate(contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo){
+  if(!contractorId){ showToast('⚠ اختر المقاول / المورد', true); return false; }
+  if(!placeId){ showToast('⚠ اختر المكان', true); return false; }
+  if(!resourceType){ showToast('⚠ اختر نوع المطلوب', true); return false; }
+  if(!Number.isInteger(qty) || qty<1){ showToast('⚠ الكمية لازم تكون رقم صحيح 1 أو أكتر', true); return false; }
+  if(!statementOfWork){ showToast('⚠ اكتب بيان الأعمال', true); return false; }
+  if(dateFrom && dateTo && dateTo<dateFrom){ showToast('⚠ تاريخ "إلى" لازم يكون بعد أو يساوي تاريخ "من"', true); return false; }
+  return true;
+}
+async function saveRentRequest(){
+  const contractorId=document.getElementById('rr-contractor').value;
+  const placeId=document.getElementById('rr-place').value;
+  const resourceType=document.getElementById('rr-resource-type').value;
+  const qty=Number(document.getElementById('rr-qty').value);
+  const statementOfWork=document.getElementById('rr-sow').value.trim();
+  const dateFrom=document.getElementById('rr-from').value||undefined;
+  const dateTo=document.getElementById('rr-to').value||undefined;
+  if(!rrValidate(contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo)) return;
+  try{
+    await api('POST','/api/rent-requests',{contractorId, placeId, resourceType, qty, statementOfWork, dateFrom, dateTo});
+    showToast('✅ اترسل طلب الإيجار');
+    document.getElementById('rr-qty').value=''; document.getElementById('rr-sow').value='';
+    document.getElementById('rr-from').value=''; document.getElementById('rr-to').value='';
+    renderRentRequests();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر إرسال الطلب'), true); }
+}
+async function rrDecide(id, decision){
+  let note;
+  if(decision!=='APPROVED'){
+    note=prompt(decision==='REJECTED' ? 'سبب الرفض (إلزامي):' : 'الملاحظة (إلزامية):');
+    if(note===null) return;
+    note=note.trim();
+    if(!note){ showToast('⚠ لازم تكتب ملاحظة', true); return; }
+  }
+  try{
+    await api('POST','/api/rent-requests/'+id+'/decide',{decision, note:note||undefined});
+    showToast('✅ اتسجل القرار');
+    renderRentRequests();
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر تسجيل القرار'), true); }
+}
+
 async function renderInventory(){
   const list=document.getElementById('inv-items-list'); if(!list) return;
   if(!getAccessToken()||!navigator.onLine){ list.innerHTML='<div class="home-empty">المخازن بيانات مشتركة حية — محتاج اتصال بالنت</div>'; return; }
@@ -5457,6 +5556,7 @@ function getAccessToken(){ return localStorage.getItem('cea_access_token') || nu
 function getRefreshToken(){ return localStorage.getItem('cea_refresh_token') || null; }
 function getUserRole(){ return localStorage.getItem('cea_user_role') || 'ENGINEER'; }
 function isAdmin(){ return getUserRole() === 'ADMIN'; }
+function isProjectManager(){ return localStorage.getItem('cea_user_grade') === 'project manager'; }
 function saveSession(data){
   localStorage.setItem('cea_access_token', data.accessToken);
   localStorage.setItem('cea_refresh_token', data.refreshToken);
@@ -5472,6 +5572,7 @@ function clearSession(){
   localStorage.removeItem('cea_refresh_token');
   localStorage.removeItem('cea_user_email');
   localStorage.removeItem('cea_user_role');
+  localStorage.removeItem('cea_user_grade');
 }
 // كل مفاتيح بيانات التطبيق على الجهاز (بدون مفاتيح الجلسة) — تُمسح عند الخروج أو تبديل الحساب
 // عشان بيانات مهندس ما تتدمجش في حساب مهندس تاني على نفس الهاتف
@@ -5546,7 +5647,7 @@ async function verifySession(token){
     const res=await fetch(API_URL+'/api/auth/me',{headers:{'Authorization':'Bearer '+token}});
     if(res.ok){
       const d=await res.json();
-      if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_name', d.data.displayName||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); applyFormButtons(); }
+      if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_name', d.data.displayName||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); localStorage.setItem('cea_user_grade', d.data.grade||''); applyFormButtons(); }
       return 'ok';
     }
     // 429 (ضغط طلبات) أو خطأ سيرفر مؤقت = مش انتهاء جلسة — نعتبره مشكلة شبكة ونكمل أوفلاين
@@ -5628,6 +5729,8 @@ async function doLogin(){
     localStorage.setItem('cea_last_user_email', newEmail);
     saveSession(d.data);
     _sessionDead=false; // جلسة جديدة سليمة — نسمح بالتجديد تاني
+    // verifySession بتجيب grade/title/name/site من /me — doLogin ما بيستلمهاش من رد /login نفسه
+    await verifySession(d.data.accessToken);
     hideLoginScreen();
     onAuthReady(false);
   }catch(e){
