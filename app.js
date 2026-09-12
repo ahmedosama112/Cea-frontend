@@ -4098,29 +4098,42 @@ function raRenderList(){
   const cnt=document.getElementById('ra-count'); if(cnt) cnt.textContent=rows.length+' طلب';
   if(!rows.length){ list.innerHTML='<div class="home-empty">'+(_raRequests.length?'لا يوجد طلب بالفلتر ده':'لا يوجد طلبات إيجار بعد')+'</div>'; return; }
   const canDecide=rrCanDecide();
-  list.innerHTML=rows.map(r=>{
-    const st=RR_STATUS_LABEL[r.status]||RR_STATUS_LABEL.PENDING;
+  // جدول زي شاشة اعتماد المدراء (aprBuildTable): مدير المشروع بيقارن طلبات كتير بسرعة، وصف لكل طلب بيحط كل بيان في عموده والقرار في آخر الصف
+  const heads=['التاريخ والوقت','المهندس','رقم الطلب','النوع','المقاول','المكان','تاريخ الشغل','الكمية','السعر','الإجمالي','بيان الأعمال','الإجراء / الحالة'];
+  let html='<table class="apr-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
+  html+=rows.map(r=>{
     const rv=r.reviews||[]; const lastReview=rv[rv.length-1];
-    const when=new Date(r.createdAt).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'});
-    return `<div class="record-card">
-      <div class="record-head">
-        <div class="record-title"><div class="record-name">${esc(r.requestNo)}</div><div class="record-spec">🕐 ${esc(when)} · 👤 ${esc(personName(r.user))}</div></div>
-        <div class="record-side"><span class="badge" style="background:${st.bg};color:${st.c}">${st.t}</span></div>
-      </div>
-      <div class="hint-box">
-        <div><strong>نوع الإيجار:</strong> ${RR_RESOURCE_LABEL[r.resourceType]||r.resourceType}</div>
-        <div><strong>الكمية:</strong> ${esc(r.qty)} ${esc(r.qtyType)}</div>
-      </div>
-      <div class="record-meta"><span class="badge">👷 ${esc(r.contractorName)}</span> <span class="badge">📍 ${esc(r.placeName)}</span> <span class="badge">💰 ${fmt(r.total)} ج.م</span></div>
-      <div class="record-notes">📝 ${esc(r.statementOfWork)}</div>
-      ${lastReview&&lastReview.note?'<div class="record-notes">💬 '+esc(lastReview.note)+'</div>':''}
-      ${(canDecide&&r.status==='PENDING')?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-navy btn-inline" onclick="raDecide('${r.id}','APPROVED')">✅ اعتماد</button>
-        <button class="btn btn-gold btn-inline" onclick="raDecide('${r.id}','APPROVED_NOTES')">📝 اعتماد بملاحظات</button>
-        <button class="btn btn-danger btn-inline" onclick="raDecide('${r.id}','REJECTED')">⛔ رفض</button>
-      </div>`:''}
-    </div>`;
+    const notesBlock=(lastReview&&lastReview.note)?'<div class="record-notes">💬 '+esc(lastReview.note)+'</div>':'';
+    const when=new Date(r.createdAt);
+    let actionCell;
+    if(canDecide && r.status==='PENDING'){
+      actionCell='<div class="apr-acts">'
+        + '<button class="apr-a apr-a-ok" onclick="raDecide(\''+r.id+'\',\'APPROVED\')">✅ اعتماد</button>'
+        + '<button class="apr-a apr-a-notes" onclick="raDecide(\''+r.id+'\',\'APPROVED_NOTES\')">📝 اعتماد بملاحظات</button>'
+        + '<button class="apr-a apr-a-rej" onclick="raDecide(\''+r.id+'\',\'REJECTED\')">⛔ رفض</button>'
+        + '</div>';
+    } else {
+      const mod=(r.status==='APPROVED'||r.status==='APPROVED_NOTES')?'apr-ok':(r.status==='REJECTED'?'apr-rej':'apr-lock');
+      const t=(RR_STATUS_LABEL[r.status]||RR_STATUS_LABEL.PENDING).t;
+      actionCell='<span class="apr-pill '+mod+'">'+esc(t)+'</span>';
+    }
+    return '<tr>'
+      +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
+      +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small></td>'
+      +'<td>'+esc(r.requestNo)+'</td>'
+      +'<td>'+esc(RR_RESOURCE_LABEL[r.resourceType]||r.resourceType)+'</td>'
+      +'<td>'+esc(r.contractorName)+'</td>'
+      +'<td>'+esc(r.placeName)+'</td>'
+      +'<td>'+esc(r.date)+'<br><small>'+esc(r.day)+'</small></td>'
+      +'<td>'+esc(r.qty)+' '+esc(r.qtyType)+'</td>'
+      +'<td>'+fmt(r.price)+'</td>'
+      +'<td>'+fmt(r.total)+'</td>'
+      +'<td>'+esc(r.statementOfWork)+'</td>'
+      +'<td>'+actionCell+notesBlock+'</td>'
+      +'</tr>';
   }).join('');
+  html+='</tbody></table>';
+  list.innerHTML=html;
 }
 async function raDecide(id, decision){
   let note;
