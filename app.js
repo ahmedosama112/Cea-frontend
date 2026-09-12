@@ -2492,6 +2492,22 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
 }
 
 // يبني ملف الكشف المعتمد (نفس المنطق لزراري التنزيل والإرسال) ويرجّع الملف + ملخص بياناته
+// ── مقاولون بيتقدّموا في أول المصنّف ──
+// (12 سبتمبر 2026) طلب الـDC: سراكي العمالة دي بتتجمّع في الآخر فبتضيع منه وهو بيراجع.
+// الأسماء هنا بتتقارن بعد تطبيع المسافات والألف/الياء، فاختلاف كتابة بسيط مايكسرش المطابقة.
+// لزيادة/تعديل الأسماء: عدّل المصفوفة دي بس — الترتيب جواها هو ترتيب الورقات.
+const SHEET_FIRST_CONTRACTORS = ['أحمد عيد', 'محمد أحمد الليثي'];
+function normContractorName(s){
+  return String(s||'').replace(/\s+/g,' ').trim()
+    .replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه');
+}
+function sortContractorsForSheet(names){
+  const pri = SHEET_FIRST_CONTRACTORS.map(normContractorName);
+  const rank = n => { const i = pri.indexOf(normContractorName(n)); return i === -1 ? pri.length : i; };
+  // فرز ثابت: المقدَّمون بترتيب المصفوفة، والباقي بترتيبه الأصلي زي ما كان
+  return names.map((n,i)=>({n,i})).sort((a,b)=> (rank(a.n)-rank(b.n)) || (a.i-b.i)).map(x=>x.n);
+}
+
 async function buildApprovedWorkbook(exp, weekBounds, pq){
   try{
     // استبعاد السجلات اللي المهندس علّم عليها "مش هيتسجل في الإكسيل المعتمد" (r.done)
@@ -2509,7 +2525,7 @@ async function buildApprovedWorkbook(exp, weekBounds, pq){
       }
     }
 
-    const contractorNames = [...new Set(exp.map(r=>r.contractor))];
+    const contractorNames = sortContractorsForSheet([...new Set(exp.map(r=>r.contractor))]);
     let sheetsCount = 0;
     if(exportPlaceChips.length){
       // نسخة منفصلة لكل مقاول × كل مكان محدد
