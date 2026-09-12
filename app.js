@@ -345,6 +345,8 @@ let places      = JSON.parse(localStorage.getItem('saraki_places')      || 'null
 // ملاحظات الأماكن {اسم المكان: الملاحظة} — بتظهر للمهندس كأيقونة ❕ جنب اختيار المكان في تسجيل السركي
 let placeNotes  = JSON.parse(localStorage.getItem('cea_place_notes')    || '{}');
 function savePlaceNotes(){ try{ localStorage.setItem('cea_place_notes', JSON.stringify(placeNotes)); }catch(e){} }
+// كاش آخر طلبات إيجار معتمدة (لبادج "متطابق" في تاب السركي، اللي بيشتغل أوفلاين كمان)
+let _rrApprovedCache=[]; try{ _rrApprovedCache=JSON.parse(localStorage.getItem('cea_rr_approved_cache')||'[]'); }catch(e){}
 let inspectors  = JSON.parse(localStorage.getItem('saraki_inspectors')  || 'null') || [];
 let items       = JSON.parse(localStorage.getItem('saraki_items')       || 'null') || [];
 let editingId   = null;
@@ -1091,6 +1093,86 @@ function autoSetDateFromDay(dayName, dateInputId='f-date'){
 function calcTotal(qId='f-qty',pId='f-price',dId='f-discount',tId='f-total'){const q=parseFloat(document.getElementById(qId).value)||0,p=parseFloat(document.getElementById(pId).value)||0,d=dId?(parseFloat(document.getElementById(dId).value)||0):0,t=q*p-d;document.getElementById(tId).value=t>=0?fmt(t)+' ج.م':'---';}
 function rrCalcTotal(){ calcTotal('rr-qty','rr-price',null,'rr-total'); }
 
+// ── إسقاط طلب إيجار معتمد في فورم السركي ──
+// من غير كده المهندس بيكتب نفس بيانات الطلب اللي بعت بيه أصلاً تاني بإيده — والسيرفر
+// بيربط طلب واحد بسطر سركي واحد بس، فالإسقاط هنا بيوفّر الكتابة ويمنع الفروق البسيطة.
+let _rrPickList=[];          // الطلبات المعتمدة غير المستخدَمة
+let _rrPickedId=null;        // الطلب المختار للسجل اللي بيتكتب دلوقتي
+async function rrRefreshPickButton(){
+  const wrap=document.getElementById('f-rr-pick-wrap');
+  if(!wrap) return;
+  if(!navigator.onLine || !getAccessToken() || !moduleEnabled('rent_requests')){ wrap.style.display='none'; return; }
+  try{
+    // نداء واحد بيخدم الاتنين: القايمة للاختيار (غير المستخدَم) والكاش للبادج (الكل).
+    // usedByRecordId جاي من السيرفر، فالفلترة هنا نفس نتيجة unused=1 بالظبط بنص الطلبات.
+    const approved=await api('GET','/api/rent-requests/approved');
+    const all=approved.data||[];
+    // usedByRecordId بييجي من السيرفر، لكن المزامنة مؤجَّلة 3 ثواني (وممكن الجهاز يبقى أوفلاين
+    // خالص) — فالطلب اللي اتسجّل من شوية لسه بيبان "غير مستخدَم" في رد السيرفر. نستبعد كمان
+    // أي طلب مربوط بسجل محلي، وإلا المهندس يقدر يسقّطه تاني في الفترة دي.
+    const localUsed=new Set(records.filter(r=>r.rentRequestId!=null).map(r=>String(r.rentRequestId)));
+    _rrPickList=all.filter(r=>!r.usedByRecordId && !localUsed.has(String(r.id)));
+    wrap.style.display=_rrPickList.length?'':'none';
+    _rrApprovedCache=all.map(r=>({
+      id:r.id, requestNo:r.requestNo, qty:r.qty, qtyType:r.qtyType, price:r.price,
+      date:r.date, contractor:r.contractorName, place:r.placeName
+    }));
+    try{ localStorage.setItem('cea_rr_approved_cache', JSON.stringify(_rrApprovedCache)); }catch(e){}
+    renderRecords();
+  }catch(e){ wrap.style.display='none'; }
+}
+function rrOpenPicker(){
+  let ov=document.getElementById('rr-pick-overlay');
+  if(!ov){ ov=document.createElement('div'); ov.id='rr-pick-overlay'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  const rows=_rrPickList.map(r=>`<div class="home-row" style="cursor:pointer" onclick="rrPickApply(${jsArg(r.id)})">
+      <div style="min-width:0"><div class="n">${esc(r.requestNo)} · ${RR_RESOURCE_LABEL[r.resourceType]||esc(r.resourceType)}</div>
+      <div class="s">👷 ${esc(r.contractorName)} · 📍 ${esc(r.placeName)} · 📅 ${esc(r.date)} (${esc(r.day)})<br>${esc(r.qty)} ${esc(r.qtyType)} × ${fmt(r.price)}<br>📝 ${esc(r.statementOfWork)}</div></div>
+    </div>`).join('');
+  ov.innerHTML=`
+    <div class="modal-box" role="dialog" aria-modal="true">
+      <div class="modal-head">📥 اختر طلب إيجار معتمد</div>
+      <div class="modal-body">
+        <div class="list-scroll" style="max-height:400px">
+          ${rows||'<div class="home-empty">لا يوجد طلبات إيجار معتمدة غير مستخدَمة</div>'}
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-inline" onclick="rrClosePicker()">إلغاء</button>
+      </div>
+    </div>`;
+  ov.style.display='flex';
+  document.body.classList.add('modal-open');
+}
+function rrClosePicker(){
+  const ov=document.getElementById('rr-pick-overlay'); if(ov) ov.style.display='none';
+  document.body.classList.remove('modal-open');
+}
+function rrPickApply(id){
+  const r=_rrPickList.find(x=>String(x.id)===String(id)); if(!r) return;
+  document.getElementById('f-date').value=r.date; autoSetDay(r.date);
+  document.getElementById('f-qty').value=r.qty;
+  if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value=r.qtyType;
+  const missing=[];
+  const cSel=document.getElementById('f-contractor');
+  if(cSel){
+    const hasContractor=[...cSel.options].some(o=>o.value===r.contractorName);
+    if(hasContractor){ cSel.value=r.contractorName; fillSpec(); } else missing.push('المقاول "'+r.contractorName+'"');
+  }
+  const pSel=document.getElementById('f-place');
+  if(pSel){
+    const hasPlace=[...pSel.options].some(o=>o.value===r.placeName);
+    if(hasPlace) pSel.value=r.placeName; else missing.push('المكان "'+r.placeName+'"');
+  }
+  document.getElementById('f-price').value=r.price;
+  calcTotal();
+  document.getElementById('f-notes').value=r.statementOfWork;
+  _rrPickedId=r.id;
+  rrClosePicker();
+  // توست واحد بس: التاني كان بيبلع تحذير النقص، وهو الأهم للمهندس
+  if(missing.length) showToast('⚠ طلب '+r.requestNo+' اترسّم، بس '+missing.join(' و')+' مش موجود في قوايمك — اختاره يدويًا', true);
+  else showToast('📥 اترسّم طلب '+r.requestNo);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 function saveRecord(){
   const day=document.getElementById('f-day').value.trim(),date=document.getElementById('f-date').value.trim(),contractor=document.getElementById('f-contractor').value.trim(),spec=document.getElementById('f-spec').value.trim(),qty=parseFloat(document.getElementById('f-qty').value)||0,price=parseFloat(document.getElementById('f-price').value)||0,discount=parseFloat(document.getElementById('f-discount').value)||0,total=qty*price-discount,place=document.getElementById('f-place').value.trim(),notes=document.getElementById('f-notes').value.trim();
   const qtyType = (document.getElementById('f-qty-type') ? document.getElementById('f-qty-type').value : 'يومية');
@@ -1098,23 +1180,24 @@ function saveRecord(){
   const deductNote = (document.getElementById('f-deduct-note') ? document.getElementById('f-deduct-note').value.trim() : '');
   if(!day){showToast('⚠ اختر اليوم',true);return;}if(!contractor){showToast('⚠ اختر المقاول',true);return;}if(!place){showToast('⚠ اختر مكان الأعمال',true);return;}if(!qty||!price){showToast('⚠ أدخل العدد والسعر',true);return;}
   const isNew = editingId===null;
-  if(!isNew){const idx=records.findIndex(r=>r.id===editingId);if(idx!==-1)records[idx]={...records[idx],day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote};}
-  else{records.push({id:Date.now(),day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote});}
+  if(!isNew){const idx=records.findIndex(r=>r.id===editingId);if(idx!==-1)records[idx]={...records[idx],day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote,rentRequestId:_rrPickedId};}
+  else{records.push({id:Date.now(),day,date,contractor,spec,qty,qtyType,price,discount,total,place,notes,deductOn,deductNote,rentRequestId:_rrPickedId});}
   // الحفظ فشل (الذاكرة اتملت): النموذج بيفضل زي ما هو عشان البيانات متضيعش — لكن لازم كمان
   // نشيل السجل من الذاكرة، وإلا دوسة "تسجيل" تانية بتعمل نسخة تانية بـid جديد، والمزامنة
   // بترفع من الذاكرة فالمكرر بيوصل السيرفر والكشف المعتمد. ورسالة النجاح مابتظهرش إلا بعد حفظ فعلي.
   if(!saveAll()){ if(isNew) records.pop(); return; }
   if(!isNew){editingId=null;document.getElementById('edit-banner').classList.remove('show');document.getElementById('save-btn').textContent='✅ تسجيل البيانات';showToast('✏️ تم التعديل بنجاح!');}
   else showToast('✅ تم التسجيل بنجاح!');
+  _rrPickedId=null; rrRefreshPickButton();
   renderRecords();renderSummary();clearForm(false);
 }
-function editRecord(id){const r=records.find(x=>x.id===id);if(!r)return;editingId=id;switchTab('form');document.getElementById('f-date').value=r.date;autoSetDay(r.date);if(!document.getElementById('f-day').value)document.getElementById('f-day').value=r.day;document.getElementById('f-qty').value=r.qty;if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value=r.qtyType||'يومية';document.getElementById('f-price').value=r.price;document.getElementById('f-discount').value=r.discount;document.getElementById('f-notes').value=r.notes;document.getElementById('f-place').value=r.place;document.getElementById('f-contractor').value=r.contractor;document.getElementById('f-spec').value=r.spec;calcTotal();
+function editRecord(id){const r=records.find(x=>x.id===id);if(!r)return;editingId=id;switchTab('form');_rrPickedId=r.rentRequestId??null;document.getElementById('f-date').value=r.date;autoSetDay(r.date);if(!document.getElementById('f-day').value)document.getElementById('f-day').value=r.day;document.getElementById('f-qty').value=r.qty;if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value=r.qtyType||'يومية';document.getElementById('f-price').value=r.price;document.getElementById('f-discount').value=r.discount;document.getElementById('f-notes').value=r.notes;document.getElementById('f-place').value=r.place;document.getElementById('f-contractor').value=r.contractor;document.getElementById('f-spec').value=r.spec;calcTotal();
   setDeductChips(r.deductOn||[]);
   if(r.deductNote) document.getElementById('f-deduct-note').value=r.deductNote;
   updatePlaceNoteIcon();
   document.getElementById('edit-banner').classList.add('show');document.getElementById('save-btn').textContent='💾 حفظ التعديل';window.scrollTo({top:0,behavior:'smooth'});}
 function cancelEdit(){editingId=null;document.getElementById('edit-banner').classList.remove('show');document.getElementById('save-btn').textContent='✅ تسجيل البيانات';clearForm(false);}
-function clearForm(ask=true){if(ask&&!confirm('هل تريد مسح النموذج؟'))return;['f-day','f-spec','f-qty','f-price','f-notes','f-place','f-total'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-discount').value='0';if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value='يومية';document.getElementById('f-date').value=todayYMD();autoSetDay(todayYMD());const cs=document.getElementById('f-contractor');if(cs)cs.selectedIndex=0;setDeductChips([]);const ds=document.getElementById('f-deduct-on-select');if(ds)ds.selectedIndex=0;}
+function clearForm(ask=true){if(ask&&!confirm('هل تريد مسح النموذج؟'))return;['f-day','f-spec','f-qty','f-price','f-notes','f-place','f-total'].forEach(id=>document.getElementById(id).value='');document.getElementById('f-discount').value='0';if(document.getElementById('f-qty-type')) document.getElementById('f-qty-type').value='يومية';document.getElementById('f-date').value=todayYMD();autoSetDay(todayYMD());const cs=document.getElementById('f-contractor');if(cs)cs.selectedIndex=0;setDeductChips([]);const ds=document.getElementById('f-deduct-on-select');if(ds)ds.selectedIndex=0;_rrPickedId=null;}
 function deleteRecord(id){if(!confirm('حذف هذا السجل؟'))return;records=records.filter(r=>r.id!==id);saveAll();renderRecords();renderSummary();showToast('🗑 تم الحذف');}
 // done = مستبعَد من شيت الإكسيل المعتمد (اسم الحقل تاريخي؛ معناه الحالي: استبعاد من التصدير)
 function toggleDone(id){const idx=records.findIndex(r=>r.id===id);if(idx===-1)return;records[idx].done=!records[idx].done;saveAll();renderRecords();showToast(records[idx].done?'🚫 مش هيتسجل في الإكسيل المعتمد':'↩️ رجع للإكسيل المعتمد');}
@@ -1203,6 +1286,12 @@ function renderRecords(){
   if(!f.length){list.innerHTML=records.length?`<div class="empty-state"><div class="icon">🔍</div><p>لا يوجد نتائج بالفلتر ده</p></div>`:`<div class="empty-state"><div class="icon">📋</div><p>لا يوجد سجلات بعد</p></div>`;return;}
   list.innerHTML=f.map(r=>{
     const da=deductList(r);
+    // بادج "متطابق": مراجعة قبل الإرسال فقط — بتختفي أول ما السطر يتبعت للمعتمد (submittedAt)
+    const rrM = (!r.submittedAt) ? rrMatchFor(r) : null;
+    const rrOk = rrM && Number(rrM.qty)===Number(r.qty) && Number(rrM.price)===Number(r.price);
+    const rrBadge = rrM ? (rrOk
+      ? `<span class="badge" style="background:var(--ok-bg);color:var(--ok-fg)">✅ مطابق ${esc(rrM.requestNo)}</span>`
+      : `<span class="badge" style="background:var(--warn-bg);color:var(--warn-fg)">⚠ مطابق ${esc(rrM.requestNo)} — الكمية/السعر مختلفين</span>`) : '';
     return `<div class="record-card ${r.done?'excluded-card':''}">
       <div class="record-head">
         <div class="record-title"><div class="record-name">${esc(r.contractor)}</div><div class="record-spec">${esc(r.spec)}</div></div>
@@ -1217,6 +1306,7 @@ function renderRecords(){
         ${r.place?`<span class="badge">📍 ${esc(r.place)}</span>`:''}
         <span class="badge">⚒ ${esc(r.qty)} ${esc(r.qtyType||'')} × ${fmt(r.price)}</span>
         ${r.discount>0?`<span class="badge badge-warn">خصم ${fmt(r.discount)}</span>`:''}
+        ${rrBadge}
       </div>
       ${(r.syncError&&isAdmin())?`<div class="record-notes" style="background:var(--danger-bg);color:var(--danger-fg);font-weight:800">⚠ السجل ده ما اترفعش للسيرفر — ${esc(r.syncError)}. عدّله بالقلم ✏️ وهيترفع لوحده.</div>`:''}
       ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
@@ -1378,6 +1468,7 @@ function switchTab(name){
   if(name==='home'){renderHome(); loadWindows();}
   // تاب السراكي والاعتمادات محتاجين حالة المواعيد عشان يقفلوا الأزرار
   if(name==='records'||name==='approvals') loadWindows();
+  if(name==='form'||name==='records') rrRefreshPickButton(); // بتنده renderRecords بنفسها بعد تحديث كاش البادج
   if(name==='submissions'&&typeof renderMySubmissions==='function')renderMySubmissions();
   if(name==='inventory')renderInventory();
   if(name==='approvals')renderApprovals();
@@ -2824,7 +2915,7 @@ async function confirmSubmitApproved(){
   if(!_pendingSubmission) return;
   if(!navigator.onLine){ showToast('⚠ الإرسال محتاج نت — نزّل النسخة المعتمدة دلوقتي وابعتها لما النت يرجع', true); return; }
   const btn=document.getElementById('submit-confirm-btn'); if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الإرسال...'; }
-  const {built:b} = _pendingSubmission;
+  const {built:b, exp} = _pendingSubmission;
   try{
     const fd=new FormData();
     fd.append('file', new Blob([b.buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), b.fileName);
@@ -2843,6 +2934,10 @@ async function confirmSubmitApproved(){
     const wasResend=!!_resendTargetId; _resendTargetId=null;
     closeSubmitReview();
     showToast(wasResend?'✅ اتبعت النسخة الجديدة للمراجعة من أول المستوى':'✅ تم إرسال الكشف للاعتماد — تابع حالته من "تسليماتي"');
+    // بادج "متطابق" أداة مراجعة قبل الإرسال بس — بمجرد ما الكشف يوصل المعتمد بطل لزومها
+    const sentIds=new Set((exp||[]).map(x=>String(x.id)));
+    records.forEach(r=>{ if(sentIds.has(String(r.id))) r.submittedAt=Date.now(); });
+    saveAll(); renderRecords();
     if(typeof renderMySubmissions==='function') renderMySubmissions();
   }catch(e){
     showToast('⚠ فشل الإرسال: '+e.message, true);
@@ -3900,6 +3995,11 @@ const RR_STATUS_LABEL={
   REJECTED:{t:'⛔ مرفوض', c:'var(--danger-fg)', bg:'var(--danger-bg)'},
 };
 function rrCanDecide(){ return isAdmin() || isProjectManager(); }
+// بادج "متطابق" في تاب السركي — لو السطر مربوط بطلب فعلي (rentRequestId) أو مطابق له بالتاريخ/المقاول/المكان
+function rrMatchFor(r){
+  if(r.rentRequestId!=null){ return _rrApprovedCache.find(x=>String(x.id)===String(r.rentRequestId))||null; }
+  return _rrApprovedCache.find(x=>x.date===r.date && x.contractor===r.contractor && x.place===r.place)||null;
+}
 async function rrLoadRefData(){
   const [ctr, pl]=await Promise.all([api('GET','/api/contractors'), api('GET','/api/places')]);
   _rrContractors=ctr.data; _rrPlaces=pl.data;
@@ -5985,7 +6085,8 @@ function recordBody(r){
     qty:Number(r.qty)||0, qtyType:r.qtyType||'يومية', price:Number(r.price)||0,
     discount:Number(r.discount)||0, place:r.place||'', notes:r.notes||'',
     deductOn:Array.isArray(r.deductOn)?r.deductOn:(r.deductOn?[r.deductOn]:[]),
-    deductNote:r.deductNote||'', done:!!r.done };
+    deductNote:r.deductNote||'', done:!!r.done,
+    rentRequestId:r.rentRequestId!=null?Number(r.rentRequestId):null };
 }
 function contractorBody(c){
   return { name:c.name, spec:c.spec||'—',
@@ -6524,7 +6625,8 @@ function mapApiRecord(r){
     spec:r.spec||'', qty:Number(r.qty), qtyType:r.qtyType||'يومية', price:Number(r.price),
     discount:Number(r.discount), total:Number(r.total), notes:r.notes||'',
     place:r.placeName||r.place||'', deductOn:r.deductOn||[], deductNote:r.deductNote||'',
-    done:!!r.done
+    done:!!r.done,
+    rentRequestId:r.rentRequestId!=null?Number(r.rentRequestId):null
   };
 }
 
