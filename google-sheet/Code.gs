@@ -736,19 +736,30 @@ function doPost(e) {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
       if (!sheet) return out({ ok: false, error: 'sheet not found' });
       const rows = Array.isArray(body.rows) ? body.rows : [];
+      // ⚡ قراءة واحدة للرينج كله بدل getValue() لكل خانة.
+      // القديم كان 5 نداءات API لكل صف (225 نداء لـ45 كشف) فبيتعدّى مهلة السيرفر (4 ث)
+      // والرد بيرجع null فالكروت كلها تبقى بلا بيانات شيت. دلوقتي نداء واحد مهما كان عدد الصفوف.
       const statuses = {};
-      rows.forEach(r => {
-        const row = Number(r);
-        if (row > HEADER_ROWS && row <= sheet.getLastRow()) {
+      const lastRow = sheet.getLastRow();
+      const wanted = rows.map(Number).filter(row => row > HEADER_ROWS && row <= lastRow);
+      if (wanted.length) {
+        const minRow = Math.min.apply(null, wanted);
+        const maxRow = Math.max.apply(null, wanted);
+        // الأعمدة D..H متجاورة (4..8) فرينج واحد بيغطيها كلها
+        const firstCol = COLS.APPROVE_EXEC;            // 4
+        const width = COLS.STATUS - COLS.APPROVE_EXEC + 1; // 5 → D E F G H
+        const block = sheet.getRange(minRow, firstCol, maxRow - minRow + 1, width).getValues();
+        wanted.forEach(row => {
+          const v = block[row - minRow];
           statuses[row] = {
-            status: String(sheet.getRange(row, COLS.STATUS).getValue() || ''),
-            execApproval: String(sheet.getRange(row, COLS.APPROVE_EXEC).getValue() || ''),
-            pmApproval: String(sheet.getRange(row, COLS.APPROVE_PM).getValue() || ''),
-            execNotes: String(sheet.getRange(row, COLS.NOTES_EXEC).getValue() || ''),
-            pmNotes: String(sheet.getRange(row, COLS.NOTES_PM).getValue() || ''),
+            status: String(v[COLS.STATUS - firstCol] || ''),
+            execApproval: String(v[COLS.APPROVE_EXEC - firstCol] || ''),
+            pmApproval: String(v[COLS.APPROVE_PM - firstCol] || ''),
+            execNotes: String(v[COLS.NOTES_EXEC - firstCol] || ''),
+            pmNotes: String(v[COLS.NOTES_PM - firstCol] || ''),
           };
-        }
-      });
+        });
+      }
       return out({ ok: true, statuses: statuses });
     }
 
