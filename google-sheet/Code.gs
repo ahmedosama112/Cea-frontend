@@ -152,7 +152,6 @@ function sealedValidation(value) {
 
 const STATUS = {
   NEW: 'جديد', CONVERTED: 'بانتظار DC',            // كان "قيد الاعتماد" — دلوقتي المتبقي بعد التطبيق هو DC (التوقيع + PDF) بس
-  QUEUED: '⏳ جاري التحويل', // (سبتمبر 2026) حالة مؤقتة بين استلام الصف والتحويل/الـ PDF — processQueuedRows بيشيلها
   EXEC_APPROVED: 'معتمد مدير التنفيذ', PM_APPROVED: 'معتمد مدير المشروع', // (توافق مع الصفوف القديمة)
   DONE: 'معتمد بالكامل ✅', REJ_EXEC: 'مرفوض من DC', REJ_PM: 'مرفوض من مدير المشروع',
 };
@@ -301,7 +300,6 @@ function applyConditionalFormatting(sheet) {
     // الحالة
     mk('معتمد بالكامل', THEME.okBg, THEME.okFg, statusRange), mk('مرفوض', THEME.dangerBg, THEME.dangerFg, statusRange),
     mk('قيد الاعتماد', THEME.infoBg, THEME.infoFg, statusRange), mk('بانتظار DC', THEME.infoBg, THEME.infoFg, statusRange),
-    mk('جاري التحويل', THEME.infoBg, THEME.infoFg, statusRange),
     mk('معتمد مدير', THEME.warnBg, THEME.warnFg, statusRange),
     mk('⚠', THEME.dangerBg, THEME.dangerFg, statusRange),
     // المشروع
@@ -374,31 +372,12 @@ function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
   return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary, true);
 }
 
-/* (سبتمبر 2026) بيانات الصف اللي مرحلة 2 (processQueuedRows) محتاجاها — بتتخزن في Document Properties
-   بدل ما نوسّع الجدول الظاهر (LAST_COL/الهيدر ثابتين). المفتاح = رقم الصف، وبتتمسح لما الصف يخلص. */
-function pendingRowKey(row) { return 'pendingRow_' + row; }
-function savePendingRowData(row, data) {
-  PropertiesService.getDocumentProperties().setProperty(pendingRowKey(row), JSON.stringify(data));
-}
-function getPendingRowData(row) {
-  const raw = PropertiesService.getDocumentProperties().getProperty(pendingRowKey(row));
-  return raw ? JSON.parse(raw) : null;
-}
-function clearPendingRowData(row) {
-  PropertiesService.getDocumentProperties().deleteProperty(pendingRowKey(row));
-}
-
-/* المرحلة 1 — سريعة (لازم تحت 10 ثواني): تضيف الصف، تحفظ الملف في Drive، وتسيب حالة "جاري التحويل"
-   عشان الـ trigger (processQueuedRows) يكمّل التحويل + التوقيعات + الـ PDF بعدين.
+/* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
    approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتمادات"
-   signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → مرحلة 2 هتطلّع الـ PDF فورًا وتخلّي الصف "معتمد بالكامل"
-           false = جاي من الفورم (طوارئ — السيرفر واقع) → المسار القديم: مرحلة 2 توقفه "بانتظار DC"، والـ DC يعتمد من
+   signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
+           false = جاي من الفورم (طوارئ — السيرفر واقع) → المسار القديم: "بانتظار DC"، والـ DC يعتمد من
            خانة D فتنزل توقيعات Drive (تنفيذ + مشروع) ويتولّد الـ PDF (onEditHandler) */
 function processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed) {
-  // شبكة أمان: الصف بيتسجّل هنا وحالته "جاري التحويل"، واللي بيكمّله هو الـ trigger.
-  // لو الـ trigger مش متركّب (نسيان بعد لصق الكود) كل الكشوف هتفضل عالقة للأبد —
-  // فبنتأكد إنه موجود مع أول كشف. الدالة بتتخطى لو موجود، فمفيش تكرار.
-  try { installTriggers(); } catch (err) { Logger.log('تركيب التريجر فشل: ' + err); }
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -422,131 +401,41 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     try { moveFileToFolder(fileId, CONFIG.RAW_UPLOADS_FOLDER_ID); } catch (err) { Logger.log('نقل الملف الأصلي: ' + err); }
     try { setFileSmartChip(sheet, row, COLS.FILE_URL, fileUrl); } catch (err) { Logger.log('Smart Chip: ' + err); sheet.getRange(row, COLS.FILE_URL).setValue(fileUrl); }
 
-    sheet.getRange(row, COLS.STATUS).setValue(STATUS.QUEUED);
-    styleNewRow(sheet, row);
-    try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
-
-    savePendingRowData(row, {
-      fileId: fileId,
-      engineerName: String(engineerName || ''),
-      approvalSummary: approvalSummary || '',
-      signed: !!signed,
-    });
-
-    return row;
-  } finally { lock.releaseLock(); }
-}
-
-/* المرحلة 2 — الشغل التقيل اللي كان جوه processNewSubmission بالظبط: تحويل الإكسيل، تجهيز
-   خانات التوقيع، تصحيح اللف، ثم حسب signed: إما توقف "بانتظار DC" أو تطلّع الـ PDF وتختم "معتمد بالكامل".
-   Idempotent: بتتفحص حالة الصف/الشيت المحوّل قبل أي خطوة عشان processQueuedRows يقدر يعيد المحاولة
-   بأمان من غير ما يكرر تحويل أو PDF. بتتنده من processQueuedRows (trigger) أو يدويًا من المحرر. */
-function runHeavyProcessing(row) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) return;
-  const data = getPendingRowData(row);
-  if (!data) {
-    Logger.log('runHeavyProcessing: مفيش بيانات معلّقة للصف ' + row);
-    sheet.getRange(row, COLS.STATUS).setValue('⚠ لا توجد بيانات معلّقة لإكمال هذا الصف');
-    return;
-  }
-  const { fileId, engineerName, approvalSummary, signed } = data;
-
-  let convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
-  if (!convertedId) {
     const newName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm')}`;
-    convertedId = convertExcelToGoogleSheet(fileId, newName, CONFIG.PROCESSING_FOLDER_ID);
+    const convertedId = convertExcelToGoogleSheet(fileId, newName, CONFIG.PROCESSING_FOLDER_ID);
     prepareApprovalSlots(convertedId);
     fixTextWrapping(convertedId);
-    // ⚠ الـ Smart Chip بيفشل بصمت لما الكود بيشتغل من trigger (مش من نداء ويب) — الخلية بتفضل فاضية
-    // والـ catch جوّه setFileChip مابيمسكش الحالة دي لأن الاستدعاء بينجح شكليًا. فبنكتب أولًا،
-    // نعمل flush، ونتأكد إن الخانة مش فاضية — ولو فاضية نرجع لرابط عادي مضمون.
-    const convUrl = `https://docs.google.com/spreadsheets/d/${convertedId}/edit`;
-    setFileChipVerified(sheet, row, COLS.CONVERTED_SHEET_URL, convUrl);
-    sheet.getRange(row, COLS.CONVERTED_SHEET_URL).setNote(convertedId);
-  }
 
-  sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
-  if (!signed) {
-    // 🆘 صف من الفورم (طوارئ): الملف مش موقّع → نسيبه "بانتظار DC" بخانة F فاضية،
-    // والـ DC يعتمد من D زي زمان → onEditHandler بينزّل توقيعات Drive ويختم F ويطلّع الـ PDF
     sheet.getRange(row, COLS.STATUS).setValue(STATUS.CONVERTED);
+    setFileChip(sheet, row, COLS.CONVERTED_SHEET_URL, `https://docs.google.com/spreadsheets/d/${convertedId}/edit`);
+    sheet.getRange(row, COLS.CONVERTED_SHEET_URL).setNote(convertedId);
+
+    sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
+    if (!signed) {
+      // 🆘 صف من الفورم (طوارئ): الملف مش موقّع → نسيبه "بانتظار DC" بخانة F فاضية،
+      // والـ DC يعتمد من D زي زمان → onEditHandler بينزّل توقيعات Drive ويختم F ويطلّع الـ PDF
+      styleNewRow(sheet, row);
+      try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
+      return row;
+    }
+    // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
+    // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق
+    // (12 سبتمبر 2026 — قرار صاحب المشروع) الاعتماد الإداري (F) مابقاش بيتختم هنا.
+    // كان بيتملي تلقائيًا وقت الوصول فالصف بيبقى "معتمد بالكامل" قبل ما الـ DC يبص عليه أصلًا.
+    // دلوقتي بيفضل فاضي، والـ DC يعتمد من D → onEditHandler يختم F ويطلّع الـ PDF.
+    if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(safeText(approvalSummary));
+
+    // علامة إن الملف وصل موقّعًا من التطبيق: onEditHandler لازم يتخطى تنزيل التوقيعات
+    // من Drive للصف ده — التوقيعات متختومة في الإكسيل من السيرفر (signStamp.ts)،
+    // وإعادة ختمها هتحط صور مكررة فوق بعضها.
+    sheet.getRange(row, COLS.APPROVE_EXEC).setNote('signed');
+
     styleNewRow(sheet, row);
     try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
-    clearPendingRowData(row);
-    return;
-  }
-
-  // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
-  // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق (idempotent: نتخطى لو اتختمت خلاص)
-  const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-  if (pmCell.getValue() !== ADMIN_APPROVED) sealAdminApproval(pmCell);
-  if (approvalSummary && !sheet.getRange(row, COLS.NOTES_PM).getValue()) {
-    sheet.getRange(row, COLS.NOTES_PM).setValue(safeText(approvalSummary));
-  }
-
-  // 🖋 (سبتمبر 2026) الملف بيوصل **موقّعًا بالكامل** من التطبيق: توقيع كل معتمد اتختم على
-  // الإكسيل قبل الإرسال (signStamp.ts)، والتحويل بيحافظ على الصور. فما بقاش فيه خطوة DC:
-  // الـ PDF بيتولّد هنا على طول والصف بيبقى "معتمد بالكامل".
-  // (زرار "اعتماد DC" فضل شغال للصفوف القديمة ولصفوف الفورم في الطوارئ — onEditHandler.)
-  if (sheet.getRange(row, COLS.STATUS).getValue() !== STATUS.DONE) {
-    try {
-      const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
-      const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
-      setFileChipVerified(sheet, row, COLS.PDF_URL, pdfUrl);
-      sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
-    } catch (err) {
-      // فشل توليد الـ PDF مايضيّعش الصف — الملف المحوّل موجود ويتولّد منه PDF يدويًا (finalizeSignedRow)
-      // الحالة هنا مش QUEUED فـ processQueuedRows مش هيعيد المحاولة تلقائيًا — لازم تدخّل يدوي
-      Logger.log('توليد PDF (صف ' + row + '): ' + err);
-      sheet.getRange(row, COLS.STATUS).setValue('⚠ اتحوّل بس الـ PDF فشل — جرّب تاني');
-      styleNewRow(sheet, row);
-      return;
-    }
-  }
-  styleNewRow(sheet, row);
-  // سلسلة الاعتماد بتيجي سطر لكل اعتماد → الصف ياخد ارتفاعه الطبيعي بدل ما السطور تتقطع عند 42px
-  if (approvalSummary) fitApprovalChainRow(sheet, row);
-  try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
-  clearPendingRowData(row);
-}
-
-/* المرحلة 2 كـ trigger كل دقيقة: بتلاقط الصفوف الواقفة "جاري التحويل" وتكمّلها — حد أقصى 3 صفوف
-   لكل تشغيلة (Apps Script بيقفل التنفيذ ~6 دقايق، والباقي بيتعالج الدقيقة الجاية). */
-function processQueuedRows() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
-  if (!sheet) return;
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= HEADER_ROWS) return;
-
-  const statusVals = sheet.getRange(HEADER_ROWS + 1, COLS.STATUS, lastRow - HEADER_ROWS, 1).getValues();
-  const rows = [];
-  for (let i = 0; i < statusVals.length && rows.length < 3; i++) {
-    if (statusVals[i][0] === STATUS.QUEUED) rows.push(HEADER_ROWS + 1 + i);
-  }
-  if (!rows.length) return;
-
-  const lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) { Logger.log('processQueuedRows: القفل مشغول (تسليم شغّال دلوقتي) — هيتعاد المحاولة الدقيقة الجاية'); return; }
-  try {
-    rows.forEach(row => {
-      try { runHeavyProcessing(row); }
-      catch (err) {
-        Logger.log('processQueuedRows: فشل الصف ' + row + ': ' + err);
-        try { sheet.getRange(row, COLS.STATUS).setValue('⚠ فشل التحويل — راجع اللوج (Executions)'); } catch (e2) {}
-      }
-    });
+    // سلسلة الاعتماد بتيجي سطر لكل اعتماد → الصف ياخد ارتفاعه الطبيعي
+    if (approvalSummary) fitApprovalChainRow(sheet, row);
+    return row;
   } finally { lock.releaseLock(); }
-}
-
-/* تثبيت التريجر (مرة واحدة من المحرر: اختار installTriggers واضغط ▶ Run) — بيتخطى لو موجود بالفعل */
-function installTriggers() {
-  const exists = ScriptApp.getProjectTriggers().some(t => t.getHandlerFunction() === 'processQueuedRows');
-  if (exists) { Logger.log('processQueuedRows تريجر موجود بالفعل — ملحقتش أضيف تاني'); return; }
-  ScriptApp.newTrigger('processQueuedRows').timeBased().everyMinutes(1).create();
-  Logger.log('✅ اتعمل تريجر processQueuedRows كل دقيقة');
 }
 
 /* =====================================================================
@@ -596,9 +485,14 @@ function onEditHandler(e) {
       // (تنفيذ حسب المشروع + مدير المشروع) ويملّي خانة مدير المشروع تلقائيًا بنفس القيمة، والـ PDF بيتولد تحت.
       // صف خلصان بالفعل (إعادة اختيار القيمة) → ما نكررش التوقيعات ولا الـ PDF
       if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) return;
-      const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
-      insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
-      insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      // الصف اللي جه من التطبيق موقّع خلاص (علامته note='signed' على خانة D) — تنزيل توقيعات
+      // Drive عليه تاني بيحط صور مكررة. الصفوف القديمة/الفورم بس هي اللي محتاجة الختم هنا.
+      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed';
+      if (!alreadySigned) {
+        const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
+        insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
+        insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      }
       // الاعتماد الإداري (F): الصفوف الجديدة بتوصل مختومة من التطبيق؛ الصف القديم الفاضي يتختم هنا ويتقفل
       const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
       if (!pmCell.getValue()) sealAdminApproval(pmCell);
@@ -646,23 +540,6 @@ function setFileSmartChip(sheet, row, col, fileUrl) {
 function setFileChip(sheet, row, col, fileUrl) {
   try { setFileSmartChip(sheet, row, col, fileUrl); }
   catch (err) { Logger.log('Smart Chip فشل (عمود ' + col + '): ' + err); sheet.getRange(row, col).setValue(fileUrl); }
-}
-
-// نسخة متحقّقة من setFileChip — للاستخدام جوّه الـ trigger.
-// المشكلة: setFileSmartChip بينجح من غير ما يرمي استثناء لكن الخانة بتفضل فاضية لما الكود
-// شغال من trigger بدل نداء ويب. فبنعمل flush ونقرا الخانة تاني — لو فاضية نكتب رابط عادي.
-function setFileChipVerified(sheet, row, col, fileUrl) {
-  const cell = sheet.getRange(row, col);
-  setFileChip(sheet, row, col, fileUrl);
-  try { SpreadsheetApp.flush(); } catch (err) { Logger.log('flush: ' + err); }
-  let ok = false;
-  try { ok = String(cell.getValue() || '').trim() !== '' || Boolean(cell.getRichTextValue() && cell.getRichTextValue().getLinkUrl()); }
-  catch (err) { Logger.log('تحقق الخانة فشل: ' + err); }
-  if (!ok) {
-    Logger.log('Smart Chip سابت الخانة فاضية (عمود ' + col + ' صف ' + row + ') — كتبنا رابط عادي بدله');
-    cell.setValue(fileUrl);
-    try { SpreadsheetApp.flush(); } catch (err) { /* تجاهل */ }
-  }
 }
 
 function convertExcelToGoogleSheet(fileId, newName, folderId) {
