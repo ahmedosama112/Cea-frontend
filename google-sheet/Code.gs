@@ -372,6 +372,51 @@ function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
   return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary, true);
 }
 
+/* 🔎 دوّر على صف موجود بالفعل لنفس الكشف (اسم مهندس + اسم ملف) — يُستخدم قبل أي رفع
+   عشان لو ردّ doPost الأول ضاع (تايم آوت من السيرفر) نلاقي الصف اللي اتعمل فعلًا بدل ما نكرره.
+   بيمشي من آخر صف لفوق ويوقف بعد أقصى 300 صف — الدالة دي بتشتغل جوه request ومينفعش تمشي على شيت كبير كله */
+function findSubmissionRow(engineerName, fileName, maxAgeMinutes) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return null;
+  const name = String(engineerName || '').trim();
+  const wantedFile = String(fileName || '').trim();
+  if (!name || !wantedFile) return null;
+  // ⚠ اسم الملف مش فريد: `سركي_<مقاول>_<بداية>_<نهاية>.xlsx` بيتكرر مع إعادة إرسال نفس الأسبوع.
+  // maxAgeMinutes بيقصر البحث على آخر كام دقيقة: إعادة المحاولة بعد رد ضايع بتحصل في ثواني،
+  // أما إعادة إرسال كشف مرفوض فبعد ساعات. من غير الحد ده النسخة المصححة كانت هتتحسب "مكررة"
+  // وترجع رقم الصف القديم، فما توصلش الـDC خالص.
+  const minTime = maxAgeMinutes ? (Date.now() - maxAgeMinutes * 60 * 1000) : null;
+  const wantedNoExt = wantedFile.replace(/\.xlsx$/i, '');
+  const lastRow = sheet.getLastRow();
+  const firstRow = Math.max(HEADER_ROWS + 1, lastRow - 300 + 1);
+  for (let row = lastRow; row >= firstRow; row--) {
+    const rowName = String(sheet.getRange(row, COLS.ENGINEER_NAME).getValue() || '').trim();
+    if (rowName !== name) continue; // مقارنة رخيصة — نعملها الأول قبل ما نلمس Drive
+    if (minTime) {
+      const ts = sheet.getRange(row, COLS.TIMESTAMP).getValue();
+      const t = (ts instanceof Date) ? ts.getTime() : 0;
+      if (!t || t < minTime) continue; // صف قديم — مش إعادة محاولة لنفس الدفعة
+    }
+    try {
+      const cell = sheet.getRange(row, COLS.FILE_URL);
+      // الخانة دي smart chip: القيمة نفسها بتبقى فاضية غالبًا، والرابط في الـ rich text link
+      let url = cell.getValue();
+      if (!url) {
+        const rich = cell.getRichTextValue();
+        url = rich ? rich.getLinkUrl() : null;
+      }
+      const fileId = getFileIdFromUrl(url);
+      if (!fileId) continue;
+      const actualName = DriveApp.getFileById(fileId).getName().trim();
+      const actualNoExt = actualName.replace(/\.xlsx$/i, '');
+      if (actualName === wantedFile || actualNoExt === wantedNoExt || actualName === wantedNoExt || actualNoExt === wantedFile) {
+        return row;
+      }
+    } catch (err) { continue; } // أي خطأ (ملف اتمسح، رابط تالف...) → نتخطى الصف ده ونكمل
+  }
+  return null;
+}
+
 /* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
    approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتمادات"
    signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
@@ -821,7 +866,19 @@ function doPost(e) {
       return out({ ok: true, fileId: file.getId(), fileUrl: file.getUrl(), kept: Math.min(all.length, 30) });
     }
 
+    // 🔎 استعلام: هل الكشف ده موجود فعلًا في الشيت؟ (يُستخدم قبل إعادة رفع بعد ما رد الرفع الأول ضاع)
+    if (body.action === 'findRow') {
+      if (!body.engineerName || !body.fileName) return out({ ok: false, error: 'missing engineerName or fileName' });
+      const row = findSubmissionRow(String(body.engineerName), String(body.fileName));
+      return out({ ok: true, row: row });
+    }
+
     if (!body.fileBase64 || !body.engineerName) return out({ ok: false, error: 'missing engineerName or fileBase64' });
+
+    // ⚠ لو رد النداء الأول ضاع، إعادة المحاولة كانت بتعمل صف تاني لنفس الكشف —
+    // دلوقتي بندوّر الأول وبنرجّع رقم الصف الموجود من غير ما نرفع ملف جديد أو نعمل صف تاني
+    const existingRow = findSubmissionRow(String(body.engineerName), body.fileName || '', 20);
+    if (existingRow) return out({ ok: true, row: existingRow, duplicate: true });
 
     // إنشاء ملف الإكسيل في Drive (processNewSubmission هينقله لفولدر RAW ويحوّله زي الفورم)
     const blob = Utilities.newBlob(
