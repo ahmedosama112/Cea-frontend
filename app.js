@@ -4507,13 +4507,16 @@ const SUB_STATUS={SUBMITTED:{t:'⏳ مُرسَل — بانتظار المراج
    كانت جوّه قايمة خطوات الشيت بخط 11px رمادي، وهي آخر مرحلة وأهم ملاحظة بتوصل للمهندس.
    لو DC رفض → أحمر (ده سبب الرفض)، غير كده أصفر. */
 function dcNotesBox(s){
-  const note=String(s.sheet?.execNotes||'').trim();
+  // اللايف (s.sheet?.execNotes) أحدث، بس لو فشل النداء آخر مرة بيرجع فاضي — بنرجع للمخزّن (s.dcNote) عشان الملاحظة ما تختفيش
+  const note=String(s.sheet?.execNotes||s.dcNote||'').trim();
   if(!note) return '';
   const rejected=String(s.sheet?.status||'').includes('مرفوض');
   const bg=rejected?'var(--danger-bg)':'var(--warn-bg)', fg=rejected?'var(--danger-fg)':'var(--warn-fg)';
   const head=rejected?'⛔ <b>DC رجّع الكشف</b> — السبب:':'📝 <b>ملاحظة من DC:</b>';
+  const unseen=s.dcNoteAt && (!s.dcNoteSeenAt || s.dcNoteSeenAt<s.dcNoteAt);
+  const seenBtn=unseen?' <button class="btn btn-ghost btn-inline" onclick="markDcNoteSeen(\''+s.id+'\', this)">✔ شفت الملاحظة</button>':'';
   return '<div class="s" style="font-size:11.5px;padding:6px 8px;background:'+bg+';color:'+fg+';border-radius:8px;line-height:1.7">'
-    + head+' '+esc(note)+'</div>';
+    + head+' '+esc(note)+seenBtn+'</div>';
 }
 function subBucket(s){
   const sh=String(s.sheet?.status||'');
@@ -4677,6 +4680,14 @@ async function refreshDcNotes(id, btn){
     showToast(r.data?.relinked ? 'ℹ️ لقينا صف الكشف في الشيت وربطناه — حالة الـDC ظاهرة دلوقتي' : r.data?.alreadySynced ? '🔄 تم التحديث (مفيش حاجة اتغيرت)' : '🔄 تم التحديث');
     renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
   }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='🔄 تحديث لتلقي ملاحظات DC'; } }
+}
+// المهندس بيأكّد إنه قرا ملاحظة الـDC — بيشيل زرار "شفت الملاحظة" من على الكارت
+async function markDcNoteSeen(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='⏳ ...'; }
+  try{
+    await api('POST','/api/submissions/'+id+'/dc-note-seen');
+    renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
+  }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='✔ شفت الملاحظة'; } }
 }
 // حذف الكشف بقى للأدمن فقط من كارت الحساب في إدارة الحسابات (المهندس مابقاش يقدر يحذف بعد الإرسال)
 async function adminLoadUserSubs(){
