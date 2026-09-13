@@ -7236,8 +7236,9 @@ function anKpis(d){
 }
 
 function anTable(rows){
+  // اليوميات = مجموع الكميات للسجلات اللي نوعها "يومية" فقط — غير عمود "أيام" اللي بيعدّ التواريخ المختلفة
   const heads = anIsCtr()
-    ? ['المقاول','التخصص','الفئة','متوسط السعر','المنصرف','الخصم','% الخصم','سجلات','أيام','أماكن','مهندسين','ساعات معدات','آخر نشاط']
+    ? ['المقاول','التخصص','الفئة','متوسط السعر','المنصرف','الخصم','% الخصم','سجلات','أيام','اليوميات','أماكن','مهندسين','ساعات معدات','آخر نشاط']
     : ['المكان','المنصرف','الخصم','% الخصم','سجلات','أيام','مقاولين','مهندسين','IR (A/B/C)','الإنجاز','ساعات معدات','آخر نشاط'];
   let t='<table class="apr-table an-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
   t+=rows.map(r=>{
@@ -7252,7 +7253,7 @@ function anTable(rows){
         +`<td>${r.rate==null?'—':anInt(r.rate)+' / '+esc(r.rateType||'يومية')}</td>`
         +`<td>${r.avgPrice==null?'—':anInt(r.avgPrice)}</td>`
         +money
-        +`<td>${anInt(r.records)}</td><td>${anInt(r.days)}</td><td>${anInt(r.places)}</td><td>${anInt(r.engineers)}</td>`
+        +`<td>${anInt(r.records)}</td><td>${anInt(r.days)}</td><td>${r.dailyQty?anInt(r.dailyQty):'—'}</td><td>${anInt(r.places)}</td><td>${anInt(r.engineers)}</td>`
         +`<td>${r.equipHours?anPct(r.equipHours):'—'}</td><td>${esc(r.lastDate||'—')}</td></tr>`;
     }
     return '<tr>'
