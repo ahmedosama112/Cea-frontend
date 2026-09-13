@@ -4605,7 +4605,8 @@ function subRow(s, adminView){
     <div class="sub-acts">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
       ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
-      ${s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled && subSentLongAgo(s) ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="الكشف عدّى الاعتمادات بس ما وصلش شيت جوجل (فشل الرفع) — بيحاول تاني">☁️ إعادة الإرسال للشيت</button>' : ''}
+      ${s.reviewState==='SENT' && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="refreshDcNotes(\''+s.id+'\', this)" title="بيعيد قراءة حالة الكشف وملاحظة الـDC من شيت الاعتماد">🔄 تحديث لتلقي ملاحظات DC</button>' : ''}
+      ${isAdmin() && s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled && subSentLongAgo(s) ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="أداة إصلاح للأدمن فقط — بترفع الملف تاني لشيت الاعتماد لو الرفع الأول فشل">☁️ إعادة الإرسال للشيت</button>' : ''}
       ${adminView && isAdmin() ? '<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+s.id+'\')" title="حذف نهائي من التطبيق (الأدمن فقط)">🗑 حذف</button>' : ''}
     </div>
   </div>`;
@@ -4666,6 +4667,16 @@ async function resyncSubmission(id, btn){
     showToast(r.data?.alreadySynced ? 'ℹ️ الكشف موجود في الشيت بالفعل (صف '+r.data.gsheetRow+')' : '☁️ وصل شيت الاعتماد — صف '+(r.data?.gsheetRow||''));
     renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
   }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='☁️ إعادة الإرسال للشيت'; } }
+}
+// الزرار ده للمهندس — بيحدّث حالة الشيت وملاحظة الـDC بس، عمره ما يبعت الملف. الإرسال للشيت
+// تلقائي لما السلسلة تكمل، وإعادة الإرسال للأدمن بس.
+async function refreshDcNotes(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent='⏳ جاري التحديث...'; }
+  try{
+    const r=await api('POST','/api/submissions/'+id+'/gsync');
+    showToast(r.data?.relinked ? 'ℹ️ لقينا صف الكشف في الشيت وربطناه — حالة الـDC ظاهرة دلوقتي' : r.data?.alreadySynced ? '🔄 تم التحديث (مفيش حاجة اتغيرت)' : '🔄 تم التحديث');
+    renderMySubmissions(); if(typeof renderAdminSubmissions==='function' && isAdmin()) renderAdminSubmissions();
+  }catch(e){ showToast('⚠ '+e.message, true); if(btn){ btn.disabled=false; btn.textContent='🔄 تحديث لتلقي ملاحظات DC'; } }
 }
 // حذف الكشف بقى للأدمن فقط من كارت الحساب في إدارة الحسابات (المهندس مابقاش يقدر يحذف بعد الإرسال)
 async function adminLoadUserSubs(){

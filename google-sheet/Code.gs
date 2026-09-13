@@ -375,7 +375,10 @@ function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
 /* 🔎 دوّر على صف موجود بالفعل لنفس الكشف (اسم مهندس + اسم ملف) — يُستخدم قبل أي رفع
    عشان لو ردّ doPost الأول ضاع (تايم آوت من السيرفر) نلاقي الصف اللي اتعمل فعلًا بدل ما نكرره.
    بيمشي من آخر صف لفوق ويوقف بعد أقصى 300 صف — الدالة دي بتشتغل جوه request ومينفعش تمشي على شيت كبير كله */
-function findSubmissionRow(engineerName, fileName, maxAgeMinutes) {
+/* notBeforeMs (اختياري): الصف لازم يكون اتعمل بعد الوقت ده. الباك اند بيبعت وقت إنشاء ملف
+   الكشف الحالي — فالصفوف اللي أقدم منه بتخص نسخة سابقة (إعادة إرسال كشف مرفوض بتعمل ملف جديد
+   بنفس الاسم)، وربط الكشف بيها كان هيوصّل المهندس لحالة النسخة القديمة. */
+function findSubmissionRow(engineerName, fileName, maxAgeMinutes, notBeforeMs) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) return null;
   const name = String(engineerName || '').trim();
@@ -385,7 +388,10 @@ function findSubmissionRow(engineerName, fileName, maxAgeMinutes) {
   // maxAgeMinutes بيقصر البحث على آخر كام دقيقة: إعادة المحاولة بعد رد ضايع بتحصل في ثواني،
   // أما إعادة إرسال كشف مرفوض فبعد ساعات. من غير الحد ده النسخة المصححة كانت هتتحسب "مكررة"
   // وترجع رقم الصف القديم، فما توصلش الـDC خالص.
-  const minTime = maxAgeMinutes ? (Date.now() - maxAgeMinutes * 60 * 1000) : null;
+  const ageLimit = maxAgeMinutes ? (Date.now() - maxAgeMinutes * 60 * 1000) : null;
+  const floor = Number(notBeforeMs) || null;
+  // الأقسى بين الاتنين هو اللي بيحكم
+  const minTime = (ageLimit && floor) ? Math.max(ageLimit, floor) : (ageLimit || floor);
   const wantedNoExt = wantedFile.replace(/\.xlsx$/i, '');
   const lastRow = sheet.getLastRow();
   const firstRow = Math.max(HEADER_ROWS + 1, lastRow - 300 + 1);
@@ -869,7 +875,7 @@ function doPost(e) {
     // 🔎 استعلام: هل الكشف ده موجود فعلًا في الشيت؟ (يُستخدم قبل إعادة رفع بعد ما رد الرفع الأول ضاع)
     if (body.action === 'findRow') {
       if (!body.engineerName || !body.fileName) return out({ ok: false, error: 'missing engineerName or fileName' });
-      const row = findSubmissionRow(String(body.engineerName), String(body.fileName));
+      const row = findSubmissionRow(String(body.engineerName), String(body.fileName), null, body.notBefore);
       return out({ ok: true, row: row });
     }
 
