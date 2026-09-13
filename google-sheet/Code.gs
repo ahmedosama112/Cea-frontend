@@ -487,7 +487,9 @@ function onEditHandler(e) {
       if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) return;
       // الصف اللي جه من التطبيق موقّع خلاص (علامته note='signed' على خانة D) — تنزيل توقيعات
       // Drive عليه تاني بيحط صور مكررة. الصفوف القديمة/الفورم بس هي اللي محتاجة الختم هنا.
-      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed';
+      // طبقتين: العلامة (بتضيع لو حد مسح الملاحظة) + فحص الملف نفسه (بيصحّح لو العلامة ضاعت)
+      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed'
+        || hasAnySignature(convertedId);
       if (!alreadySigned) {
         const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
         insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
@@ -498,8 +500,14 @@ function onEditHandler(e) {
       if (!pmCell.getValue()) sealAdminApproval(pmCell);
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     } else {
-      // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث
-      insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث.
+      // خانة F كانت بتنزّل التوقيع بلا أي شرط، فالكشف الواصل موقّع من التطبيق كان بياخد توقيع تاني فوق الحقيقي —
+      // فبنستخدم نفس الفحص المزدوج قبل ما نحط التوقيع.
+      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed'
+        || hasAnySignature(convertedId);
+      if (!alreadySigned) {
+        insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      }
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     }
 
@@ -598,6 +606,36 @@ function restoreRowHeightsForImages(ws) {
   });
 }
 
+/* فيه توقيع فعلًا في الملف؟ — بنبص على خانات التوقيع الثلاثة في كل ورقات الشيت المحوّل.
+   السبب: علامة note='signed' لوحدها مش كفاية — هي على خانة الـDC نفسها وأي مسح/لصق بيضيّعها،
+   وساعتها السكربت بيفتكر الصف طوارئ وينزّل توقيعات Drive فوق توقيعات حقيقية. */
+function hasAnySignature(sheetId) {
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    // الخانات دي بلوكات مدموجة — نحل الدمج عشان نقارن بالصف/العمود الحقيقي مش النص
+    const cellRefs = [SIG_CELL_EXEC, SIG_CELL_PM, SIG_CELL_TL];
+    for (const ws of ss.getSheets()) {
+      const resolved = cellRefs.map(a1 => {
+        let range = ws.getRange(a1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
+        return { row: range.getRow(), col: range.getColumn() };
+      });
+      for (const img of ws.getImages()) {
+        const anchor = img.getAnchorCell();
+        const ar = anchor.getRow(), ac = anchor.getColumn();
+        if (resolved.some(t => t.row === ar && t.col === ac)) return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    // ما قدرناش نتأكد → نفترض إن فيه توقيع (الأمان في عدم التختيم، مش في التختيم):
+    // توقيع ناقص بيتصلّح باليد، أما توقيع زيادة فوق ملف مالي فبيبوّظه.
+    // بنسجّل السبب: في مسار الطوارئ الفشل ده معناه PDF طلع بلا توقيعات في صمت — لو ظهر في اللوج
+    // يبقى الصف ده محتاج ختم يدوي أو إعادة توليد PDF بعده.
+    Logger.log('⚠ hasAnySignature فشل للشيت ' + sheetId + ' — اتخطينا الختم احتياطًا: ' + e);
+    return true;
+  }
+}
+
 function insertSignatureOnAllSheets(sheetId, sigFileId, cellA1) {
   // توقيع مش مضبوط (مفتاح فاضي / PUT_...) أو صورته اتمسحت من Drive → نتخطاه ونكمّل (الـ PDF بيتولّد برضو).
   // كده ممكن تشيل صور التوقيعات من CONFIG وقت ما تحب والاعتماد ما يتكسرش — وترجّعها بلصق الـ ID تاني.
@@ -682,10 +720,31 @@ function finalizeSignedRow() {
   ui.alert('✅ اتولّد الـ PDF للصف ' + row + ' والحالة بقت "معتمد بالكامل".');
 }
 
+/* 🔄 لما الأونر يعدّل الشيت المحوّل يدويًا (يشيل توقيع غلط مثلاً) ويحتاج PDF جديد منه.
+   عن قصد الدالة دي "غبية": مابتلمسش الحالة ولا F ولا التوقيعات — بس بتاخد الملف المحوّل زي
+   ما هو دلوقتي وتعمل منه PDF جديد، فمن الآمن تشغيلها في أي وقت. */
+function regeneratePdfForRow() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) { ui.alert('افتح شيت "' + CONFIG.SHEET_NAME + '" وحدد الصف الأول.'); return; }
+  const row = sheet.getActiveRange().getRow();
+  if (row <= HEADER_ROWS) { ui.alert('حدد صف كشف (مش الترويسة).'); return; }
+  const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
+  if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
+  const confirm = ui.alert('إعادة توليد PDF', 'هيتعمل PDF جديد للصف ' + row + ' من الشيت المحوّل زي ما هو دلوقتي، وهيستبدل رابط الـ PDF القديم. تكمل؟', ui.ButtonSet.YES_NO);
+  if (confirm !== ui.Button.YES) return;
+  const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
+  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
+  setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+  ui.alert('✅ اتولّد PDF جديد للصف ' + row + '.');
+}
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('⚙ أدوات السراكي')
     .addItem('🎨 إعادة تطبيق التصميم', 'applyNewDesign')
     .addItem('🖨 إخراج PDF لصف موقّع من التطبيق (بدون توقيعات Drive)', 'finalizeSignedRow')
+    .addItem('🔄 إعادة توليد PDF للصف (بعد تعديل يدوي)', 'regeneratePdfForRow')
     .addSeparator()
     .addItem('🙈 إخفاء بيانات الأسبوع الآن', 'hideWeeklyData')
     .addItem('👁 إظهار كل الصفوف المخفية', 'unhideAllRows')
