@@ -108,6 +108,76 @@ apt install -y docker-compose-plugin
 
 وجّه دومين (مثلًا `api.yourdomain.com`) بسجل A على IP الـ VPS — شهادة HTTPS هتتعمل تلقائيًا بـ Caddy تحت.
 
+#### 1أ — تأمين السيرفر (قبل ما تحط أي بيانات عليه)
+
+الفرق الجوهري عن Railway: هناك مكانش فيه سيرفر مكشوف على الإنترنت باسم مستخدم وباسورد.
+هنا فيه — و**السيرفرات الجديدة بتتضرب بمحاولات دخول تلقائية خلال ساعات من تشغيلها**. الخطوات
+دي مش رفاهية.
+
+**١. مفتاح SSH بدل الباسورد**
+
+من جهازك (مش من السيرفر):
+```bash
+ssh-keygen -t ed25519 -C "cea-vps"          # لو مالكش مفتاح
+ssh-copy-id root@<IP-الـVPS>                 # بينسخ المفتاح للسيرفر
+ssh root@<IP-الـVPS>                         # لازم يدخل من غير ما يسأل باسورد
+```
+
+⚠ **متعملش الخطوة اللي بعدها غير لما الدخول بالمفتاح ينجح فعلًا** — لو قفلت الباسورد
+والمفتاح مش شغال، هتتقفل برّه السيرفر. (Hostinger عندهم console في اللوحة كخطة إنقاذ.)
+
+وبعدها على السيرفر، في `/etc/ssh/sshd_config`:
+```
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+```
+ثم `systemctl restart ssh`.
+
+**٢. الجدار الناري — اقفل كل حاجة إلا ٣ منافذ**
+
+```bash
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 22/tcp       # SSH
+ufw allow 80/tcp       # HTTP (Caddy بيحتاجه لشهادة Let's Encrypt)
+ufw allow 443/tcp      # HTTPS
+ufw enable
+ufw status verbose
+```
+
+⚠ **منفذ MySQL (3306) مايتفتحش خالص.** التطبيق بيوصل للقاعدة عبر شبكة Docker الداخلية
+(`db:3306`) مش عبر الإنترنت. على Railway كان مكشوف عبر TCP proxy — متكررش ده.
+
+للتأكد إن القاعدة مش مكشوفة، لازم `docker-compose.yml` **مايكونش فيه `ports:` تحت خدمة `db`**
+(النسخة في الخطوة 3 مظبوطة كده عمدًا).
+
+**٣. منع محاولات الدخول المتكررة**
+
+```bash
+apt install -y fail2ban
+systemctl enable --now fail2ban
+fail2ban-client status sshd
+```
+
+**٤. تحديثات أمنية تلقائية**
+
+```bash
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades      # اختار Yes
+```
+
+**٥. تحقق سريع بعد ما تخلص**
+
+```bash
+ufw status                                   # لازم 22/80/443 بس
+ss -tlnp | grep -E ":3306|:4000"             # المفروض مايظهروش على 0.0.0.0
+```
+
+من جهازك، اتأكد إن القاعدة فعلًا مقفولة من برّه:
+```bash
+nc -vz <IP-الـVPS> 3306                       # المفروض يفشل — وده المطلوب
+```
+
 ### الخطوة 2 — رفع الكود
 
 ```bash
@@ -272,6 +342,8 @@ docker compose logs api --since 24h | grep -E "\[backup\]|\[sheetWatch\]|\[token
 | تسجيل الدخول شغال بس الكل اتسجل خروجه | JWT secrets اتغيرت | انسخهم من Railway حرفيًا وأعد `docker compose up -d api` |
 | CORS errors في المتصفح | `CORS_ORIGIN` ناقص أو غلط | لازم يساوي أصل الواجهة بالظبط: `https://cea-app.pages.dev` |
 | تنزيل تسليم قديم بيرجع 404 بوضوح "الملف لم يعد موجودًا" | فولدر uploads ما اتنقلش أو اتفك في مكان غلط | الملفات لازم تكون تحت `/app/uploads` جوه كونتينر الـ api |
+| اتقفلت برّه السيرفر بعد تعديل SSH | المفتاح مش مظبوط والباسورد اتقفل | ادخل من console الـVPS في لوحة Hostinger ورجّع `PasswordAuthentication yes` مؤقتًا |
+| الشهادة مش بتتعمل (Caddy بيفشل) | منفذ 80 مقفول في `ufw` أو الدومين لسه ما وجّهش | `ufw allow 80/tcp` + اتأكد إن سجل A بيشاور على IP الـVPS |
 | الاعتمادات مش بتوصل للشيتات | متغيرات `GOOGLE_WEBAPP_*` ناقصة | انقل الأربعة كلهم، وجرّب زرار "🔄 تحديث لتلقي ملاحظات DC" من التطبيق |
 | ملاحظات الـDC مش بتتحدّث لوحدها | جوب `sheetWatch` مش شغال | شوف الخطوة 8 — الأغلب `GOOGLE_WEBAPP_*` ناقصة |
 | "الإجمالي الفعلي" في التحليلات فاضي | طبيعي لو القاعدة اتنقلت لكن مفيش كشوف جديدة اتبعتت بعد النقل | العمود `approved_total` بيتملّي وقت الدفع لجوجل بس — الكشوف القديمة بتفضل "تقديرية" |
