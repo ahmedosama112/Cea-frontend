@@ -198,6 +198,12 @@ function applyNewDesign() {
   sheet.setRowHeight(2, 30);
   // خط ذهبي رفيع تحت الترويسة
   r2.setBorder(null, null, true, null, null, null, THEME.gold, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  // فواصل رفيعة سودا بين أعمدة الترويسة — من غيرها العناوين بتسيح في بعض على الكحلي
+  r2.setBorder(null, null, null, null, true, null, THEME.borderStrong, SpreadsheetApp.BorderStyle.SOLID);
+  // "سلسلة الاعتماد" (G) هي السجل الحقيقي للاعتمادات بعد ما الاعتماد الإداري اتلغى —
+  // فبتاخد راس دهبي بخط كحلي عشان تبان مميزة عن باقي الأعمدة
+  sheet.getRange(2, COLS.NOTES_PM).setBackground(THEME.gold).setFontColor(THEME.navyDark)
+    .setBorder(true, true, true, true, null, null, THEME.borderStrong, SpreadsheetApp.BorderStyle.SOLID);
 
   // ── عروض الأعمدة ──
   const widths = [150, 130, 300, 160, 150, 160, 150, 170, 240, 240, 110];
