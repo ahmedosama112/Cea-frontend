@@ -4625,8 +4625,13 @@ function subGroupsHtml(rows, adminView){
   return G.map(g=>{
     const list=rows.filter(r=>subBucket(r)===g.k);
     if(!list.length) return '';
-    return '<details class="sub-group g-'+g.k+'"'+(g.open?' open':'')+'>'
-      + '<summary><span>'+g.t+'</span><span class="sub-gcount">'+list.length+'</span>'
+    // ملاحظة DC لسه ما اتشافتش جوّه مجموعة مطوية = ملاحظة مخبّية ورا سهم، وهي بالظبط اللي
+    // عايزينها توصل. فالمجموعة بتتفتح لوحدها وبيبان عدّاد أحمر على عنوانها.
+    const unseen=list.filter(r=>r.dcNoteAt && (!r.dcNoteSeenAt || r.dcNoteSeenAt<r.dcNoteAt)).length;
+    const open=g.open||unseen>0;
+    const badge=unseen?'<span class="sub-gcount" style="background:var(--danger-bg);color:var(--danger-fg);font-weight:900" title="ملاحظات من DC لسه ما اتشافتش">📝 '+unseen+'</span>':'';
+    return '<details class="sub-group g-'+g.k+'"'+(open?' open':'')+'>'
+      + '<summary><span>'+g.t+'</span><span class="sub-gcount">'+list.length+'</span>'+badge
       + '<span class="sub-ghint">'+g.h+'</span><span class="sub-gcaret">▾</span></summary>'
       + '<div class="sub-gbody">'+list.map(r=>subRow(r,adminView)).join('')+'</div></details>';
   }).join('');
