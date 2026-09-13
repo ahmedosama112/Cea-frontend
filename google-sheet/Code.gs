@@ -458,16 +458,10 @@ function onEditHandler(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    if (col === COLS.APPROVE_PM) {
-      const execVal = sheet.getRange(row, COLS.APPROVE_EXEC).getValue();
-      if (!isOk(execVal)) {
-        e.range.setValue('');
-        SpreadsheetApp.getUi().alert('لازم مدير التنفيذ يعتمد الأول قبل ما تقدر تعتمد كمدير مشروع.');
-        return;
-      }
-    }
+    // F اتلغت كخطوة خالص — لا اعتماد ولا رفض. أي تعديل فيها بيخرج من غير أثر
+    if (col !== COLS.APPROVE_EXEC) return;
     if (isNo(newValue)) {
-      sheet.getRange(row, COLS.STATUS).setValue(col === COLS.APPROVE_EXEC ? STATUS.REJ_EXEC : STATUS.REJ_PM);
+      sheet.getRange(row, COLS.STATUS).setValue(STATUS.REJ_EXEC);
       return;
     }
     if (!isOk(newValue)) return;
@@ -495,25 +489,14 @@ function onEditHandler(e) {
         insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
         insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
       }
-      // الاعتماد الإداري (F): الصفوف الجديدة بتوصل مختومة من التطبيق؛ الصف القديم الفاضي يتختم هنا ويتقفل
-      const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-      if (!pmCell.getValue()) sealAdminApproval(pmCell);
-      sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
-    } else {
-      // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث.
-      // خانة F كانت بتنزّل التوقيع بلا أي شرط، فالكشف الواصل موقّع من التطبيق كان بياخد توقيع تاني فوق الحقيقي —
-      // فبنستخدم نفس الفحص المزدوج قبل ما نحط التوقيع.
-      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed'
-        || hasAnySignature(convertedId);
-      if (!alreadySigned) {
-        insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
-      }
+      // الاعتماد الإداري اتلغى كخطوة — سلسلة الاعتماد في G هي السجل، وD هو قرار الـDC،
+      // وF كانت بتتختم بنفس الضغطة اللي بتتحقق منها فبوابة بتفتح دايمًا
+      // بنسيب STATUS.PM_APPROVED هنا لحظيًا وبلوك الـ PDF تحت بيدهسها بـ DONE على طول (D بقى البوابة الوحيدة)
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     }
 
     const execOk = isOk(sheet.getRange(row, COLS.APPROVE_EXEC).getValue());
-    const pmOk = isOk(sheet.getRange(row, COLS.APPROVE_PM).getValue());
-    if (execOk && pmOk) {
+    if (execOk) {
       const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
       const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
       const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
@@ -714,8 +697,7 @@ function finalizeSignedRow() {
   const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
   const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
   setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
-  const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-  if (!pmCell.getValue()) sealAdminApproval(pmCell);
+  // الاعتماد الإداري (F) اتلغى كخطوة والعمود مخفي — مابقاش يتختم من هنا كمان
   sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
   ui.alert('✅ اتولّد الـ PDF للصف ' + row + ' والحالة بقت "معتمد بالكامل".');
 }
