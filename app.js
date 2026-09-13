@@ -7061,12 +7061,13 @@ let _anDim='place';         // place | contractor
 let _anScope=null;          // {level, engineers[], sites[]}
 let _anPeriod='month';      // week | month | q | all | custom
 let _anBucket='week';       // تجميع الاتجاه الزمني
+let _anApprovedBucket='month'; // تجميع تاب "الإجمالي الفعلي" (أسبوعي/شهري/سنوي)
 let _anSort='total';
 let _anData=null;
 let _anTrend=null;
 let _anSeq=0;               // الفلتر ممكن يتغيّر والطلب لسه شغال — بنتجاهل الرد القديم
 
-const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'},{k:'matrix',l:'🔀 العلاقة'}];
+const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'},{k:'matrix',l:'🔀 العلاقة'},{k:'approved',l:'🔒 الإجمالي الفعلي'}];
 const AN_PERIODS=[{k:'week',l:'هذا الأسبوع'},{k:'month',l:'هذا الشهر'},{k:'q',l:'آخر 3 شهور'},{k:'all',l:'كل الفترة'},{k:'custom',l:'مخصص'}];
 const AN_SORTS=[{k:'total',l:'الأعلى منصرفًا'},{k:'records',l:'الأكتر سجلات'},{k:'discount',l:'الأعلى خصمًا'},{k:'last',l:'آخر نشاط'},{k:'name',l:'الاسم'}];
 
@@ -7074,7 +7075,8 @@ const anInt=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:0});
 const anPct=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:1});
 const anIsCtr=()=>_anDim==='contractor';
 const anIsMx=()=>_anDim==='matrix';
-const AN_ENDPOINT={place:'places', contractor:'contractors', matrix:'matrix'};
+const AN_ENDPOINT={place:'places', contractor:'contractors', matrix:'matrix', approved:'approved-totals'};
+const anIsApproved=()=>_anDim==='approved';
 
 // حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
 function anRange(){
@@ -7113,6 +7115,7 @@ function anPaintChips(){
   box.innerHTML=AN_PERIODS.map(p=>`<button type="button" class="an-chip${p.k===_anPeriod?' on':''}" onclick="anSetPeriod('${p.k}')">${esc(p.l)}</button>`).join('');
 }
 function anSetBucket(b){ _anBucket=b; renderAnalytics(); }
+function anSetApprovedBucket(b){ _anApprovedBucket=b; renderAnalytics(); }
 function anSetSort(v){ _anSort=v; anPaintBody(); }
 
 async function renderAnalytics(fresh){
@@ -7130,12 +7133,13 @@ async function renderAnalytics(fresh){
       anPaintFilters();
     }
     const f=fresh===true?{fresh:'1'}:{};
-    const [p,t]=await Promise.all([
-      api('GET','/api/analytics/'+(AN_ENDPOINT[_anDim]||'places')+anQuery(f)),
-      api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))),
-    ]);
+    // تاب "الإجمالي الفعلي" له بكت خاص بيه (أسبوعي/شهري/سنوي) ومالوش رسم اتجاه — نطلبه لوحده
+    const mainQuery = anIsApproved() ? Object.assign({bucket:_anApprovedBucket}, f) : f;
+    const calls=[api('GET','/api/analytics/'+(AN_ENDPOINT[_anDim]||'places')+anQuery(mainQuery))];
+    if(!anIsApproved()) calls.push(api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))));
+    const [p,t]=await Promise.all(calls);
     if(seq!==_anSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
-    _anData=p.data; _anTrend=t.data;
+    _anData=p.data; _anTrend=t?t.data:null;
     anPaintBody();
   }catch(e){
     if(seq!==_anSeq) return;
@@ -7295,9 +7299,33 @@ function anTable(rows){
   return t+'</tbody></table>';
 }
 
+// جدول "الإجمالي الفعلي" — شكل مختلف عن باقي الأبعاد (weekStart/label بدل صف مكان/مقاول)
+function anApprovedTable(rows){
+  let t='<table class="apr-table an-table"><thead><tr><th>الفترة</th><th>عدد الكشوف</th><th>الإجمالي</th></tr></thead><tbody>';
+  t+=rows.map(r=>`<tr><td class="an-name">${esc(r.label)}</td><td>${anInt(r.submissions)}</td><td><b>${anInt(r.total)}</b></td></tr>`).join('');
+  return t+'</tbody></table>';
+}
+function anApprovedView(d){
+  const t=d.totals;
+  let html='<div class="summary-grid">'
+    + `<div class="summary-box"><span class="val">${anInt(t.total)}</span><span class="lbl">الإجمالي الفعلي (ج.م)</span></div>`
+    + `<div class="summary-box purple"><span class="val">${anInt(t.submissions)}</span><span class="lbl">عدد الكشوف</span></div>`
+    + '</div>';
+  html+='<div class="card"><div class="card-title between"><span class="t">🔒 الإجمالي الفعلي</span>'
+      + `<span class="an-seg"><button type="button" class="an-chip${_anApprovedBucket==='week'?' on':''}" onclick="anSetApprovedBucket('week')">أسبوعي</button>`
+      + `<button type="button" class="an-chip${_anApprovedBucket==='month'?' on':''}" onclick="anSetApprovedBucket('month')">شهري</button>`
+      + `<button type="button" class="an-chip${_anApprovedBucket==='year'?' on':''}" onclick="anSetApprovedBucket('year')">سنوي</button></span></div>`
+      + (d.rows.length?('<div class="apr-scroll">'+anApprovedTable(d.rows)+'</div>'):'<div class="home-empty">مفيش كشوف في النطاق ده</div>')
+      + (t.estimated>0?`<div class="hint">⚠ ${anInt(t.estimated)} كشف من قبل تتبّع الإجمالي الفعلي — الرقم المعروض ليها هو اللي بعته المهندس وقتها، ولو مدير شطب سطر فيها بعد كده يمكن ميكونش متخصوم منه.</div>`:'')
+      + '</div>';
+  return html;
+}
+
 function anPaintBody(){
   const body=document.getElementById('an-body'); if(!body||!_anData) return;
-  const d=_anData, rows=anIsMx()?[]:anSortRows(d.rows);
+  const d=_anData;
+  if(anIsApproved()){ body.innerHTML=anApprovedView(d); return; }
+  const rows=anIsMx()?[]:anSortRows(d.rows);
   const k=anKpis(d);
   const box=(x)=>`<div class="summary-box ${x[0]}"><span class="val"${x[3]?' style="font-size:13px"':''}>${x[2]}</span><span class="lbl">${x[1]}</span></div>`;
   let html='<div class="summary-grid">'+k.slice(0,4).map(box).join('')+'</div>'
