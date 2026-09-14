@@ -6,7 +6,7 @@
 > 3. **تذكرة المعتمدين** — بتطلع للمدير أول ما يفتح التطبيق لو عنده كشوف مستنية مراجعته. ✅
 > 4. **الفرحة** — تطلع من ورا "✅ معتمد بالكامل" لما الكشف يكمّل اعتماده. ✅
 >
-> **السجل ده للفيتشرين دول بس.** أي شغل تاني يروح لـ[SESSION-LOG.md](SESSION-LOG.md) أو
+> **السجل ده للأربع شخصيات دول بس.** أي شغل تاني يروح لـ[SESSION-LOG.md](SESSION-LOG.md) أو
 > [SESSION-LOG-OPUS.md](SESSION-LOG-OPUS.md).
 
 ---
@@ -17,6 +17,13 @@ commit `26c6189` على `main`. الواجهة على Cloudflare Pages: كاش `
 deployment `a02e745e`. **مافيش تغيير في الباك إند** — الفيتشر واجهة بالكامل.
 اتحقق بعد النشر: `index` = 200 · `sw.js` بالكاش الجديد · `app.js` 633,208 بايت وفيه الأربع
 صور، على `a02e745e.cea-app.pages.dev` و`cea-app.pages.dev`. ✔
+توثيق النشر في commit `b37cff4`. الريبو **مالوش git remote** — محلي بس.
+
+⚠ **اتصلّح قبل النشر مباشرة:** خانة **الخصم** في [index (17).html:668](index%20(17).html:668)
+كانت لسه فيها `oninput="calcTotal();discountMascot()"` — بقية من أول تنفيذ. ولأن حارس
+"مرة واحدة" اتشال، دي كانت هتنطّ الشخصية **مع كل حرف** يتكتب في خانة الفلوس وبجملة من
+غير اسم مقاول. بقت `oninput="calcTotal()"`. **الزناد الوحيد للمقاول دلوقتي هو
+`addDeductChip` — لو حد رجّع النداء ده تاني، ده رجوع لغلطة معروفة.**
 
 ---
 
@@ -260,14 +267,22 @@ document.head.appendChild(st);
 
 ## الملفات
 
-| الملف | إيه فيه |
+كل الأرقام دي متحقَّق منها بعد آخر commit (`b37cff4`).
+
+| السطر | إيه فيه |
 |---|---|
-| [app.js:1179](app.js:1179) | `MASCOT_SRC` — data URI صورة المقاول |
-| [app.js:1181](app.js:1181) وما بعده | قسم المقاول: `MASCOT_LINE`، الـCSS المحقون، `mascotShow`/`mascotHide`/`mascotReset`/`discountMascot` |
-| [app.js:939](app.js:939) | `addDeductChip` — زناد المقاول |
-| [app.js:598](app.js:598) · [app.js:611](app.js:611) | `addContractor` / `addPlace` — زنادا المهندس |
-| قسم `MASCOT_ENG_SRC` وما بعده | المهندس: `engMascotWho`/`engMascotEnsureCSS`/`engMascotHide`/`engMascotGo`/`reviewMascot` |
+| [app.js:1185](app.js:1185) | `MASCOT_SRC` — صورة المقاول الزعلان (data URI) |
+| [app.js:1251](app.js:1251) | `discountMascot()` — يعرض شخصية المقاول |
+| [app.js:943](app.js:943) | `addDeductChip` — **الزناد الوحيد** لشخصية المقاول |
 | [index (17).html:671](index%20(17).html:671) | `id="f-deduct-field"` على خانة "بالخصم على" |
+| [app.js:1263](app.js:1263) | `MASCOT_ENG_SRC` — المهندس المشاور |
+| [app.js:1310](app.js:1310) | `reviewMascot()` — مهندس مراجعة السراكي |
+| [app.js:870](app.js:870) · [876](app.js:876) · [912](app.js:912) · [918](app.js:918) | `addExportContractorChip` / `addExportPlaceChip` — زنادات المهندس (الفرع العادي وفرع "الكل") |
+| [app.js:1339](app.js:1339) | `MASCOT_APR_SRC` — المهندس بالكليب بورد |
+| [app.js:1405](app.js:1405) | `aprMascotBoot()` — تذكرة المعتمدين وقت الإقلاع |
+| [app.js:4918](app.js:4918) | `MASCOT_CHEER_SRC` — الفرحة |
+| [app.js:4956](app.js:4956) | `cheerMascotScan()` — بتتنادى من `subPaintMine()` ([app.js:4900](app.js:4900)) |
+| [app.js:4807](app.js:4807) | `subRow()` — شارة "معتمد بالكامل" و`data-cheer-id` |
 
 ---
 
@@ -288,5 +303,15 @@ node build-pwa.js && npx wrangler pages deploy pwa-dist --project-name cea-app -
 الصور كلها data URI جوّه الملف، فمافيش أي تعديل مطلوب في `sw.js` ولا `build-pwa.js` وبتشتغل
 أوفلاين. لو اتضافت شخصيات تانية، الأفضل نطلّعهم ملفات ونضيفهم لـ`APP_SHELL` في `sw.js`.
 
-**قبل النشر:** `node --check app.js` + `CRLF=0` و`NUL=2` + تجربة حيّة
+**قبل النشر:** `node --check app.js` + `CRLF=0` و`NUL=2` + **تجربة حيّة على لوكال هوست**
 (الاختبارات الآلية مش كافية).
+
+فحص سريع بأمر واحد:
+```bash
+python -c "d=open('app.js','rb').read(); print('CRLF:',d.count(b'
+'),'NUL:',d.count(b' '))" && node --check app.js
+```
+
+> فيه سكربت جاهز أشمل من ده (`check-appjs.js`) بيتحقق كمان إن الأربع ثوابت `MASCOT_*_SRC`
+> موجودة وكل واحدة data URI سليم، وبيخرج بكود 1 لو أي فحص فشل. **لسه مش متضاف للريبو** —
+> اطلبه وهيتحط في `tools/`.
