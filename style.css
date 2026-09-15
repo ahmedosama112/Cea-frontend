@@ -723,6 +723,11 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-table th { background:var(--navy); color:#fff; font-weight:800; padding:10px 8px; text-align:center; white-space:nowrap; font-size:11.5px; border-inline:1px solid rgba(255,255,255,.15); }
 .apr-table td { padding:9px 8px; border-top:1px solid var(--border); border-inline:1px solid var(--border); text-align:center; white-space:nowrap; vertical-align:middle; color:var(--text); }
 .apr-table tr.mine { background:linear-gradient(90deg,rgba(201,168,76,.14),transparent); }
+/* فاصل الأسبوع: صف ملوّن بيبان بين أسبوع والتاني (الأسبوع يبدأ الأربعاء 00:00 = ليلة الثلاثاء).
+   بيتحط تلقائيًا في aprBuildTable لما تاريخ الصف يعدّي حدود الأسبوع. */
+.apr-table tr.apr-week-sep td { background:var(--navy); color:#fff; font-weight:800;
+  font-size:11.5px; letter-spacing:.3px; padding:6px 8px; text-align:center; white-space:nowrap;
+  border-top:2px solid var(--gold); border-bottom:2px solid var(--gold); }
 /* عمود "الإجراء / الحالة" (آخر عمود = أقصى الشمال في RTL) بيتحرّك عادي مع الجدول —
    كان مثبّتًا (sticky) فكان بيفضل واقف مكانه وقت التمرير والزوم. اتشال بقرار صاحب المشروع (9 سبتمبر 2026). */
 /* ═══ عدّاد مواعيد الإرسال والاعتماد (9 سبتمبر 2026) ═══

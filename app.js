@@ -4028,16 +4028,42 @@ function aprStatusPill(r){
     + '</div>';
   return '<span class="apr-pill apr-lock">مع '+esc(r.currentLevel||'—')+'</span>';
 }
+// حدود الأسبوع في تاب الاعتمادات (قرار صاحب المشروع 15 سبتمبر 2026):
+// الأسبوع يبدأ **الثلاثاء 8:00 صباحًا** وينتهي الثلاثاء اللي بعده 7:59 صباحًا.
+// (كان الأربعاء 00:00 وقت أول تنفيذ — اتغيّر لأن قفل التسليم بيحصل الثلاثاء الصبح.)
+// الحساب بتوقيت الجهاز المحلي — نفس التوقيت اللي بيتعرض في عمود التاريخ.
+const APR_WEEK_DAY = 2;   // الثلاثاء (الأحد=0)
+const APR_WEEK_HOUR = 8;  // 8 صباحًا
+// الحيلة: نزيح الوقت 8 ساعات لورا، فالحدّ يبقى منتصف ليل ونقدر نقرّب لليوم بسهولة.
+function aprWeekStart(d){
+  const shifted=new Date(d.getTime()-APR_WEEK_HOUR*3600*1000);
+  const x=new Date(shifted.getFullYear(), shifted.getMonth(), shifted.getDate());
+  x.setDate(x.getDate()-((x.getDay()-APR_WEEK_DAY+7)%7)); // ارجع لأقرب ثلاثاء سابق أو نفس اليوم
+  x.setHours(APR_WEEK_HOUR,0,0,0);                        // الثلاثاء 8:00 ص = بداية الأسبوع
+  return x;
+}
+function aprWeekKey(d){ const x=aprWeekStart(d); return x.getFullYear()+'-'+(x.getMonth()+1)+'-'+x.getDate(); }
+function aprWeekLabel(d){
+  const s=aprWeekStart(d), e=new Date(s); e.setDate(e.getDate()+7);
+  const f=x=>x.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'});
+  return '🗓 أسبوع من الثلاثاء '+f(s)+' ٨ص إلى الثلاثاء '+f(e)+' ٨ص';
+}
 function aprBuildTable(){
   const box=document.getElementById('apr-table'); if(!box) return;
   const active=_aprRows.filter(r=>r.reviewState==='IN_REVIEW');
   if(!_aprRows.length){ box.innerHTML='<div class="home-empty">لا توجد كشوف في المراجعة</div>'; return; }
   const heads=['التاريخ والوقت','المهندس','الملف',..._aprLevels,'النسخة','الإجراء / الحالة'];
+  const cols=heads.length;
   let html='<table class="apr-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
+  // الطابور بيوصل الأحدث فوق (createdAt desc) — بنحط فاصل ملوّن كل ما ننزل لأسبوع أقدم
+  let _prevWk=null;
   html+=_aprRows.map(r=>{
     const when=new Date(r.createdAt);
+    const wk=aprWeekKey(when);
+    const sep=(_prevWk!==null && wk!==_prevWk) ? '<tr class="apr-week-sep"><td colspan="'+cols+'">'+esc(aprWeekLabel(when))+'</td></tr>' : '';
+    _prevWk=wk;
     const mine=r.canAct?' class="mine"':'';
-    return '<tr'+mine+'>'
+    return sep+'<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
       +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
