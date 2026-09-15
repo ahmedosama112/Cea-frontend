@@ -6339,7 +6339,7 @@ function killDeadSession(){
   _sessionDead=true;
   clearSession();
   setSyncStatus('⚠ انتهت الجلسة — سجّل الدخول', '#C62828');
-  showLoginScreen('⚠ انتهت الجلسة، سجّل الدخول مرة أخرى');
+  showLoginScreen('⚠ انتهت الجلسة — سجّل الدخول تاني بنفس حسابك. بياناتك محفوظة على الجهاز وهترجع كلها فورًا.');
 }
 async function _doRefreshSession(){
   const refresh=getRefreshToken();
@@ -6419,10 +6419,34 @@ async function doLogout(){
   clearSession();
   location.reload();
 }
+// (15 سبتمبر 2026) عرض البيانات المحلية فورًا — مستقل تمامًا عن الشبكة.
+// كان كل الرسم جوّه onAuthReady، واللي مبيتنداش غير بعد "await verifySession" —
+// يعني لو النت بطيء أو معلّق (مش مقطوع) المهندس يفضل قدام شاشة فاضية وسراكيه
+// موجودة على جهازه في localStorage. وده كان سبب بلاغات "كل حاجة اتمسحت".
+// idempotent: onAuthReady بتعيد الرسم بعدين عادي، والحارس بيمنع تكرار إخفاء السplash.
+let _localRendered=false;
+function renderLocalNow(){
+  if(_localRendered) return;
+  _localRendered=true;
+  try{
+    const s=document.getElementById('splash');
+    if(s){ s.classList.add('hide'); setTimeout(()=>s.remove(),700); }
+    const el=document.getElementById('account-email-display');
+    if(el) el.textContent=getCurrentUserEmail()||'';
+    const today=todayYMD();
+    const fd=document.getElementById('f-date'); if(fd){ fd.value=today; autoSetDay(today); }
+    const ird=document.getElementById('ir-date'); if(ird) ird.value=today;
+    const td=document.getElementById('todo-date'); if(td&&!td.value) td.value=today;
+    const dd=document.getElementById('daily-date'); if(dd&&!dd.value){ dd.value=today; autoSetDailyDay(today); }
+    populateDropdowns(); renderRecords(); renderIR(); renderTodo(); renderSummary(); initSiteTab();
+    renderHome(); applyModuleVisibility(); updateLoadOlderUI(); renderBell();
+  }catch(e){ /* الرسم المبكر مايوقفش الإقلاع أبدًا */ }
+}
 async function initAuthGate(){
   const token=getAccessToken();
   const email=getCurrentUserEmail();
   if(token&&email){
+    renderLocalNow(); // البيانات تبان قبل أي نداء شبكة
     const status=await verifySession(token);
     if(status==='ok'){ onAuthReady(false); return; }
     if(status==='network_error'){ onAuthReady(true); return; }
@@ -6430,7 +6454,7 @@ async function initAuthGate(){
     if(rstatus==='ok'){ onAuthReady(false); return; }
     if(rstatus==='network_error'){ onAuthReady(true); return; }
     clearSession();
-    showLoginScreen('⚠ انتهت الجلسة، سجّل الدخول مرة أخرى');
+    showLoginScreen('⚠ انتهت الجلسة — سجّل الدخول تاني بنفس حسابك. بياناتك محفوظة على الجهاز وهترجع كلها فورًا.');
   } else {
     showLoginScreen();
   }
@@ -6957,7 +6981,13 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && getAc
 async function pullAll(opts){
   // fullHistory: سحب كل السجلات بدل آخر شهرين (يُستخدم عند إعادة المزامنة بعد تنظيف السيرفر)
   const fullHistory = !!(opts && opts.fullHistory);
-  const cutoff=isoDateMonthsAgo(SYNC_WINDOW_MONTHS);
+  // (15 سبتمبر 2026) النافذة تكبر ومتضيقش أبدًا.
+  // كان cutoff دايمًا "النهاردة ناقص شهرين"، فكل سحب كامل بيرمي التوسيع اللي المهندس
+  // عمله بـ"تحميل أقدم" — وسجلاته القديمة تختفي من العرض بعد أي reload/تحديث نسخة،
+  // فيفتكر إنها اتمسحت. (الجهاز اللي سحب من زمان كان بيبان عنده سجلات أكتر من اللي سحب النهاردة!)
+  // دلوقتي بنسحب من أقدم تاريخ بين النافذة الافتراضية واللي المهندس وسّعه بنفسه.
+  const win=isoDateMonthsAgo(SYNC_WINDOW_MONTHS);
+  const cutoff=(recordsOldestLoaded && recordsOldestLoaded < win) ? recordsOldestLoaded : win;
 
   // السجلات: نافذة آخر شهرين (أو الكل)، مع pagination
   // الحسابات اللي مالهاش وحدة "السراكي" (المعتمدين مثلًا) السيرفر بيرجّع لها 403 —
