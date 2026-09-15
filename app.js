@@ -440,6 +440,12 @@ function populateDropdowns() {
   fillSelect('export-place-select','<option value="">-- اضف مكان --</option><option value="__ALL__">➕ اضافة جميع الأماكن</option>',placeOpts());
   fillSelect('ir-inspector','<option value="">-- اختر الاستشاري --</option>',inspectors.map(opt).join(''));
   fillSelect('ir-item','<option value="">-- اختر البند --</option>',itemsOptGroups());
+  // قوائم "اختار من مقاولينك/أماكنك" في إدارة الحسابات — كانت بتتملّي مرة واحدة بس وقت اختيار
+  // المهندس (adminFillPickers جوّه adminSelectUser)، فلو الأدمن راح الإعدادات وضاف مقاول ورجع
+  // مكانش بيلاقيه غير بعد ريفريش للصفحة. (باج اتبلّغ 15 سبتمبر 2026)
+  // وكمان قيم الخيارات دي أرقام ترتيب في المصفوفة (contractors[i])، فلو القايمة قديمة بعد حذف
+  // (removeContractor بيعمل splice) الرقم ممكن يوصّل لمقاول غلط — التحديث هنا بيمنع ده كمان.
+  adminFillPickers();
   updatePlaceNoteIcon();
 }
 
