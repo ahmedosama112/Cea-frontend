@@ -6307,9 +6307,22 @@ async function api(method, path, body, _retried, _rlTries){
   return data;
 }
 
+// (15 سبتمبر 2026) مهلة على نداءات الإقلاع — على نت "معلّق" (بيقبل الاتصال وما بيردّش)
+// الـ fetch كان بيستنى للأبد، فـ onAuthReady ما بتتندهش أبدًا: لا بانر أوفلاين، ولا حالة
+// مزامنة، ولا كود جهاز. والمهندس يفتكر إن شغله اتزامن وهو لسه محلي. وحدث 'online'
+// ما بيتطلقش في الحالة دي لأن المتصفح شايف نفسه متصل.
+// AbortController يدوي (مش AbortSignal.timeout) عشان أجهزة الميدان القديمة.
+// المهلة ١٢ ثانية مش ٨: شبكات المواقع ضعيفة أغلب الوقت، ورقم قصير كان هيقطع
+// اتصالات كانت هتنجح ويودّي المهندس أوفلاين من غير داعي.
+function _fetchWithTimeout(url, opts, ms){
+  if(typeof AbortController==='undefined') return fetch(url, opts); // متصفح قديم: السلوك القديم
+  const ac=new AbortController();
+  const t=setTimeout(()=>{ try{ ac.abort(); }catch(e){} }, ms||12000);
+  return fetch(url, Object.assign({}, opts, {signal:ac.signal})).finally(()=>clearTimeout(t));
+}
 async function verifySession(token){
   try{
-    const res=await fetch(API_URL+'/api/auth/me',{headers:{'Authorization':'Bearer '+token}});
+    const res=await _fetchWithTimeout(API_URL+'/api/auth/me',{headers:{'Authorization':'Bearer '+token}},12000);
     if(res.ok){
       const d=await res.json();
       if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_name', d.data.displayName||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); localStorage.setItem('cea_user_grade', d.data.grade||''); applyFormButtons(); }
