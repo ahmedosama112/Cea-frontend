@@ -663,7 +663,12 @@
         <label>السعر <span class="req">*</span></label>
         <input type="number" id="f-price" placeholder="0.00" min="0" step="0.01" inputmode="decimal" oninput="calcTotal()">
       </div>
-      <div class="field">
+      <!-- خانة "الخصم" (مبلغ) — مخفية بطلب صاحب المشروع (15 سبتمبر 2026): ملهاش استخدام عملي.
+           ⚠ الحقل نفسه لازم يفضل في الصفحة بقيمة 0 — مش يتشال. بيتقرا في calcTotal و addRecord
+           و editRecord و clearForm و discountMascot، وشيله بيخلي getElementById يرجّع null فيكسر الفورم.
+           ".row" فلكس فـ display:none بيخلي خانة السعر تاخد عرض الصف كله لوحدها.
+           للرجوع: امسح style="display:none" من السطر اللي تحت. -->
+      <div class="field" id="f-discount-field" style="display:none">
         <label>الخصم</label>
         <input type="number" id="f-discount" placeholder="0.00" value="0" min="0" step="0.01" inputmode="decimal" oninput="calcTotal()">
       </div>
