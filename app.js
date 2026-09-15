@@ -3960,7 +3960,7 @@ function aprLevelCell(r, level){
     const when=last.createdAt ? new Date(last.createdAt).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}) : '';
     const by = who ? '<br><small class="apr-by">بواسطة '+esc(who)+(when?' · '+esc(when):'')+'</small>' : '';
     if(last.decision==='REJECTED') return '<span class="apr-pill apr-rej">❌ مرفوض</span>'+by;
-    if(last.decision==='APPROVED_NOTES') return '<span class="apr-pill apr-notes" title="'+esc(last.note||'')+'">📝 بملاحظات</span>'+by;
+    if(last.decision==='APPROVED_NOTES') return '<span class="apr-pill apr-notes" title="'+esc(last.note||'')+'">📝 معتمد بملاحظات</span>'+by;
     return '<span class="apr-pill apr-ok">✅ معتمد</span>'+by;
   }
   // اسم المعتمد المسند للمستوى ده (بيرجع من السيرفر مع كل كشف) — بيتعرض تحت "دورك/منتظر" وتحت المقفول
@@ -4023,7 +4023,7 @@ function aprStatusPill(r){
   }
   if(r.canAct) return '<div class="apr-acts">'
     + '<button class="apr-a apr-a-ok" onclick="aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED\')">!</span></button>'
-    + '<button class="apr-a apr-a-notes" onclick="aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED_NOTES\')">!</span></button>'
+    + '<button class="apr-a apr-a-notes" onclick="aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 معتمد بملاحظات <span class="apr-info" onclick="event.stopPropagation();aprTip(\'APPROVED_NOTES\')">!</span></button>'
     + '<button class="apr-a apr-a-rej" onclick="aprAsk(\''+r.id+'\',\'REJECTED\')">❌ رفض <span class="apr-info" onclick="event.stopPropagation();aprTip(\'REJECTED\')">!</span></button>'
     + '</div>';
   return '<span class="apr-pill apr-lock">مع '+esc(r.currentLevel||'—')+'</span>';
@@ -4118,7 +4118,7 @@ function aprOpenPreview(title, wb, r){
   }).join('');
   const acts = (r && r.canAct)
     ? '<button class="btn btn-inline" style="background:linear-gradient(135deg,#1B5E20,#2E7D32);color:#fff" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'APPROVED\')">✅ اعتماد</button>'
-      +'<button class="btn btn-gold btn-inline" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 بملاحظات</button>'
+      +'<button class="btn btn-gold btn-inline" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'APPROVED_NOTES\')">📝 معتمد بملاحظات</button>'
       +'<button class="btn btn-danger btn-inline" onclick="aprClosePreview();aprAsk(\''+r.id+'\',\'REJECTED\')">❌ رفض</button>'
       +'<button class="btn btn-ghost btn-inline" onclick="aprClosePreview()">إغلاق</button>'
     : '<span class="hint" style="flex:1">مش دورك في الاعتماد على الكشف ده دلوقتي — للاطلاع فقط</span><button class="btn btn-ghost btn-inline" onclick="aprClosePreview()">إغلاق</button>';
@@ -4387,7 +4387,7 @@ function raRenderList(){
     if(canDecide && r.status==='PENDING'){
       actionCell='<div class="apr-acts">'
         + '<button class="apr-a apr-a-ok" onclick="raDecide(\''+r.id+'\',\'APPROVED\')">✅ اعتماد</button>'
-        + '<button class="apr-a apr-a-notes" onclick="raDecide(\''+r.id+'\',\'APPROVED_NOTES\')">📝 اعتماد بملاحظات</button>'
+        + '<button class="apr-a apr-a-notes" onclick="raDecide(\''+r.id+'\',\'APPROVED_NOTES\')">📝 معتمد بملاحظات</button>'
         + '<button class="apr-a apr-a-rej" onclick="raDecide(\''+r.id+'\',\'REJECTED\')">⛔ رفض</button>'
         + '</div>';
     } else {
