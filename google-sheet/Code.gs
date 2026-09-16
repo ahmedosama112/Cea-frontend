@@ -23,10 +23,12 @@ const CONFIG = {
   PROCESSING_FOLDER_ID: '14t459eIi0OVHa2zSbwpD-7FnnQ-uD7Fg',
   DC_FOLDER_ID: '1GrptvPNLk3-6O26m90iRUDPibkEjBGyV',
   // توقيع مدير التنفيذ — مختلف لكل مشروع (سكني/تجاري)؛ مدير المشروع توقيعه واحد
-  SIG_EXEC_MANAGER_FILE_ID: '1qvBGRIqtyiU8Y6Tbbp40TIZDCeQnX1Je',            // 🏠 سكني (الموجود من الأول)
-  SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID: 'PUT_COMMERCIAL_SIGNATURE_FILE_ID',  // 🏪 تجاري — حط الـ File ID هنا
-  SIG_PROJECT_MANAGER_FILE_ID: '1ByWboACc2m6WxYIENrB-gA_VyekfU77s',                 // 🏠 سكني
-  SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID: 'PUT_COMMERCIAL_PM_SIGNATURE_FILE_ID',     // 🏪 تجاري — حط الـ File ID هنا
+  SIG_EXEC_MANAGER_FILE_ID: '1yj9AXVFeLY_GKM_m-sVI1SjUShWbCfEu',            // 🏠 سكني (اتحدّث 14 سبتمبر 2026)
+  SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID: '1vM74f45icYl4ueGAPas9KrBnRO1uT1i5',  // 🏪 تجاري (اتحدّث 14 سبتمبر 2026)
+  // مدير المشروع توقيعه واحد للمشروعين (سكني وتجاري) — مفيش نسخة تجاري ليه.
+  // كان فيه SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID هنا؛ اتشال 14 سبتمبر 2026 لأنه
+  // مكانش متنادى من أي مكان في الملف وكان بيوهم إن فيه توقيعين.
+  SIG_PROJECT_MANAGER_FILE_ID: '1Rf7xhHPA4TylkInJsGKCzk6LD0vDUfuL',                 // (اتحدّث 14 سبتمبر 2026)
   RAW_UPLOADS_FOLDER_ID: '1hFk4iV5icPkUPQvy4mfZz1lRiKR3HNEz',
   DEFAULT_PROJECT: '🏠 سكني', // المشروع الافتراضي لو مفيش اختيار (صفوف قديمة / فورم بدون السؤال)
 
