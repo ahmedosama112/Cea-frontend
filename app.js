@@ -345,6 +345,9 @@ let places      = JSON.parse(localStorage.getItem('saraki_places')      || 'null
 // ملاحظات الأماكن {اسم المكان: الملاحظة} — بتظهر للمهندس كأيقونة ❕ جنب اختيار المكان في تسجيل السركي
 let placeNotes  = JSON.parse(localStorage.getItem('cea_place_notes')    || '{}');
 function savePlaceNotes(){ try{ localStorage.setItem('cea_place_notes', JSON.stringify(placeNotes)); }catch(e){} }
+// مشروع كل مكان {اسم المكان: رقم الموقع 1/2} — الأماكن بتتجمّع تحته في الإعدادات، واسمه بيتكتب في راس كشف السركي
+let placeSites = JSON.parse(localStorage.getItem('cea_place_sites') || '{}');
+function savePlaceSites(){ try{ localStorage.setItem('cea_place_sites', JSON.stringify(placeSites)); }catch(e){} }
 // كاش آخر طلبات إيجار معتمدة (لبادج "متطابق" في تاب السركي، اللي بيشتغل أوفلاين كمان)
 let _rrApprovedCache=[]; try{ _rrApprovedCache=JSON.parse(localStorage.getItem('cea_rr_approved_cache')||'[]'); }catch(e){}
 let inspectors  = JSON.parse(localStorage.getItem('saraki_inspectors')  || 'null') || [];
@@ -388,7 +391,15 @@ function showToast(msg,isError=false) {
 
 const opt = v => `<option value="${esc(v)}">${esc(v)}</option>`;
 const contractorOpts = () => contractors.map(c=>opt(c.name)).join('');
-const placeOpts      = () => places.map(opt).join('');
+// لو فيه أماكن متربطة بمشاريع: الخيارات بتتجمّع تحت اسم المشروع — اختيار المكان بيوضّح مشروعه
+const placeOpts      = () => {
+  if(!places.some(p=>placeSites[p])) return places.map(opt).join('');
+  return [1,2,null].map(g=>{
+    const ps=places.filter(p=>(placeSites[p]||null)===g);
+    if(!ps.length) return '';
+    return `<optgroup label="${g===null?'بدون مشروع':'🏗 '+esc(siteName(g))}">${ps.map(opt).join('')}</optgroup>`;
+  }).join('');
+};
 function itemsOptGroups(){
   const cats=[...new Set(items.map(i=>i.cat))];
   return cats.map(cat=>`<optgroup label="${esc(cat)}">${items.filter(i=>i.cat===cat).map(i=>opt(i.name)).join('')}</optgroup>`).join('');
@@ -507,7 +518,10 @@ function renderSettings() {
   const cq=(document.getElementById('contractors-search')?.value||'').trim().toLowerCase();
   const pq=(document.getElementById('places-search')?.value||'').trim().toLowerCase();
   const cList=contractors.map((c,i)=>({c,i})).filter(({c})=>!cq || String(c.name||'').toLowerCase().includes(cq) || String(c.spec||'').toLowerCase().includes(cq));
-  const pList=places.map((p,i)=>({p,i})).filter(({p})=>!pq || String(p).toLowerCase().includes(pq) || String(placeNotes[p]||'').toLowerCase().includes(pq));
+  const pList=places.map((p,i)=>({p,i})).filter(({p})=>!pq
+    || String(p).toLowerCase().includes(pq)
+    || String(placeNotes[p]||'').toLowerCase().includes(pq)
+    || (placeSites[p]?String(siteName(placeSites[p])).toLowerCase().includes(pq):false));
   document.getElementById('contractors-list').innerHTML = contractors.length
     ? (cList.length ? cList.map(({c,i})=>`
       <div class="setting-item">
@@ -522,8 +536,7 @@ function renderSettings() {
       </div>`).join('') : emptyP('مفيش مقاول مطابق للبحث'))
     : emptyP('لا يوجد مقاولين');
 
-  document.getElementById('places-list').innerHTML = places.length
-    ? (pList.length ? pList.map(({p,i})=>`<div class="setting-item">
+  const placeItemHtml=({p,i})=>`<div class="setting-item">
         <div style="flex:1;min-width:0">
           <div class="setting-name">${esc(p)}</div>
           ${placeNotes[p]?`<div class="setting-sub">❕ ${esc(placeNotes[p])}</div>`:''}
@@ -532,8 +545,17 @@ function renderSettings() {
           <button class="btn-sm-edit" onclick="startEditPlace(${i})">تعديل</button>
           <button class="btn-sm-del" onclick="removePlace(${i})">حذف</button>
         </div>`:''}
-      </div>`).join('') : emptyP('مفيش مكان مطابق للبحث'))
+      </div>`;
+  document.getElementById('places-list').innerHTML = places.length
+    ? (pList.length ? [1,2,null].map(g=>{
+        const rows=pList.filter(({p})=>(placeSites[p]||null)===g);
+        if(!rows.length) return '';
+        const heading=g===null ? 'بدون مشروع' : `🏗 ${esc(siteName(g))}`;
+        return `<div class="subhead" style="margin-top:8px">${heading}</div>` + rows.map(placeItemHtml).join('');
+      }).join('') : emptyP('مفيش مكان مطابق للبحث'))
     : emptyP('لا يوجد أماكن');
+  if(document.getElementById('new-place-site')) document.getElementById('new-place-site').innerHTML=placeSiteOptions(document.getElementById('new-place-site').value);
+  if(document.getElementById('ep-site')) document.getElementById('ep-site').innerHTML=placeSiteOptions(document.getElementById('ep-site').value);
   document.getElementById('inspectors-list').innerHTML = inspectors.length
     ? inspectors.map((ins,i)=>`<div class="setting-item"><div class="setting-name">${esc(ins)}</div><button class="btn-sm-del" onclick="removeInspector(${i})">حذف</button></div>`).join('')
     : emptyP('لا يوجد استشاريين');
@@ -608,16 +630,18 @@ async function addPlace(){
   if(!ok) return;
   const p=document.getElementById('new-place').value.trim();if(!p){showToast('⚠ أدخل إسم المكان',true);return;}if(places.includes(p)){showToast('⚠ موجود مسبقاً',true);return;}
   const note=(document.getElementById('new-place-note')?.value||'').trim();
+  const site=(document.getElementById('new-place-site')?.value||'')||null;
   places.push(p);
   if(note) placeNotes[p]=note; savePlaceNotes();
+  if(site) placeSites[p]=Number(site); savePlaceSites();
   saveAll();populateDropdowns();renderSettings();pushPlacesToCloud();
-  document.getElementById('new-place').value=''; if(document.getElementById('new-place-note')) document.getElementById('new-place-note').value='';
+  document.getElementById('new-place').value=''; if(document.getElementById('new-place-note')) document.getElementById('new-place-note').value=''; if(document.getElementById('new-place-site')) document.getElementById('new-place-site').value='';
   showToast('✅ تم إضافة المكان');
 }
 async function removePlace(i){
   const ok = await requirePin();
   if(!ok) return;
-  if(!confirm(`حذف "${places[i]}"؟`))return;delete placeNotes[places[i]];savePlaceNotes();places.splice(i,1);saveAll();populateDropdowns();renderSettings();pushPlacesToCloud();showToast('🗑 تم الحذف');
+  if(!confirm(`حذف "${places[i]}"؟`))return;delete placeNotes[places[i]];savePlaceNotes();delete placeSites[places[i]];savePlaceSites();places.splice(i,1);saveAll();populateDropdowns();renderSettings();pushPlacesToCloud();showToast('🗑 تم الحذف');
 }
 async function editPlace(i, newName){
   const ok = await requirePin();
@@ -626,6 +650,7 @@ async function editPlace(i, newName){
   if(!newName){ showToast('⚠ أدخل إسم المكان', true); return; }
   if(places.includes(newName)){ showToast('⚠ موجود مسبقاً', true); return; }
   if(placeNotes[places[i]]!==undefined){ placeNotes[newName]=placeNotes[places[i]]; delete placeNotes[places[i]]; savePlaceNotes(); }
+  if(placeSites[places[i]]!==undefined){ placeSites[newName]=placeSites[places[i]]; delete placeSites[places[i]]; savePlaceSites(); }
   places[i] = newName;
   saveAll(); populateDropdowns(); renderSettings(); pushPlacesToCloud();
   showToast('✅ تم تعديل المكان');
@@ -638,6 +663,7 @@ async function startEditPlace(i){
   editingPlaceIdx=i;
   document.getElementById('ep-name').value=places[i];
   document.getElementById('ep-note').value=placeNotes[places[i]]||'';
+  if(document.getElementById('ep-site')) document.getElementById('ep-site').value=placeSites[places[i]]||'';
   const f=document.getElementById('edit-place-form');
   f.style.display='block'; f.scrollIntoView({behavior:'smooth'});
 }
@@ -650,12 +676,15 @@ function saveEditPlace(){
   const oldName=places[i];
   const newName=document.getElementById('ep-name').value.trim();
   const note=document.getElementById('ep-note').value.trim();
+  const site=(document.getElementById('ep-site')?.value||'')||null;
   if(!newName){ showToast('⚠ أدخل إسم المكان', true); return; }
   if(newName!==oldName && places.includes(newName)){ showToast('⚠ موجود مسبقاً', true); return; }
   delete placeNotes[oldName];
   if(note) placeNotes[newName]=note; else delete placeNotes[newName];
+  delete placeSites[oldName];
+  if(site) placeSites[newName]=Number(site); else delete placeSites[newName];
   places[i]=newName;
-  savePlaceNotes(); saveAll(); populateDropdowns(); renderSettings(); updatePlaceNoteIcon(); pushPlacesToCloud();
+  savePlaceNotes(); savePlaceSites(); saveAll(); populateDropdowns(); renderSettings(); updatePlaceNoteIcon(); pushPlacesToCloud();
   cancelEditPlace();
   showToast('✅ تم تعديل المكان');
 }
@@ -1814,6 +1843,12 @@ function presenceText(iso){
 // أسماء المواقع/المشاريع — بتتقري من السيرفر (يعدّلها الأدمن)، ودي القيم الافتراضية لحد ما تحمّل
 let _siteNames={ '1':'كومباوند جريني', '2':'أزاليا' };
 function siteName(s){ return _siteNames[String(s||1)]||('الموقع '+s); }
+// خيارات دروب داون "مشروع المكان" — بتتحدث تلقائيًا لما أسماء المواقع تتغيّر (siteName بيقرا من _siteNames)
+function placeSiteOptions(selected){
+  const sel=String(selected||'');
+  return `<option value=""${sel?'':' selected'}>🏗 المشروع — غير محدد</option>`
+    + [1,2].map(s=>`<option value="${s}"${sel===String(s)?' selected':''}>🏗 ${esc(siteName(s))}</option>`).join('');
+}
 function applySiteNames(){
   // أسماء فيتشرز زرار الفورم في قائمة "الوحدات الظاهرة له" بتتبع أسماء المواقع
   ALL_FEATURES.forEach(f=>{
@@ -1953,12 +1988,30 @@ function adminRenderPlaces(list){
       <div style="flex:1;min-width:0">
         <div class="setting-name">${esc(p.name)}</div>
         ${p.note?`<div class="setting-sub">❕ ${esc(p.note)}</div>`:''}
+        ${p.site?`<div class="setting-sub">🏗 ${esc(siteName(p.site))}</div>`:''}
       </div>
       <div class="setting-actions">
         <button class="btn-sm-edit" onclick="adminEditPlaceNote('${p.id}')">${p.note?'✏️ الملاحظة':'❕ ملاحظة'}</button>
+        <button class="btn-sm-edit" onclick="adminEditPlaceSite('${p.id}')">🏗 المشروع</button>
         <button class="btn-sm-del" onclick="adminRemovePlace('${p.id}')">حذف</button>
       </div>
     </div>`).join('') : '<div class="home-empty">لا يوجد أماكن — أضف من الخانة بالأسفل</div>';
+  const sel=document.getElementById('admin-new-place-site');
+  if(sel) sel.innerHTML=placeSiteOptions('');
+}
+// تعديل مشروع مكان عند مهندس معيّن — بيسأل رقم الموقع (1/2) أو فاضي لإلغاء التحديد
+async function adminEditPlaceSite(placeId){
+  if(!_adminSelected) return;
+  const p=_adminPlaces.find(x=>String(x.id)===String(placeId)); if(!p) return;
+  const ans=prompt('مشروع "'+p.name+'": اكتب 1 لـ'+siteName(1)+'، 2 لـ'+siteName(2)+'، أو سيبها فاضية لإلغاء التحديد:', p.site?String(p.site):'');
+  if(ans===null) return;
+  const site=ans.trim()?Number(ans.trim()):null;
+  if(site!==null && site!==1 && site!==2){ showToast('⚠ اكتب 1 أو 2 بس', true); return; }
+  try{
+    await api('PUT',`/api/admin/users/${_adminSelected.id}/places/${placeId}`,{name:p.name, note:p.note||'', site});
+    adminRenderPlaces((await api('GET',`/api/admin/users/${_adminSelected.id}/places`)).data);
+    showToast('✅ تم تحديث المشروع');
+  }catch(e){ showToast('⚠ '+e.message, true); }
 }
 // تعديل ملاحظة مكان عند مهندس معيّن — بتظهر له كأيقونة ❕ جنب اختيار المكان في تسجيل السركي
 async function adminEditPlaceNote(placeId){
@@ -1985,9 +2038,10 @@ async function adminAddPlace(){
   const inp=document.getElementById('admin-new-place'); const name=inp.value.trim();
   if(!name){ showToast('⚠ أدخل إسم المكان', true); return; }
   const noteInp=document.getElementById('admin-new-place-note'); const note=(noteInp?.value||'').trim();
+  const siteInp=document.getElementById('admin-new-place-site'); const site=(siteInp?.value||'')?Number(siteInp.value):null;
   try{
-    await api('POST',`/api/admin/users/${_adminSelected.id}/places`,{name, note});
-    inp.value=''; if(noteInp) noteInp.value='';
+    await api('POST',`/api/admin/users/${_adminSelected.id}/places`,{name, note, site});
+    inp.value=''; if(noteInp) noteInp.value=''; if(siteInp) siteInp.value='';
     adminRenderPlaces((await api('GET',`/api/admin/users/${_adminSelected.id}/places`)).data);
     showToast('✅ تم إضافة المكان');
   }catch(e){ showToast('⚠ '+e.message, true); }
@@ -2074,9 +2128,9 @@ async function adminPickPlace(){
   const sel=document.getElementById('admin-place-pick'); const p=places[Number(sel.value)];
   if(!sel.value || !p){ showToast('⚠ اختار مكان من القائمة', true); return; }
   try{
-    await api('POST',`/api/admin/users/${_adminSelected.id}/places`,{name:p, note:placeNotes[p]||''});
+    await api('POST',`/api/admin/users/${_adminSelected.id}/places`,{name:p, note:placeNotes[p]||'', site:placeSites[p]||null});
     sel.value=''; adminRenderPlaces((await api('GET',`/api/admin/users/${_adminSelected.id}/places`)).data); showToast('✅ تم إضافة '+p+' لحسابه');
-  }catch(e){ showToast('⚠ '+(e.code==='CONFLICT'?p+' موجود عنده بالفعل':e.message), true); }
+  }catch(e){ showToast('⚠ '+(e.code==='CONFLICT'&&!/مشروع/.test(e.message||'')?p+' موجود عنده بالفعل':e.message), true); }
 }
 
 // ── توقيع المهندس (يزرعه الأدمن) ──
@@ -2709,8 +2763,11 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
   styleRange(1,1,1,13,{font:{bold:true,size:14,color:{argb:'FFFFFFFF'},name:'Arial'}, fill:navy});
   ws.getRow(1).height = 24;
 
+  const siteIds=[...new Set(exp.map(r=>placeSites[r.place]).filter(Boolean))];
+  const projectLabel = siteIds.length ? siteIds.map(s=>siteName(s)).join(' ، ') : 'كومبوند جريني افينيو';
+
   ws.mergeCells(2,1,2,13);
-  ws.getCell(2,1).value = 'كومبوند جريني افينيو  —  سجل سركي معدات وعمالة أسبوعي';
+  ws.getCell(2,1).value = `${projectLabel}  —  سجل سركي معدات وعمالة أسبوعي`;
   styleRange(2,1,2,13,{font:{bold:true,size:11,color:{argb:navy},name:'Arial'}, fill:gold});
   ws.getRow(2).height = 20;
 
@@ -2726,7 +2783,7 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
   ws.mergeCells(4,11,4,13); ws.getCell(4,13).value = 'الموقع :‏';
   ws.mergeCells(4,8,4,10);  ws.getCell(4,10).value = currentPlace;
   ws.mergeCells(4,5,4,7);   ws.getCell(4,7).value = 'المشروع :‏';
-  ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value = 'كومبوند جريني افينيو';
+  ws.mergeCells(4,1,4,4);   ws.getCell(4,1).value = projectLabel;
   styleRange(4,1,4,13,{font:{size:10,name:'Arial'}});
   [13,7].forEach(cc=>{ws.getCell(4,cc).font={bold:true,size:10,name:'Arial',color:{argb:navy}};});
 
@@ -2862,6 +2919,8 @@ async function buildApprovedWorkbook(exp, weekBounds, pq){
     // استبعاد السجلات اللي المهندس علّم عليها "مش هيتسجل في الإكسيل المعتمد" (r.done)
     exp = exp.filter(r=>!r.done);
     if(!exp.length){ showToast('⚠ كل السجلات مستبعَدة من الإكسيل المعتمد',true); return null; }
+    const expSiteIds=[...new Set(exp.map(r=>placeSites[r.place]).filter(Boolean))];
+    if(expSiteIds.length>1){ showToast('⚠ الكشف فيه أماكن من مشروعين مختلفين — اعمل كشف لكل مشروع لوحده', true); return null; }
     const workbook = new ExcelJS.Workbook();
 
     // توقيع واحد مشترك لكل الشيتات (أصغر في الحجم) — الملف بيطلع XML سليم كده.
@@ -6242,12 +6301,12 @@ function clearSession(){
 // كل مفاتيح بيانات التطبيق على الجهاز (بدون مفاتيح الجلسة) — تُمسح عند الخروج أو تبديل الحساب
 // عشان بيانات مهندس ما تتدمجش في حساب مهندس تاني على نفس الهاتف
 const APP_DATA_KEYS=['saraki_records','saraki_ir','cea_equipment','cea_eq_contractor','cea_eq_site','cea_eq_sites','saraki_todos','saraki_contractors','saraki_places','saraki_inspectors','saraki_items',
-  'cea_daily','cea_exec','saraki_signature','cea_records_fully_loaded','cea_records_oldest_loaded','cea_place_notes',
+  'cea_daily','cea_exec','saraki_signature','cea_records_fully_loaded','cea_records_oldest_loaded','cea_place_notes','cea_place_sites',
   'cea_sync_snapshot','cea_pin_hash','cea_user_title','cea_enabled_modules','cea_enabled_features',
   'cea_notifs','cea_notif_snooze','cea_notif_pending'];
 function wipeLocalAppData(){
   APP_DATA_KEYS.forEach(k=>localStorage.removeItem(k));
-  records=[]; irRecords=[]; equipmentRecords=[]; todos=[]; contractors=[]; places=[]; inspectors=[]; items=[]; placeNotes={};
+  records=[]; irRecords=[]; equipmentRecords=[]; todos=[]; contractors=[]; places=[]; inspectors=[]; items=[]; placeNotes={}; placeSites={};
   dailyRecords=[]; execRecords=[]; engineerSignature=null; _syncSnap={};
   recordsFullyLoaded=true; recordsOldestLoaded=null;
 }
@@ -6694,7 +6753,7 @@ async function mirrorPushByName(entity, arr, base, bodyFn, nameOf, removeLocal){
       }
       else if(snap[name]!==h){ await api('PUT', base+'/'+existing.id, b); }
       newSnap[name]=h;
-    }catch(e){ errors++; }
+    }catch(e){ errors++; if(e.status===409) showToast(e.message,true); }
   }
   if(remoteDeleted.size && typeof removeLocal==='function'){ try{ removeLocal(remoteDeleted); }catch(e){} }
   const localNames=new Set(arr.map(x=>bodyFn(x).name));
@@ -6778,11 +6837,17 @@ async function pullManagedData(){
     placeNotes=serverNotes; savePlaceNotes();
     if(typeof updatePlaceNoteIcon==='function') updatePlaceNoteIcon();
   }
+  // مشروع كل مكان: السيرفر مرجعه دايمًا كمان
+  const serverSites={};
+  placesRes.data.forEach(p=>{ if(p.site) serverSites[p.name]=p.site; });
+  if(JSON.stringify(serverSites)!==JSON.stringify(placeSites)){
+    placeSites=serverSites; savePlaceSites();
+  }
   // حدّث snapshot الأماكن بنسخة السيرفر — عشان لو المستخدم حذف مكان محليًا بعدين، الحذف يتزامن صح
   // (mirrorPushByName مش بيحذف من السيرفر غير الأسماء المعروفة في الـ snapshot)
   const psnap=snapOf('places');
   const srvPlaceNames=new Set(serverPlaces);
-  placesRes.data.forEach(p=>{ psnap[p.name]=syncHash({name:p.name, note:p.note||''}); });
+  placesRes.data.forEach(p=>{ psnap[p.name]=syncHash({name:p.name, note:p.note||'', site:p.site||null}); });
   Object.keys(psnap).forEach(n=>{ if(!srvPlaceNames.has(n)) delete psnap[n]; });
   saveSyncSnap();
   const st=(await api('GET','/api/account/settings')).data;
@@ -6815,8 +6880,8 @@ async function pushContractorsIfAdmin(){
 }
 async function pushPlacesIfAdmin(){
   if(!isAdmin()) return 0;
-  return mirrorPushByName('places', places.map(name=>({name})), '/api/places', p=>({name:p.name, note:placeNotes[p.name]||''}), r=>r.name,
-    names=>{ places=places.filter(n=>!names.has(n)); names.forEach(n=>delete placeNotes[n]); savePlaceNotes(); });
+  return mirrorPushByName('places', places.map(name=>({name})), '/api/places', p=>({name:p.name, note:placeNotes[p.name]||'', site:placeSites[p.name]||null}), r=>r.name,
+    names=>{ places=places.filter(n=>!names.has(n)); names.forEach(n=>{ delete placeNotes[n]; delete placeSites[n]; }); savePlaceNotes(); savePlaceSites(); });
 }
 
 // ── سحب ودمج التغييرات القادمة من أجهزة تانية (بعد الرفع) ──
@@ -7331,7 +7396,8 @@ function backupData() {
     inspectors,
     items,
     dailyRecords: typeof dailyRecords!=='undefined'?dailyRecords:[],
-    execRecords:  typeof execRecords !=='undefined'?execRecords :[]
+    execRecords:  typeof execRecords !=='undefined'?execRecords :[],
+    placeSites
   };
   const jsonStr = JSON.stringify(backup, null, 2);
   const fileName = `CEA_backup_${todayYMD()}.json`;
@@ -7396,6 +7462,7 @@ function applyRestoreData(jsonStr){
     if(IT) items        = IT.map(it=>({cat:str(it.cat), name:str(it.name), stages:stages(it.stages)}));
     if(D)  dailyRecords = D.map(x=>withId({...x, photo:isDataImg(x.photo)?x.photo:null, photoFileId:x.photoFileId!=null?num(x.photoFileId,null):null}));
     if(E)  execRecords  = E.map(x=>withId({...x, pct:num(x.pct,0), stages:stages(x.stages), stageDone:Array.isArray(x.stageDone)?x.stageDone.map(Boolean):[]}));
+    if(data.placeSites && typeof data.placeSites==='object' && !Array.isArray(data.placeSites)){ placeSites=data.placeSites; savePlaceSites(); }
     // ⚠ الاستعادة بتستبدل بيانات الجهاز بالكامل — لازم snapshot المزامنة يتفضّى الأول.
     // من غير كده أول مزامنة بعدها بتلاقي سجلات في الـsnapshot ومش في الملف فتعتبرها "اتحذفت"
     // وتبعت DELETE للسيرفر: استعادة نسخة من أسبوعين كانت بتمسح الأسبوعين دول من السحابة كمان.

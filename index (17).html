@@ -435,6 +435,9 @@
     <div class="add-row" style="margin-top:6px">
       <input type="text" id="admin-new-place-note" placeholder="❕ ملاحظة عن المكان (اختياري) — تظهر للمهندس عند اختياره" maxlength="500">
     </div>
+    <div class="add-row" style="margin-top:6px">
+      <select id="admin-new-place-site"></select>
+    </div>
     <button class="btn btn-ghost mt8" id="admin-copy-places-btn" onclick="adminCopyMyPlaces()">📋 انسخ كل أماكني لحسابه دفعة واحدة</button>
     <div class="hint" style="margin-top:6px">أو اختار من أماكنك:</div>
     <input type="search" class="select-search" id="admin-place-pick-search" placeholder="🔍 ابحث باسم المكان..." oninput="filterSelectOptions('admin-place-pick-search','admin-place-pick')" style="margin-top:4px">
@@ -1496,6 +1499,7 @@
       <div class="subhead" style="margin-top:0">✏️ تعديل المكان</div>
       <input type="text" id="ep-name" placeholder="إسم المكان" class="mb7">
       <input type="text" id="ep-note" placeholder="❕ ملاحظة عن المكان (اختياري)" class="mb7" maxlength="500">
+      <select id="ep-site" class="mb7"></select>
       <div class="btn-group">
         <button class="btn btn-primary btn-sm" onclick="saveEditPlace()">💾 حفظ</button>
         <button class="btn btn-ghost btn-sm" onclick="cancelEditPlace()">✕ إلغاء</button>
@@ -1507,6 +1511,9 @@
     </div>
     <div class="add-row" style="margin-top:6px">
       <input type="text" id="new-place-note" placeholder="❕ ملاحظة عن المكان (اختياري) — تظهر للمهندس عند اختياره" maxlength="500">
+    </div>
+    <div class="add-row" style="margin-top:6px">
+      <select id="new-place-site"></select>
     </div>
     <button class="btn btn-add" onclick="addPlace()">➕ إضافة مكان</button>
     </div>
