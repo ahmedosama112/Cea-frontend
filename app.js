@@ -394,7 +394,7 @@ const contractorOpts = () => contractors.map(c=>opt(c.name)).join('');
 // لو فيه أماكن متربطة بمشاريع: الخيارات بتتجمّع تحت اسم المشروع — اختيار المكان بيوضّح مشروعه
 const placeOpts      = () => {
   if(!places.some(p=>placeSites[p])) return places.map(opt).join('');
-  return [1,2,null].map(g=>{
+  return [..._projects.map(p=>p.id), null].map(g=>{
     const ps=places.filter(p=>(placeSites[p]||null)===g);
     if(!ps.length) return '';
     return `<optgroup label="${g===null?'بدون مشروع':'🏗 '+esc(siteName(g))}">${ps.map(opt).join('')}</optgroup>`;
@@ -547,7 +547,7 @@ function renderSettings() {
         </div>`:''}
       </div>`;
   document.getElementById('places-list').innerHTML = places.length
-    ? (pList.length ? [1,2,null].map(g=>{
+    ? (pList.length ? [..._projects.map(p=>p.id), null].map(g=>{
         const rows=pList.filter(({p})=>(placeSites[p]||null)===g);
         if(!rows.length) return '';
         const heading=g===null ? 'بدون مشروع' : `🏗 ${esc(siteName(g))}`;
@@ -1840,14 +1840,41 @@ function presenceText(iso){
   const h=Math.floor(mins/60); if(h<24) return 'آخر ظهور منذ '+h+' س';
   const d=Math.floor(h/24); return 'آخر ظهور منذ '+d+' يوم';
 }
-// أسماء المواقع/المشاريع — بتتقري من السيرفر (يعدّلها الأدمن)، ودي القيم الافتراضية لحد ما تحمّل
+// المشاريع (1 و2 القديمين + أي مشروع أضافه الأدمن) — بتتقري من السيرفر، ومتخزنة محليًا عشان الأوفلاين
+function loadProjectsCache(){
+  try{ const v=JSON.parse(localStorage.getItem('cea_projects')||'null'); if(Array.isArray(v)&&v.length) return v; }catch(e){}
+  return [{id:1,name:'كومباوند جريني'},{id:2,name:'أزاليا'}];
+}
+let _projects=loadProjectsCache();
+function saveProjectsCache(){ try{ localStorage.setItem('cea_projects', JSON.stringify(_projects)); }catch(e){} }
+// أسماء المواقع 1/2 (توافقي مع كود قديم بيستخدم _siteNames) — مشتقة من _projects
 let _siteNames={ '1':'كومباوند جريني', '2':'أزاليا' };
-function siteName(s){ return _siteNames[String(s||1)]||('الموقع '+s); }
-// خيارات دروب داون "مشروع المكان" — بتتحدث تلقائيًا لما أسماء المواقع تتغيّر (siteName بيقرا من _siteNames)
+function syncSiteNamesFromProjects(){
+  const p1=_projects.find(p=>Number(p.id)===1), p2=_projects.find(p=>Number(p.id)===2);
+  _siteNames={ '1':(p1&&p1.name)||_siteNames['1'], '2':(p2&&p2.name)||_siteNames['2'] };
+}
+syncSiteNamesFromProjects();
+function siteName(s){
+  const p=_projects.find(x=>String(x.id)===String(s||1));
+  return p ? p.name : ('مشروع '+s);
+}
+// تحميل قائمة المشاريع من السيرفر — بيتنادى عند تسجيل الدخول وبعد أي تعديل من الأدمن (إضافة/تسمية)
+async function loadProjects(){
+  try{
+    const r=await api('GET','/api/config');
+    if(Array.isArray(r.data.projects) && r.data.projects.length){
+      _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name}));
+      saveProjectsCache();
+    }
+  }catch(e){ /* نكمل بالقايمة المتخزنة محليًا */ }
+  syncSiteNamesFromProjects();
+  applySiteNames();
+}
+// خيارات دروب داون "مشروع المكان" — بتتحدث تلقائيًا لما المشاريع تتغيّر (siteName بيقرا من _projects)
 function placeSiteOptions(selected){
   const sel=String(selected||'');
   return `<option value=""${sel?'':' selected'}>🏗 المشروع — غير محدد</option>`
-    + [1,2].map(s=>`<option value="${s}"${sel===String(s)?' selected':''}>🏗 ${esc(siteName(s))}</option>`).join('');
+    + _projects.map(p=>`<option value="${p.id}"${sel===String(p.id)?' selected':''}>🏗 ${esc(p.name)}</option>`).join('');
 }
 function applySiteNames(){
   // أسماء فيتشرز زرار الفورم في قائمة "الوحدات الظاهرة له" بتتبع أسماء المواقع
@@ -1884,6 +1911,7 @@ async function loadSiteNames(){
   try{
     const r=await api('GET','/api/admin/config');
     _siteNames={ '1':r.data.site1Name||_siteNames['1'], '2':r.data.site2Name||_siteNames['2'] };
+    if(Array.isArray(r.data.projects) && r.data.projects.length){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name})); saveProjectsCache(); }
   }catch(e){ /* نكمل بالأسماء الافتراضية */ }
   applySiteNames();
 }
@@ -1894,9 +1922,47 @@ async function adminSaveSiteNames(){
   try{
     const r=await api('PATCH','/api/admin/config',{site1Name, site2Name});
     _siteNames={ '1':r.data.site1Name, '2':r.data.site2Name };
+    if(Array.isArray(r.data.projects)){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name})); saveProjectsCache(); }
     applySiteNames();
     showToast('✅ اتحفظت الأسماء');
     renderAdmin();
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+// ── كارت "🏗 المشاريع" في إدارة الحسابات: عرض/إضافة/إعادة تسمية ──
+function adminRenderProjects(){
+  const box=document.getElementById('admin-projects-list'); if(!box) return;
+  box.innerHTML=_projects.map(p=>`<div class="setting-item">
+      <div class="setting-name" style="flex:1">${esc(p.name)}</div>
+      <button class="btn-sm-edit" onclick="adminRenameProject(${p.id})">✏️ إعادة تسمية</button>
+    </div>`).join('') || '<div class="home-empty">لا يوجد مشاريع</div>';
+}
+async function adminAddProject(){
+  const inp=document.getElementById('admin-new-project-name'); if(!inp) return;
+  const name=inp.value.trim();
+  if(!name){ showToast('⚠ اكتب اسم المشروع', true); return; }
+  try{
+    await api('POST','/api/admin/projects',{name});
+    inp.value='';
+    await loadProjects();
+    adminRenderProjects();
+    applySiteNames();
+    renderSettings();
+    showToast('✅ اتضاف مشروع '+name);
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+async function adminRenameProject(id){
+  const cur=_projects.find(p=>Number(p.id)===Number(id));
+  const name=prompt('اسم المشروع الجديد:', cur?cur.name:'');
+  if(name===null) return;
+  const trimmed=name.trim();
+  if(!trimmed){ showToast('⚠ اكتب اسم صحيح', true); return; }
+  try{
+    await api('PATCH','/api/admin/projects/'+id,{name:trimmed});
+    await loadProjects();
+    adminRenderProjects();
+    applySiteNames();
+    renderSettings();
+    showToast('✅ اتغيّر اسم المشروع');
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
 /* أكورديون تاب إدارة الحسابات: بيفتكر أنهي أقسام فتحتها على الجهاز عشان
@@ -1914,6 +1980,7 @@ function accOpen(key){ const d=document.querySelector('#tab-admin details.acc[da
 async function renderAdmin(){
   if(!isAdmin()) { switchTab('home'); return; }
   await loadSiteNames(); // الأول — عشان أسماء المواقع تظهر صح في labels الفيتشرز والدروب داون
+  adminRenderProjects();
   loadAprLevelsAdmin();
   renderWindowsAdmin();
   renderActivityTable();
@@ -1973,6 +2040,7 @@ async function adminOpenUser(id){
     }
     adminModuleCheckboxes('admin-user-modules', st.data.enabledModules||[], userFeats);
     adminRenderPlaces(pl.data);
+    adminLoadUserProjects();
     adminRenderSignature(st.data);
     adminLoadContractors();
     adminFillPickers();
@@ -2003,10 +2071,11 @@ function adminRenderPlaces(list){
 async function adminEditPlaceSite(placeId){
   if(!_adminSelected) return;
   const p=_adminPlaces.find(x=>String(x.id)===String(placeId)); if(!p) return;
-  const ans=prompt('مشروع "'+p.name+'": اكتب 1 لـ'+siteName(1)+'، 2 لـ'+siteName(2)+'، أو سيبها فاضية لإلغاء التحديد:', p.site?String(p.site):'');
+  const list=_projects.map(pr=>pr.id+': '+pr.name).join('\n');
+  const ans=prompt('مشروع "'+p.name+'": اكتب رقم المشروع (id) من القايمة، أو سيبها فاضية لإلغاء التحديد:\n'+list, p.site?String(p.site):'');
   if(ans===null) return;
   const site=ans.trim()?Number(ans.trim()):null;
-  if(site!==null && site!==1 && site!==2){ showToast('⚠ اكتب 1 أو 2 بس', true); return; }
+  if(site!==null && (!Number.isInteger(site) || !_projects.some(pr=>pr.id===site))){ showToast('⚠ رقم مشروع غير معروف', true); return; }
   try{
     await api('PUT',`/api/admin/users/${_adminSelected.id}/places/${placeId}`,{name:p.name, note:p.note||'', site});
     adminRenderPlaces((await api('GET',`/api/admin/users/${_adminSelected.id}/places`)).data);
@@ -2324,7 +2393,75 @@ async function adminSaveGrade(){
     Object.assign(_adminSelected, {grade:r.data.grade, approverTlId:r.data.approverTlId, approverCmId:r.data.approverCmId, approverPmId:r.data.approverPmId});
     await loadAprLevelsAdmin(); // الدرجة اتغيرت → قوائم المعتمدين المتاحة اتغيرت كمان
     adminFillGradeAndApprovers();
+    adminRenderUserProjects(); // السلسلة (تبع الدرجة) بتتغيّر كمان تحت كل مشروع محمّل
     showToast('✅ اتحفظت الدرجة: '+gradeLabel(grade));
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+// ── المشاريع المحمّلة على حساب مهندس (بمعتمديها الخاصين) — بديل معتمدي الحساب الافتراضيين لكشوف مشروع معيّن ──
+let _adminUserProjects=[];
+async function adminLoadUserProjects(){
+  if(!_adminSelected) return;
+  try{ _adminUserProjects=(await api('GET',`/api/admin/users/${_adminSelected.id}/projects`)).data; }
+  catch(e){ _adminUserProjects=[]; }
+  adminRenderUserProjects();
+}
+function adminRenderUserProjects(){
+  const u=_adminSelected; if(!u) return;
+  const box=document.getElementById('admin-user-projects');
+  const addSel=document.getElementById('admin-add-user-project');
+  if(!box||!addSel) return;
+  const chain=(_aprMeta.matrix||{})[u.grade||'junior']||[];
+  box.innerHTML = _adminUserProjects.length ? _adminUserProjects.map(up=>{
+    const rows = chain.length ? chain.map(l=>{
+      const ui=APR_LEVEL_UI[l]; const cur=up[ui.field]?String(up[ui.field]):'';
+      const opts=(_aprMeta.approvers||[]).filter(a=>a.grade===l&&String(a.id)!==String(u.id))
+        .map(a=>`<option value="${esc(String(a.id))}"${String(a.id)===cur?' selected':''}>${esc(personName(a))} — ${esc(a.email)}</option>`).join('');
+      const auto = l==='project manager' && !cur && _aprMeta.solePmId;
+      const empty = auto ? '<option value="">(تلقائي — مدير المشروع الوحيد)</option>' : '<option value="">— مش محدد (المستوى ده هيتخطى) —</option>';
+      return '<div class="add-row" style="margin-top:4px"><span class="hint" style="white-space:nowrap;min-width:74px">'+esc(ui.label)+':</span>'
+        +'<select id="up-sel-'+up.projectId+'-'+ui.field+'">'+empty+(opts||'')+'</select>'
+        +'<button class="btn btn-navy btn-inline" onclick="adminSaveUserProjectApprover('+up.projectId+',\''+ui.field+'\')">💾</button></div>';
+    }).join('') : '<p class="hint" style="margin:4px 0">مفيش مستويات اعتماد لدرجة الحساب.</p>';
+    return `<div class="setting-item" style="flex-direction:column;align-items:stretch;gap:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="setting-name">🏗 ${esc(up.name)}</div>
+          <button class="btn-sm-del" onclick="adminRemoveUserProject(${up.projectId})">إزالة</button>
+        </div>
+        ${rows}
+      </div>`;
+  }).join('') : '<div class="home-empty">مفيش مشاريع محمّلة على الحساب</div>';
+  const loaded=new Set(_adminUserProjects.map(up=>Number(up.projectId)));
+  const avail=_projects.filter(p=>!loaded.has(Number(p.id)));
+  addSel.innerHTML = avail.length ? avail.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('') : '<option value="">— كل المشاريع محمّلة —</option>';
+}
+async function adminLoadUserProject(){
+  if(!_adminSelected) return;
+  const sel=document.getElementById('admin-add-user-project');
+  const projectId=sel&&sel.value?Number(sel.value):null;
+  if(!projectId){ showToast('⚠ اختار مشروع', true); return; }
+  try{
+    await api('PUT',`/api/admin/users/${_adminSelected.id}/projects/${projectId}`,{});
+    await adminLoadUserProjects();
+    showToast('✅ اتحمّل المشروع على الحساب');
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+async function adminSaveUserProjectApprover(projectId, field){
+  if(!_adminSelected) return;
+  const sel=document.getElementById('up-sel-'+projectId+'-'+field);
+  const v=sel?sel.value:'';
+  try{
+    await api('PUT',`/api/admin/users/${_adminSelected.id}/projects/${projectId}`,{[field]: v||null});
+    await adminLoadUserProjects();
+    showToast(v?'✅ اتحفظ المعتمد':'✅ اتشال الإسناد — المستوى هيتخطى');
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+async function adminRemoveUserProject(projectId){
+  if(!_adminSelected) return;
+  if(!confirm('تشيل المشروع ده من الحساب؟ كشوف أماكنه هترجع للمعتمدين الافتراضيين.')) return;
+  try{
+    await api('DELETE',`/api/admin/users/${_adminSelected.id}/projects/${projectId}`);
+    await adminLoadUserProjects();
+    showToast('✅ اتشال المشروع من الحساب');
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
 async function adminSaveApprover(field){
@@ -2963,7 +3100,7 @@ async function buildApprovedWorkbook(exp, weekBounds, pq){
       : `${contractorNames.length}_مقاولين${placesLabel?'_'+placesLabel:''}`;
     const fileName = `سركي_${label}_${wkStart}_${wkEnd}.xlsx`;
     const total = exp.reduce((a,r)=>a+(Number(r.total)||0),0);
-    return {buffer, fileName, sheetsCount, contractorNames, wkStart, wkEnd, total, recordsCount: exp.length, placesLabel, buildLabel: label, workbook};
+    return {buffer, fileName, sheetsCount, contractorNames, wkStart, wkEnd, total, recordsCount: exp.length, placesLabel, buildLabel: label, workbook, projectId: expSiteIds[0]||null};
 
   }catch(e){ showToast('⚠ خطأ في بناء الكشف: '+e.message,true); return null; }
 }
@@ -3183,6 +3320,7 @@ function openSubmitReview(b, exp){
           <div><strong>المهندس:</strong> ${esc(localStorage.getItem('cea_user_name')||getCurrentUserEmail()||'')}${title?' — '+esc(title):''}</div>
           <div><strong>المقاول:</strong> ${esc(ctrLabel)}</div>
           ${b.placesLabel?'<div><strong>المكان:</strong> '+esc(b.placesLabel)+'</div>':''}
+          ${b.projectId?'<div><strong>المشروع:</strong> '+esc(siteName(b.projectId))+'</div>':''}
           <div><strong>الأسبوع:</strong> من ${esc(b.wkStart)} إلى ${esc(b.wkEnd)}</div>
           <div><strong>عدد السجلات:</strong> ${b.recordsCount} · <strong>الإجمالي:</strong> ${fmt(b.total)} ج.م</div>
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(b.fileName)}</span> (${b.sheetsCount} شيت)</div>
@@ -3243,6 +3381,7 @@ async function confirmSubmitApproved(){
     fd.append('total', String(b.total)); fd.append('recordsCount', String(b.recordsCount));
     fd.append('engineerNote', (document.getElementById('submit-note')?.value||'').trim());
     if(b.kind) fd.append('kind', b.kind); // equipment = كشف معدات (placeName = المعدة، total = الساعات)
+    if(b.projectId) fd.append('projectId', String(b.projectId)); // مشروع أماكن الكشف — بيحدد معتمدي المشروع لو محمّل على المهندس
     // لو ده إعادة إرسال لكشف مرفوض → يروح على /resend بنسخة جديدة بدل ما يعمل كشف جديد
     const url = _resendTargetId ? (API_URL+'/api/submissions/'+_resendTargetId+'/resend') : (API_URL+'/api/submissions');
     const res=await fetch(url,{method:'POST',headers:{'Authorization':'Bearer '+getAccessToken()},body:fd});
@@ -4130,7 +4269,7 @@ function aprBuildTable(){
     const mine=r.canAct?' class="mine"':'';
     return sep+'<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
-      +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+'</td>'
+      +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+(r.projectName?'<small>🏗 '+esc(r.projectName)+'</small>':'')+'</td>'
       +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
@@ -4194,7 +4333,7 @@ function aprOpenPreview(title, wb, r){
         <div class="hint-box" style="margin-bottom:10px">
           <div><strong>المهندس:</strong> ${esc(personName(r.user))}${r.user?.displayName?' <span style="color:var(--muted);direction:ltr;unicode-bidi:embed">'+esc(r.user.email||'')+'</span>':''}${r.user?.title?' — '+esc(r.user.title):''}</div>
           <div><strong>المقاول:</strong> ${esc(r.contractorName||'')}</div>
-          ${r.placeName?'<div><strong>المكان:</strong> '+esc(r.placeName)+'</div>':''}
+          ${r.placeName?'<div><strong>المكان:</strong> '+esc(r.placeName)+(r.projectName?' — 🏗 '+esc(r.projectName):'')+'</div>':''}
           <div><strong>الأسبوع:</strong> من ${esc(r.weekStart)} إلى ${esc(r.weekEnd)}</div>
           <div><strong>عدد السجلات:</strong> ${r.recordsCount} · <strong>الإجمالي:</strong> ${fmt(r.total)} ج.م · <strong>النسخة:</strong> rev ${String(r.revision).padStart(2,'0')}</div>
           <div><strong>الملف:</strong> <span style="direction:ltr;unicode-bidi:embed">${esc(r.file?.fileName||'')}</span> (${wb.worksheets.length} شيت)</div>
@@ -4940,7 +5079,7 @@ function subRow(s, adminView){
   return `<div class="sub-card ${bucket==='need'?'c-need':''}">
     <div class="sub-top">
       <div style="min-width:0;flex:1 1 220px">
-        <div class="sub-name">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
+        <div class="sub-name">${esc(s.contractorName)}${s.placeName?' · '+esc(s.placeName):''}${s.projectName?' · 🏗 '+esc(s.projectName):''} <span class="apr-rev">rev ${String(s.revision||0).padStart(2,'0')}</span></div>
         <div class="sub-meta">${s.kind==='equipment' ? '🚜 كشف معدات · الشهر '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' يوم تشغيل · '+fmtMinutes(Math.round(Number(s.total)*60))+' ساعة' : 'الأسبوع '+esc(s.weekStart)+' → '+esc(s.weekEnd)+' · '+s.recordsCount+' سجل · '+fmt(s.total)+' ج.م'}</div>
         ${who}
       </div>
@@ -6540,7 +6679,7 @@ function onAuthReady(offline){
   if(banner) banner.style.display=offline?'block':'none';
   if(offline) showToast('⚠ وضع أوفلاين — الاتصال بالخادم غير متاح دلوقتي، شغلك بيتحفظ محليًا وهيتزامن أول ما النت يرجع', true);
   // مواعيد الإرسال/الاعتماد — محتاجينها من أول لحظة عشان الكارت يبان والأزرار تتقفل قبل ما المستخدم يدوس
-  if(!offline) loadWindows();
+  if(!offline){ loadWindows(); loadProjects(); }
   setTimeout(()=>{const s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(()=>s.remove(),700);}},600);
   const today=todayYMD();
   document.getElementById('f-date').value=today; autoSetDay(today);

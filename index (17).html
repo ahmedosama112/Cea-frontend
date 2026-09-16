@@ -400,6 +400,18 @@
 
       </div>
     </details>
+    <details class="acc acc-sub" data-acc="u-projects">
+      <summary class="acc-head"><span class="acc-t">🏗 المشاريع المحمّلة على الحساب</span><span class="acc-caret">▾</span></summary>
+      <div class="acc-body">
+    <div id="admin-user-projects"></div>
+    <div class="add-row mt8">
+      <select id="admin-add-user-project"></select>
+      <button class="btn btn-navy btn-inline" onclick="adminLoadUserProject()">➕ تحميل المشروع</button>
+    </div>
+    <p class="hint" style="margin-top:4px">كشوف أماكن المشروع ده بتروح لمعتمديه هنا بدل المعتمدين الافتراضيين فوق</p>
+
+      </div>
+    </details>
     <details class="acc acc-sub" data-acc="u-modules">
       <summary class="acc-head"><span class="acc-t">🧩 الوحدات الظاهرة لهذا الحساب</span><span class="acc-caret">▾</span></summary>
       <div class="acc-body">
@@ -539,6 +551,16 @@
     <div class="add-row"><span class="hint" style="white-space:nowrap">الموقع الأول:</span><input type="text" id="site1-name-input" maxlength="60"></div>
     <div class="add-row" style="margin-top:6px"><span class="hint" style="white-space:nowrap">الموقع الثاني:</span><input type="text" id="site2-name-input" maxlength="60"></div>
     <button class="btn btn-navy btn-inline mt8" onclick="adminSaveSiteNames()">💾 حفظ الأسماء</button>
+    </div>
+  </details>
+
+  <details class="acc" data-acc="projects">
+    <summary class="acc-head"><span class="acc-t">🏗 المشاريع</span><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
+    <p class="hint" style="margin-top:0">المشروعان الأول والثاني ثابتان (id هما اللي بيتحدد بيه في الأماكن وحساب المهندس)، وتقدر تضيف مشاريع جديدة أو تعيد تسمية أي مشروع.</p>
+    <div id="admin-projects-list"><div class="home-empty">⏳</div></div>
+    <div class="add-row mt8"><input type="text" id="admin-new-project-name" placeholder="اسم مشروع جديد" maxlength="120"></div>
+    <button class="btn btn-navy btn-inline mt8" onclick="adminAddProject()">➕ إضافة مشروع</button>
     </div>
   </details>
 
