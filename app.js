@@ -4011,7 +4011,7 @@ async function winOpenFor(kind, minutes){
 }
 /* ═══════════ اعتمادات المديرين (وحدة approvals — أونلاين فقط) ═══════════
    سلسلة مراجعة داخل التطبيق قبل ما الكشف ينزل جوجل شيت. */
-let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false, _aprMyId='';
+let _aprLevels=[], _aprMyLevel=null, _aprRows=[], _aprViewer=false, _aprMyId='', _aprPreviewWb=null;
 const APR_TIPS={
   APPROVED:['اعتماد','معتمد بدون ملاحظات — الكشف يفتح للمعتمد اللي بعده في السلسلة.'],
   APPROVED_NOTES:['اعتماد بملاحظات','معتمد مع ملاحظة — بيكمل للمعتمد اللي بعده برضو. الملاحظة بتتسجل، مش بترجع للمهندس.'],
@@ -4274,7 +4274,7 @@ function aprBuildTable(){
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+(r.projectName?'<small>🏗 '+esc(r.projectName)+'</small>':'')+'</td>'
       +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
-      +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
+      +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+(((r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-wait" title="سطور معدّلة">✏️ '+(r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
       +'</tr>';
   }).join('');
@@ -4308,17 +4308,25 @@ async function aprReview(id){
 function aprOpenPreview(title, wb, r){
   let ov=document.getElementById('apr-preview-ov');
   if(!ov){ ov=document.createElement('div'); ov.id='apr-preview-ov'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  _aprPreviewWb=wb;
   // شطب سطر (رفض جزئي): السطور المشطوبة في النسخة الحالية + قائمة سطور كل ورقة بأزرار ✕ للمعتمد اللي دوره
   const struck=(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0));
   const isStruck=(si,row)=>struck.find(x=>Number(x.sheetIndex)===si && Number(x.row)===row);
   const canStrike = !!(r && r.canAct && r.reviewState==='IN_REVIEW');
+  // تعديل سطر (مدير المشروع بس): سطور اتعدّلت في النسخة الحالية + زرار ✏️ لمن دوره
+  const edits=(r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0));
+  const editOf=(si,row)=>edits.find(x=>Number(x.sheetIndex)===si && Number(x.row)===row);
+  const canEdit=!!(r && r.canEdit && r.reviewState==='IN_REVIEW');
   const sheetsHtml=wb.worksheets.map((ws,si)=>{
     const rows=aprDataRows(ws, r.kind);
     const list = rows.length ? '<div class="apr-rows">'+rows.map(x=>{
       const s=isStruck(si,x.row);
+      const ed=!s && editOf(si,x.row);
       return '<div class="apr-row'+(s?' struck':'')+'"><span>'+esc(x.label)+'</span>'
         + (s ? '<small>❌ مشطوب — '+esc(s.level)+(s.note?': '+esc(s.note):'')+'</small>'
-             : (canStrike ? '<button type="button" class="apr-fbtn apr-strike" onclick="aprRowReject(\''+r.id+'\','+si+','+x.row+','+jsArg(x.label)+')">✕ شطب السطر</button>' : ''))
+             : ''+(ed?'<small>✏️ معدّل — '+esc(ed.level)+': '+esc(ed.note)+'</small>':'')
+               +(canEdit ? '<button type="button" class="apr-fbtn apr-edit" onclick="aprRowEdit(\''+r.id+'\','+si+','+x.row+','+jsArg(x.label)+')">✏️ تعديل</button>' : '')
+               +(canStrike ? '<button type="button" class="apr-fbtn apr-strike" onclick="aprRowReject(\''+r.id+'\','+si+','+x.row+','+jsArg(x.label)+')">✕ شطب السطر</button>' : ''))
         + '</div>'; }).join('')+'</div>' : '';
     return '<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, wb)+list;
   }).join('');
@@ -4358,6 +4366,7 @@ function aprOpenPreview(title, wb, r){
   // تمييز السطور المشطوبة في الجدول نفسه (الملف جاي من السيرفر بالخط الأحمر، وده تأكيد بصري في المعاينة)
   const tables=ov.querySelectorAll('#apr-xl-zoom table.xl-preview');
   struck.forEach(x=>{ const t=tables[Number(x.sheetIndex)]; const tr=t && t.rows[Number(x.row)-1]; if(tr) tr.classList.add('xl-struck'); });
+  edits.forEach(x=>{ const t=tables[Number(x.sheetIndex)]; const tr=t && t.rows[Number(x.row)-1]; if(tr) tr.classList.add('xl-edited'); });
   _aprZoom=1; aprZoom(0);
 }
 // سطور البيانات في ورقة (نفس تخطيط buildApprovedSheet/buildEquipmentSheet): التاريخ عمود 13 + إجمالي (عمالة عمود 8 / معدات المدة عمود 7)
@@ -4381,6 +4390,83 @@ function aprRowReject(id, sheetIndex, row, label){
   aprClosePreview(); // نافذة القرار (#apr-modal) بتتغطى بمعاينة الملف لو فضلت مفتوحة — بنقفلها ونعيد فتحها بعد الحفظ
   _aprPending={id, decision:'ROW_REJECT', sheetIndex, row, label};
   aprOpenModal('#C62828','✕ شطب سطر من الكشف', 'السطر: '+label+'\n\nالسطر هيتشطب بالأحمر ويتشال من إجمالي الورقة، والكشف يكمّل اعتماده بدونه. المهندس هيشوف السبب. مفيش إلغاء للشطب بعد الحفظ. لو شطبت كل السطور الكشف كله يترفض ويرجع للمهندس.', '✕ شطب', '#C62828', true);
+}
+// ── تعديل سطر (مدير المشروع بس): العدد/السعر/البيان/الخصم على — بديل الشطب، بسبب إلزامي ──
+let _aprEditPrefill=null;
+function aprRowEdit(id, sheetIndex, row, label){
+  const ws=_aprPreviewWb && _aprPreviewWb.worksheets[sheetIndex];
+  if(!ws){ showToast('⚠ تعذر قراءة السطر', true); return; }
+  const cv=(r,c)=>{ let v=ws.getCell(r,c).value; if(v&&typeof v==='object'){ v = v.richText ? v.richText.map(t=>t.text).join('') : (v.result!==undefined ? v.result : (v.text||'')); } return v==null?'':String(v); };
+  const qtyText=cv(row,11);
+  const multi=qtyText.includes('\n');
+  const firstLine=(multi?qtyText.split('\n')[0]:qtyText).replace(/‏/g,'').trim();
+  const m=firstLine.match(/^([\d.]+)\s*(.*)$/);
+  const qty=m?Number(m[1]):null;
+  const qtyType=(m&&m[2].trim())||'يومية';
+  const priceRaw=ws.getCell(row,9).value;
+  const price=typeof priceRaw==='number'?priceRaw:null;
+  // خانة الملاحظات جاية من السيرفر وممكن يكون فيها سطور تعديل/رفض سابقة اتضافت للعرض — بنشيلها عشان نبدأ من البيان الحقيقي
+  const notes=cv(row,3).split('\n').filter(l=>!/^✏️ معدّل|^❌ مرفوض/.test(l.trim())).join('\n');
+  const deduct=cv(row,2);
+  aprClosePreview();
+  _aprEditPrefill={qty, price, notes, deduct};
+  let ov=document.getElementById('apr-edit-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='apr-edit-ov'; ov.className='modal-overlay'; document.body.appendChild(ov); }
+  const total0=(qty!=null && price!=null) ? Math.round(qty*price*100)/100 : 0;
+  ov.innerHTML=`
+    <div class="modal-box" role="dialog" aria-modal="true">
+      <div class="modal-head">✏️ تعديل سطر — ${esc(label)}</div>
+      <div class="modal-body">
+        ${multi ? '<div class="hint-box">السطر فيه أكتر من سجل — العدد والسعر مش قابلين للتعديل</div>' : `
+        <div class="field"><label>العدد (${esc(qtyType)})</label><input type="number" id="are-qty" step="0.25" value="${qty!=null?qty:''}"></div>
+        <div class="field"><label>سعر الوحدة</label><input type="number" id="are-price" step="0.01" value="${price!=null?price:''}"></div>
+        <div class="field"><label>الإجمالي الجديد</label><div id="are-total" style="font-weight:800">${fmt(total0)} ج.م</div></div>
+        `}
+        <div class="field"><label>بيان الأعمال</label><textarea id="are-notes" rows="2">${esc(notes)}</textarea></div>
+        <div class="field"><label>بالخصم على</label><input type="text" id="are-deduct" value="${esc(deduct)}"></div>
+        <div class="field"><label>سبب التعديل (إلزامي)</label><textarea id="are-note" rows="2" placeholder="اكتب سبب التعديل..."></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-gold btn-inline" id="apr-edit-save" onclick="aprRowEditSave(${jsArg(id)},${sheetIndex},${row},${jsArg(label)})">💾 حفظ التعديل</button>
+        <button class="btn btn-ghost btn-inline" onclick="aprRowEditCancel(${jsArg(id)})">إلغاء</button>
+      </div>
+    </div>`;
+  ov.style.display='flex'; document.body.classList.add('modal-open');
+  ov.onclick=e=>{ if(e.target===ov) aprRowEditCancel(id); };
+  if(!multi){
+    const upd=()=>{ const q=Number(document.getElementById('are-qty').value)||0; const p=Number(document.getElementById('are-price').value)||0; document.getElementById('are-total').textContent=fmt(Math.round(q*p*100)/100)+' ج.م'; };
+    document.getElementById('are-qty').oninput=upd;
+    document.getElementById('are-price').oninput=upd;
+  }
+}
+function aprCloseEditModal(){ const ov=document.getElementById('apr-edit-ov'); if(ov) ov.style.display='none'; document.body.classList.remove('modal-open'); _aprEditPrefill=null; }
+function aprRowEditCancel(id){ aprCloseEditModal(); aprReview(id); }
+async function aprRowEditSave(id, sheetIndex, row, label){
+  const note=document.getElementById('are-note').value.trim();
+  if(!note){ showToast('⚠ اكتب سبب التعديل', true); return; }
+  const pre=_aprEditPrefill||{};
+  const body={sheetIndex, row, label, note};
+  const qtyEl=document.getElementById('are-qty'), priceEl=document.getElementById('are-price');
+  if(qtyEl){ const q=Number(qtyEl.value); if(qtyEl.value!=='' && q!==pre.qty) body.qty=q; }
+  if(priceEl){ const p=Number(priceEl.value); if(priceEl.value!=='' && p!==pre.price) body.price=p; }
+  const notes=document.getElementById('are-notes').value;
+  if(notes!==(pre.notes||'')) body.notes=notes;
+  const deduct=document.getElementById('are-deduct').value;
+  if(deduct!==(pre.deduct||'')) body.deduct=deduct;
+  if(body.qty===undefined && body.price===undefined && body.notes===undefined && body.deduct===undefined){
+    showToast('⚠ مفيش تغيير', true); return;
+  }
+  const btn=document.getElementById('apr-edit-save'); if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الحفظ...'; }
+  try{
+    await api('POST','/api/approvals/'+id+'/rows/edit', body);
+    aprCloseEditModal();
+    showToast('✏️ اتعدّل السطر');
+    await renderApprovals();
+    aprReview(id);
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='💾 حفظ التعديل'; }
+    showToast('⚠ '+(e.message||'تعذر حفظ التعديل'), true);
+  }
 }
 let _aprZoom=1;
 function aprZoom(d){ _aprZoom=Math.min(2,Math.max(0.4,Math.round((_aprZoom+d)*100)/100)); const el=document.getElementById('apr-xl-zoom'); if(el) el.style.zoom=_aprZoom; const l=document.getElementById('apr-xl-zoom-label'); if(l) l.textContent=Math.round(_aprZoom*100)+'%'; }
@@ -5071,6 +5157,18 @@ function subRow(s, adminView){
       + struckRows.map(x=>'✕ <b>سطر مشطوب:</b> '+esc(x.label)+' — <b>'+esc(x.level)+'</b>'+(x.note?': '+esc(x.note):'')).join('<br>')
       + (s.reviewState==='IN_REVIEW'||s.reviewState==='SENT' ? '<br><span style="font-weight:600">الكشف كمّل اعتماده من غير السطور دي (اتشالت من الإجمالي).</span>' : '')+'</div>'
     : '';
+  // سطور معدّلة من مدير المشروع (بدل الشطب) في النسخة الحالية
+  const editedRows=(s.rowEdits||[]).filter(x=>Number(x.revision)===Number(s.revision||0));
+  const editBox = editedRows.length
+    ? '<div class="s" style="font-size:11.5px;padding:6px 8px;background:var(--warn-bg);color:var(--warn-fg);border-radius:8px;line-height:1.7">'
+      + editedRows.map(x=>{
+        const bits=[];
+        if(x.qtyTo!=null) bits.push('العدد '+esc(x.qtyFrom==null?'—':x.qtyFrom)+'→'+esc(x.qtyTo));
+        if(x.priceTo!=null) bits.push('السعر '+esc(x.priceFrom==null?'—':x.priceFrom)+'→'+esc(x.priceTo));
+        if(x.totalTo!=null) bits.push('الإجمالي '+esc(x.totalFrom==null?'—':x.totalFrom)+'→'+esc(x.totalTo));
+        return '✏️ <b>سطر معدّل:</b> '+esc(x.label)+(bits.length?' — '+bits.join(' · '):'')+' — <b>'+esc(x.level)+'</b>: '+esc(x.note);
+      }).join('<br>')+'</div>'
+    : '';
   const who = adminView ? '<div class="sub-meta">👤 '+esc(personName(s.user))+(s.user?.displayName?' <span style="direction:ltr;unicode-bidi:embed">'+esc(s.user.email||'')+'</span>':'')+(s.user?.title?' — '+esc(s.user.title):'')+'</div>' : '';
   const bucket=subBucket(s);
   // التفاصيل مطوية افتراضيًا — دي كانت أكتر حاجة بتطوّل الكارت
@@ -5088,7 +5186,7 @@ function subRow(s, adminView){
       <span class="pill sub-status-pill"${_fullyApproved?` data-cheer-id="${esc(String(s.id))}"`:''} style="background:${st.bg};color:${st.c};font-size:10.5px;padding:3px 8px;border-radius:999px;white-space:normal;max-width:100%;flex:0 1 auto;font-weight:800">${st.t}</span>
     </div>
     ${subChainBar(s)}
-    ${rejBox}${struckBox}${dcNotesBox(s)}
+    ${rejBox}${struckBox}${editBox}${dcNotesBox(s)}
     <details class="sub-more"><summary>التفاصيل ▾</summary><div class="sub-mbody">${detail}</div></details>
     <div class="sub-acts">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>

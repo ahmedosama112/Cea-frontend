@@ -919,6 +919,10 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-strike { background:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-fg); }
 .xl-preview tr.xl-struck td { text-decoration:line-through; color:#B71C1C !important; background:#FDE8E8 !important; }
 
+/* تعديل سطر (مدير المشروع بس) — بديل الشطب، تلوين كهرماني بدل الأحمر */
+.apr-fbtn.apr-edit { background:var(--warn-bg); color:var(--warn-fg); border-color:var(--warn-fg); }
+.xl-preview tr.xl-edited td { background:#FFF4D6 !important; }
+
 /* ═══ تحليلات الأماكن (تاب المديرين) ═══ */
 .an-periods { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
 .an-chip { background:var(--input); border:1.5px solid var(--border-strong); border-radius:20px; padding:6px 12px; font-size:12px; font-weight:700; color:var(--muted); cursor:pointer; font-family:inherit; }
