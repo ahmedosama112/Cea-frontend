@@ -975,6 +975,35 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-note-rej { border-inline-start-color:var(--danger-bg); }
 .apr-by { display:block; font-size:10px; color:var(--muted); font-weight:700; margin-top:2px; white-space:nowrap; }
 
+/* ── شريط الإحصاءات فوق تاب الاعتمادات ── */
+.apr-stats { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px; }
+.apr-chip { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:800; padding:5px 10px; border-radius:999px; background:var(--input); color:var(--text); border:1px solid var(--border-strong); }
+.apr-chip b { color:var(--gold-text); font-size:12.5px; }
+.apr-chip-mine { border-color:var(--gold); background:linear-gradient(90deg,rgba(201,168,76,.16),transparent); }
+.apr-chip-warn { border-color:var(--danger-fg); color:var(--danger-fg); }
+.apr-chip-warn b { color:var(--danger-fg); }
+
+/* ── ريأكشن وكومنت — شريط مصغّر تحت حالة الصف ── */
+.apr-social { display:flex; align-items:center; gap:4px; flex-wrap:wrap; justify-content:center; margin-top:6px; }
+.apr-react { border:1px solid var(--border-strong); background:var(--input); color:var(--text); border-radius:999px; padding:2px 7px; font-size:11px; font-weight:700; cursor:pointer; line-height:1.6; }
+.apr-react.active { border-color:var(--gold); background:linear-gradient(90deg,rgba(201,168,76,.22),transparent); color:var(--gold-text); }
+.apr-react-add { opacity:.7; }
+.apr-react-menu { position:absolute; z-index:400; background:var(--card); border:1px solid var(--border-strong); border-radius:10px; box-shadow:var(--shadow-lg); padding:6px; display:flex; gap:4px; }
+.apr-react-menu button { border:none; background:transparent; font-size:18px; cursor:pointer; padding:2px 4px; border-radius:6px; }
+.apr-react-menu button:hover { background:var(--input); }
+.apr-cmt-btn { background:var(--input); }
+.modal-x { border:none; background:transparent; color:#fff; font-size:16px; font-weight:900; cursor:pointer; padding:2px 6px; }
+#apr-comments-box .modal-head { display:flex; align-items:center; justify-content:space-between; }
+.apr-cmt-row { border-bottom:1px dashed var(--border); padding:8px 0; }
+.apr-cmt-row:last-child { border-bottom:none; }
+.apr-cmt-head { display:flex; align-items:center; gap:8px; font-size:11.5px; }
+.apr-cmt-head small { color:var(--muted); font-weight:700; }
+.apr-cmt-del { margin-inline-start:auto; border:none; background:transparent; cursor:pointer; opacity:.7; font-size:13px; }
+.apr-cmt-del:hover { opacity:1; }
+.apr-cmt-body { font-size:12.5px; line-height:1.6; white-space:pre-wrap; word-break:break-word; margin-top:2px; }
+.apr-cmt-input { display:flex; gap:8px; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--border); }
+.apr-cmt-input textarea { flex:1; resize:vertical; min-height:38px; border-radius:8px; border:1px solid var(--border-strong); background:var(--input); color:var(--text); font-family:inherit; padding:6px 8px; }
+
 /* ── الإعدادات: كل كارت مطوي (زي أقسام إدارة الحسابات) ── */
 #tab-settings .card-title.set-head { cursor:pointer; user-select:none; }
 #tab-settings .set-chev { margin-inline-start:auto; font-size:12px; font-weight:700; opacity:.6; transition:transform .15s; }

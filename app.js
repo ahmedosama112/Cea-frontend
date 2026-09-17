@@ -4032,7 +4032,24 @@ async function renderApprovals(){
         : (_aprMyLevel==='viewer'?'👁 مشاهدة — بتشوف كل الكشوف وملفاتها، ومفيش قرارات'
           :'👁 مشاهدة فقط — بتشوف كل الكشوف وحالتها وملاحظاتها، وتفتح ملفات كشوفك إنت بس، من غير أي إجراء'));
     aprBuildTable();
-  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; return; }
+  // شريط الإحصاءات فوق الجدول — فشله ما بيوقفش عرض الجدول نفسه
+  try{
+    const st=(await api('GET','/api/approvals/stats')).data;
+    aprRenderStats(st);
+  }catch(e){ /* الشريط اختياري — سكوت */ }
+}
+function aprRenderStats(st){
+  const el=document.getElementById('apr-stats'); if(!el) return;
+  const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
+  const chips=[
+    '<span class="apr-chip">⏳ في المراجعة <b>'+esc(String(st.pending))+'</b></span>',
+  ];
+  if(isApprover && (st.myTurn>0)) chips.push('<span class="apr-chip apr-chip-mine">🎯 دورك <b>'+esc(String(st.myTurn))+'</b></span>');
+  chips.push('<span class="apr-chip">✅ اتعتمد النهارده <b>'+esc(String(st.approvedToday))+'</b></span>');
+  chips.push('<span class="apr-chip">↩️ رجع النهارده <b>'+esc(String(st.returnedToday))+'</b></span>');
+  if(st.staleOver24h>0) chips.push('<span class="apr-chip apr-chip-warn">🐢 مستني من أكتر من يوم <b>'+esc(String(st.staleOver24h))+'</b></span>');
+  el.innerHTML=chips.join('');
 }
 // (8 سبتمبر 2026) المشاهد لازم يبان قدامه إن التاب للمتابعة بس — بنزوّد "(مشاهدة فقط)" على عنوان التاب
 // في القائمة الجانبية وفي كارت الشاشة وفي شريط العنوان. بيتنادى بعد ما الطابور يرجّع الفلاج من السيرفر.
@@ -4152,7 +4169,63 @@ function aprAutoRefresh(){
   if(!aprTabLive() || _aprPending) return;
   const pv=document.getElementById('apr-preview-ov'); if(pv && pv.style.display && pv.style.display!=='none') return;
   const m=document.getElementById('apr-modal'); if(m && m.style.display==='flex') return;
+  const cm=document.getElementById('apr-comments-ov'); if(cm && cm.style.display==='flex') return;
   renderApprovals();
+}
+// ── مودال التعليقات — نفس نمط modal-overlay/modal-box، بيتحدّث محليًا بعد كل إجراء من غير ما يتقفل ──
+let _aprCommentsId=null;
+function aprOpenComments(id){
+  _aprCommentsId=String(id);
+  let ov=document.getElementById('apr-comments-ov');
+  if(!ov){
+    ov=document.createElement('div'); ov.id='apr-comments-ov'; ov.className='modal-overlay';
+    ov.innerHTML='<div class="modal-box" id="apr-comments-box">'
+      +'<div class="modal-head"><span id="apr-comments-title">💬 التعليقات</span><button class="modal-x" onclick="aprCloseComments()">✕</button></div>'
+      +'<div class="modal-body" id="apr-comments-list"></div>'
+      +'<div class="apr-cmt-input"><textarea id="apr-comments-text" rows="2" maxlength="500" placeholder="اكتب تعليق..."></textarea>'
+      +'<button class="apr-fbtn" onclick="aprSendComment()">إرسال</button></div>'
+      +'</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e=>{ if(e.target===ov) aprCloseComments(); });
+  }
+  ov.style.display='flex'; document.body.classList.add('modal-open');
+  const r=_aprRows.find(x=>String(x.id)===String(id));
+  aprRefreshCommentsModal(id, r ? r.comments : []);
+}
+function aprCloseComments(){
+  const ov=document.getElementById('apr-comments-ov'); if(ov) ov.style.display='none';
+  document.body.classList.remove('modal-open'); _aprCommentsId=null;
+}
+function aprRefreshCommentsModal(id, comments){
+  if(_aprCommentsId!==String(id)) return;
+  const list=document.getElementById('apr-comments-list'); if(!list) return;
+  const items=(comments||[]).filter(c=>c.kind==='comment');
+  const canDel=c=>isAdmin() || String(c.user?.id||'')===_aprMyId;
+  list.innerHTML = items.length ? items.map(c=>{
+    const when=c.createdAt ? new Date(c.createdAt).toLocaleString('ar-EG',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+    return '<div class="apr-cmt-row">'
+      +'<div class="apr-cmt-head"><b>'+esc(personName(c.user)||'—')+'</b><small>'+esc(when)+'</small>'
+      +(canDel(c)?'<button class="apr-cmt-del" title="مسح" onclick="aprDeleteComment(\''+c.id+'\')">🗑</button>':'')
+      +'</div><div class="apr-cmt-body">'+esc(c.body)+'</div></div>';
+  }).join('') : '<div class="home-empty">مفيش تعليقات لسه</div>';
+}
+async function aprSendComment(){
+  const id=_aprCommentsId; if(!id) return;
+  const ta=document.getElementById('apr-comments-text'); const body=(ta.value||'').trim();
+  if(!body) return;
+  try{
+    const res=await api('POST','/api/approvals/'+id+'/comments', { body });
+    ta.value='';
+    aprApplyFreshComments(id, res.data);
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+async function aprDeleteComment(commentId){
+  const id=_aprCommentsId; if(!id) return;
+  if(!confirm('مسح التعليق ده؟')) return;
+  try{
+    const res=await api('DELETE','/api/approvals/'+id+'/comments/'+commentId);
+    aprApplyFreshComments(id, res.data);
+  }catch(e){ showToast('⚠ '+e.message, true); }
 }
 setInterval(aprAutoRefresh, 20*1000);
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) aprAutoRefresh(); });
@@ -4214,7 +4287,46 @@ function aprNotesBlock(r){
   return out.length ? '<div class="apr-notes-box">'+out.join('')+'</div>' : '';
 }
 function aprStatusCell(r){
-  return aprStatusPill(r)+aprNotesBlock(r);
+  return aprStatusPill(r)+aprNotesBlock(r)+aprSocialStrip(r);
+}
+// ريأكشن + كومنت — شريط مصغّر جوه خانة "الإجراء/الحالة"، متاح للجميع (حتى المشاهد)
+const APR_REACT_EMOJIS=['👍','❤️','🔥','👏','⚠️','😂'];
+function aprSocialStrip(r){
+  const comments=Array.isArray(r.comments)?r.comments:[];
+  const reactions=comments.filter(c=>c.kind==='reaction');
+  const btns=APR_REACT_EMOJIS.map(em=>{
+    const withEm=reactions.filter(c=>c.body===em);
+    if(!withEm.length) return '';
+    const mine=withEm.some(c=>String(c.user?.id||'')===_aprMyId);
+    const names=withEm.map(c=>personName(c.user)).filter(Boolean).join('، ');
+    return '<button type="button" class="apr-react'+(mine?' active':'')+'" title="'+esc(names)+'" onclick="event.stopPropagation();aprReact(\''+r.id+'\',\''+em+'\')">'+em+' '+withEm.length+'</button>';
+  }).join('');
+  const addBtn='<button type="button" class="apr-react apr-react-add" title="ضيف ريأكشن" onclick="event.stopPropagation();aprReactPicker(this,\''+r.id+'\')">➕</button>';
+  const commentsCount=comments.filter(c=>c.kind==='comment').length;
+  const cmtBtn='<button type="button" class="apr-fbtn apr-cmt-btn" onclick="event.stopPropagation();aprOpenComments(\''+r.id+'\')">💬 '+commentsCount+'</button>';
+  return '<div class="apr-social">'+btns+addBtn+cmtBtn+'</div>';
+}
+function aprReactPicker(btn, id){
+  document.querySelectorAll('.apr-react-menu').forEach(m=>m.remove());
+  const menu=document.createElement('div'); menu.className='apr-react-menu';
+  menu.innerHTML=APR_REACT_EMOJIS.map(em=>'<button type="button" onclick="event.stopPropagation();aprReact(\''+id+'\',\''+em+'\');document.querySelectorAll(\'.apr-react-menu\').forEach(m=>m.remove());">'+em+'</button>').join('');
+  document.body.appendChild(menu);
+  const b=btn.getBoundingClientRect();
+  menu.style.top=(window.scrollY+b.bottom+4)+'px';
+  menu.style.left=(window.scrollX+b.left)+'px';
+  setTimeout(()=>{ document.addEventListener('click', function h(e){ if(!menu.contains(e.target)){ menu.remove(); document.removeEventListener('click', h); } }); }, 0);
+}
+async function aprReact(id, emoji){
+  try{
+    const res=await api('POST','/api/approvals/'+id+'/react', { emoji });
+    aprApplyFreshComments(id, res.data);
+  }catch(e){ showToast('⚠ '+e.message, true); }
+}
+// بيحدّث r.comments لصف بعينه محليًا من غير renderApprovals كامل — يحافظ على حالة الجدول/الزوم/التمرير
+function aprApplyFreshComments(id, comments){
+  const r=_aprRows.find(x=>String(x.id)===String(id));
+  if(r){ r.comments=comments; aprBuildTable(); }
+  aprRefreshCommentsModal(id, comments);
 }
 function aprStatusPill(r){
   if(r.reviewState==='RETURNED'){
