@@ -922,6 +922,11 @@ body.dark-mode .xl-wrap { background:#fff; }
 /* تعديل سطر (مدير المشروع بس) — بديل الشطب، تلوين كهرماني بدل الأحمر */
 .apr-fbtn.apr-edit { background:var(--warn-bg); color:var(--warn-fg); border-color:var(--warn-fg); }
 .xl-preview tr.xl-edited td { background:#FFF4D6 !important; }
+/* السطر اللي المعتمد واقف عليه/بيعدّله — أزرق واضح عشان مايتلخبطش مع باقي السطور */
+.xl-preview tr.xl-target td { background:#D6E8FF !important; color:#0D2A55 !important; box-shadow:inset 0 2px 0 #1565C0, inset 0 -2px 0 #1565C0; }
+.apr-row { cursor:pointer; }
+.apr-snip-title { font-size:12px; font-weight:800; margin-bottom:4px; }
+.apr-snip { max-height:none; margin-bottom:10px; white-space:normal; }
 
 /* ═══ تحليلات الأماكن (تاب المديرين) ═══ */
 .an-periods { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }

@@ -4322,7 +4322,8 @@ function aprOpenPreview(title, wb, r){
     const list = rows.length ? '<div class="apr-rows">'+rows.map(x=>{
       const s=isStruck(si,x.row);
       const ed=!s && editOf(si,x.row);
-      return '<div class="apr-row'+(s?' struck':'')+'"><span>'+esc(x.label)+'</span>'
+      // الوقوف على السطر في القايمة (أو الضغط عليه) بيلوّن نفس السطر في الجدول وينزل لحد عنده — عشان مفيش لخبطة
+      return '<div class="apr-row'+(s?' struck':'')+'" onmouseenter="aprRowFocus('+si+','+x.row+',false)" onmouseleave="aprRowBlur()" onclick="aprRowClick(event,'+si+','+x.row+')"><span>'+esc(x.label)+'</span>'
         + (s ? '<small>❌ مشطوب — '+esc(s.level)+(s.note?': '+esc(s.note):'')+'</small>'
              : ''+(ed?'<small>✏️ معدّل — '+esc(ed.level)+': '+esc(ed.note)+'</small>':'')
                +(canEdit ? '<button type="button" class="apr-fbtn apr-edit" onclick="aprRowEdit(\''+r.id+'\','+si+','+x.row+','+jsArg(x.label)+')">✏️ تعديل</button>' : '')
@@ -4386,10 +4387,33 @@ function aprDataRows(ws, kind){
   }
   return out;
 }
+// تمييز سطر في جدول المعاينة (أزرق) — من قايمة السطور، وقبل فتح نافذة التعديل/الشطب
+function aprRowTr(sheetIndex, row){
+  const t=document.querySelectorAll('#apr-xl-zoom table.xl-preview')[sheetIndex];
+  return t ? t.rows[row-1] : null;
+}
+function aprRowClick(ev, sheetIndex, row){ if(ev.target.closest('button')) return; aprRowFocus(sheetIndex, row, true); }
+function aprRowBlur(){ document.querySelectorAll('#apr-xl-zoom tr.xl-target').forEach(tr=>tr.classList.remove('xl-target')); }
+function aprRowFocus(sheetIndex, row, scroll){
+  aprRowBlur();
+  const tr=aprRowTr(sheetIndex, row); if(!tr) return;
+  tr.classList.add('xl-target');
+  if(scroll) tr.scrollIntoView({behavior:'smooth', block:'center'});
+}
+// نسخة من السطر نفسه (بعناوين الأعمدة) بتظهر فوق نافذة التعديل/الشطب — المعاينة بتتقفل فبناخدها قبل القفل
+function aprRowSnippet(sheetIndex, row){
+  const t=document.querySelectorAll('#apr-xl-zoom table.xl-preview')[sheetIndex];
+  const tr=t && t.rows[row-1], head=t && t.rows[6];
+  if(!tr) return '';
+  const clone=tr.cloneNode(true); clone.classList.remove('xl-struck','xl-edited'); clone.classList.add('xl-target');
+  return '<div class="apr-snip-title">📍 السطر المختار:</div><div class="xl-wrap apr-snip"><table class="xl-preview">'+(head?head.outerHTML:'')+clone.outerHTML+'</table></div>';
+}
 function aprRowReject(id, sheetIndex, row, label){
+  const snip=aprRowSnippet(sheetIndex, row);
   aprClosePreview(); // نافذة القرار (#apr-modal) بتتغطى بمعاينة الملف لو فضلت مفتوحة — بنقفلها ونعيد فتحها بعد الحفظ
   _aprPending={id, decision:'ROW_REJECT', sheetIndex, row, label};
   aprOpenModal('#C62828','✕ شطب سطر من الكشف', 'السطر: '+label+'\n\nالسطر هيتشطب بالأحمر ويتشال من إجمالي الورقة، والكشف يكمّل اعتماده بدونه. المهندس هيشوف السبب. مفيش إلغاء للشطب بعد الحفظ. لو شطبت كل السطور الكشف كله يترفض ويرجع للمهندس.', '✕ شطب', '#C62828', true);
+  if(snip) document.getElementById('apr-modal-body').insertAdjacentHTML('afterbegin', snip);
 }
 // ── تعديل سطر (مدير المشروع بس): العدد/السعر/البيان/الخصم على — بديل الشطب، بسبب إلزامي ──
 let _aprEditPrefill=null;
@@ -4408,6 +4432,7 @@ function aprRowEdit(id, sheetIndex, row, label){
   // خانة الملاحظات جاية من السيرفر وممكن يكون فيها سطور تعديل/رفض سابقة اتضافت للعرض — بنشيلها عشان نبدأ من البيان الحقيقي
   const notes=cv(row,3).split('\n').filter(l=>!/^✏️ معدّل|^❌ مرفوض/.test(l.trim())).join('\n');
   const deduct=cv(row,2);
+  const snip=aprRowSnippet(sheetIndex, row);
   aprClosePreview();
   _aprEditPrefill={qty, price, notes, deduct};
   let ov=document.getElementById('apr-edit-ov');
@@ -4417,6 +4442,7 @@ function aprRowEdit(id, sheetIndex, row, label){
     <div class="modal-box" role="dialog" aria-modal="true">
       <div class="modal-head">✏️ تعديل سطر — ${esc(label)}</div>
       <div class="modal-body">
+        ${snip}
         ${multi ? '<div class="hint-box">السطر فيه أكتر من سجل — العدد والسعر مش قابلين للتعديل</div>' : `
         <div class="field"><label>العدد (${esc(qtyType)})</label><input type="number" id="are-qty" step="0.25" value="${qty!=null?qty:''}"></div>
         <div class="field"><label>سعر الوحدة</label><input type="number" id="are-price" step="0.01" value="${price!=null?price:''}"></div>
