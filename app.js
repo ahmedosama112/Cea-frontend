@@ -6880,8 +6880,10 @@ function renderLocalNow(){
   if(_localRendered) return;
   _localRendered=true;
   try{
+    // الرسم بيحصل دلوقتي ورا الـ splash، بس الـ splash نفسه يستنى لحد ما شريط التحميل يكمل
+    // (أنيميشن 2 ثانية من فتح الصفحة) — كان بيختفي فورًا فالشريط يبان ثانية ويطير
     const s=document.getElementById('splash');
-    if(s){ s.classList.add('hide'); setTimeout(()=>s.remove(),700); }
+    if(s){ setTimeout(()=>{ s.classList.add('hide'); setTimeout(()=>s.remove(),700); }, Math.max(0, 2000-performance.now())); }
     const el=document.getElementById('account-email-display');
     if(el) el.textContent=getCurrentUserEmail()||'';
     const today=todayYMD();
@@ -6920,7 +6922,7 @@ function onAuthReady(offline){
   if(offline) showToast('⚠ وضع أوفلاين — الاتصال بالخادم غير متاح دلوقتي، شغلك بيتحفظ محليًا وهيتزامن أول ما النت يرجع', true);
   // مواعيد الإرسال/الاعتماد — محتاجينها من أول لحظة عشان الكارت يبان والأزرار تتقفل قبل ما المستخدم يدوس
   if(!offline){ loadWindows(); loadProjects(); }
-  setTimeout(()=>{const s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(()=>s.remove(),700);}},600);
+  setTimeout(()=>{const s=document.getElementById('splash');if(s){s.classList.add('hide');setTimeout(()=>s.remove(),700);}},Math.max(600, 2000-performance.now()));
   const today=todayYMD();
   document.getElementById('f-date').value=today; autoSetDay(today);
   document.getElementById('ir-date').value=today;
