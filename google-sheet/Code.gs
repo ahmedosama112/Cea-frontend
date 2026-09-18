@@ -406,14 +406,7 @@ function findSubmissionRow(engineerName, fileName, maxAgeMinutes, notBeforeMs) {
       if (!t || t < minTime) continue; // صف قديم — مش إعادة محاولة لنفس الدفعة
     }
     try {
-      const cell = sheet.getRange(row, COLS.FILE_URL);
-      // الخانة دي smart chip: القيمة نفسها بتبقى فاضية غالبًا، والرابط في الـ rich text link
-      let url = cell.getValue();
-      if (!url) {
-        const rich = cell.getRichTextValue();
-        url = rich ? rich.getLinkUrl() : null;
-      }
-      const fileId = getFileIdFromUrl(url);
+      const fileId = fileIdInCell(sheet, row, COLS.FILE_URL);
       if (!fileId) continue;
       const actualName = DriveApp.getFileById(fileId).getName().trim();
       const actualNoExt = actualName.replace(/\.xlsx$/i, '');
@@ -702,6 +695,28 @@ function getFileIdFromUrl(url) {
   if (!url) return null;
   const m = String(url).match(/[-\w]{25,}/);
   return m ? m[0] : null;
+}
+
+// id الملف من خانة رابط — سواء نص عادي أو smart chip.
+// (18 سبتمبر 2026) الـ chip قيمته '@' أو اسم الملف مش الرابط، و getRichTextValue ما بيشوفش رابطه،
+// فالبحث عن صف موجود (findSubmissionRow) ما كانش بيلاقي ولا صف اتعمل من التطبيق.
+// رابط الـ chip ما بيتقريش غير من Sheets API (نفس الخدمة اللي بتكتبه في setFileSmartChip).
+function fileIdInCell(sheet, row, col) {
+  const cell = sheet.getRange(row, col);
+  let id = getFileIdFromUrl(cell.getValue());
+  if (id) return id;
+  const rich = cell.getRichTextValue();
+  id = getFileIdFromUrl(rich ? rich.getLinkUrl() : null);
+  if (id) return id;
+  const res = Sheets.Spreadsheets.get(sheet.getParent().getId(), {
+    ranges: ["'" + sheet.getName().replace(/'/g, "''") + "'!" + cell.getA1Notation()],
+    fields: 'sheets.data.rowData.values(chipRuns,hyperlink)',
+  });
+  const v = (((((res.sheets || [])[0] || {}).data || [])[0] || {}).rowData || [])[0];
+  const c = v && v.values && v.values[0];
+  if (!c) return null;
+  const chipUri = (c.chipRuns || []).map(r => r.chip && r.chip.richLinkProperties && r.chip.richLinkProperties.uri).filter(Boolean)[0];
+  return getFileIdFromUrl(chipUri || c.hyperlink);
 }
 
 /* ========= فولدر النسخ الاحتياطية "CEA Backups" (بيتعمل تلقائيًا في جذر Drive) ========= */
