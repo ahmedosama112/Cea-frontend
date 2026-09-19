@@ -4085,7 +4085,7 @@ function aprRenderStats(st){
     '<span class="apr-chip">⏳ في المراجعة <b>'+esc(String(st.pending))+'</b></span>',
   ];
   if(isApprover && (st.myTurn>0)) chips.push('<span class="apr-chip apr-chip-mine">🎯 دورك <b>'+esc(String(st.myTurn))+'</b></span>');
-  chips.push('<span class="apr-chip">✅ اتعتمد النهارده <b>'+esc(String(st.approvedToday))+'</b></span>');
+  chips.push('<span class="apr-chip">✅ تم الاعتماد النهارده <b>'+esc(String(st.approvedToday))+'</b></span>');
   chips.push('<span class="apr-chip">↩️ رجع النهارده <b>'+esc(String(st.returnedToday))+'</b></span>');
   if(st.staleOver24h>0) chips.push('<span class="apr-chip apr-chip-warn">🐢 مستني من أكتر من يوم <b>'+esc(String(st.staleOver24h))+'</b></span>');
   el.innerHTML=chips.join('');
@@ -5174,7 +5174,7 @@ async function invReviewIssue(id, status){
   if(status==='REJECTED'){ reviewNote=prompt('سبب الرفض (هيظهر للمهندس):'); if(reviewNote===null) return; }
   try{
     await api('PATCH','/api/inventory/issue-requests/'+id+'/review',{status, reviewNote:reviewNote||undefined});
-    showToast(status==='APPROVED'?'✅ اتعتمد — اضغط "تم الصرف" لما الصرف يحصل فعليًا':'❌ اترفض');
+    showToast(status==='APPROVED'?'✅ تم الاعتماد — اضغط "تم الصرف" لما الصرف يحصل فعليًا':'❌ اترفض');
     renderInvIssues();
   }catch(e){ showToast('⚠ '+e.message, true); }
 }
