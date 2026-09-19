@@ -8059,7 +8059,7 @@ function anPaintFilters(){
   const sc=_anScope||{engineers:[],sites:[],level:'self'};
   const sel=document.getElementById('an-user');
   if(sel) sel.innerHTML='<option value="">كل المهندسين</option>'+sc.engineers
-    .map(u=>`<option value="${esc(u.id)}">${esc(u.title?u.title+' — ':'')}${esc(u.email)}</option>`).join('');
+    .map(u=>`<option value="${esc(u.id)}">${esc(u.displayName?u.displayName:(u.title?u.title+' — ':'')+u.email)}</option>`).join('');
   const siteWrap=document.getElementById('an-site-wrap'), site=document.getElementById('an-site');
   if(site) site.innerHTML='<option value="">كل المواقع</option>'+(sc.sites||[]).map(s=>`<option value="${s}">${s===2?'الموقع الثاني':'الموقع الأول'}</option>`).join('');
   if(siteWrap) siteWrap.style.display=(sc.sites||[]).length>1?'':'none';
@@ -8230,12 +8230,22 @@ function anApprovedView(d){
 
 // تاب "العمالة": يوميات مسجلة قبل الاعتماد مقابل اللي عدّى الاعتماد فعلًا (بعد شطب/تعديل المديرين)، مقسّمة بمقاول ثم مهندس
 function anLaborView(d){
-  const t=d.totals||{before:0,after:0,diff:0,estimated:0};
+  const t=d.totals||{before:0,after:0,diff:0,estimated:0,duplicates:0};
   let html='<div class="summary-grid">'
     + `<div class="summary-box"><span class="val">${anDays(t.before)}</span><span class="lbl">يوميات مسجلة (قبل الاعتماد)</span></div>`
     + `<div class="summary-box purple"><span class="val">${anDays(t.after)}</span><span class="lbl">يوميات معتمدة (بعد الاعتماد)</span></div>`
     + `<div class="summary-box gold"><span class="val">${anDays(t.diff)}</span><span class="lbl">الفرق</span></div>`
     + '</div>';
+  const dups=d.duplicates||[];
+  if(dups.length){
+    let dt='<table class="apr-table an-table"><thead><tr><th>المهندس</th><th>المقاول</th><th>اليوم</th><th>الكشوف</th><th>اليوميات</th></tr></thead><tbody>';
+    dt+=dups.map(x=>`<tr><td class="an-name">${esc(x.engineer)}</td><td>${esc(x.contractor)}</td><td>${esc(x.date)}</td>`
+      +`<td>${x.submissions.map(s=>'#'+esc(s)).join('، ')}</td><td>${x.days.map(v=>anDays(v)).join(' + ')}</td></tr>`).join('');
+    dt+='</tbody></table>';
+    html+='<div class="card accent-red"><div class="card-title"><span>⚠</span> أيام تم اعتمادها في أكتر من كشف</div>'
+      + '<div class="hint">نفس اليوم لنفس المقاول عند نفس المهندس دخل في أكتر من كشف وتم اعتماده — راجعوا الصرف عشان مايتحاسبش مرتين</div>'
+      + `<div class="apr-scroll">${dt}</div></div>`;
+  }
   html+='<div class="hint">قبل الاعتماد = اللي المهندس سجّله في يومياته. بعد الاعتماد = اللي عدّى كل الاعتمادات، بعد ما المديرين شطبوا أو عدّلوا سطور فيها.</div>';
   const contractors_=d.contractors||[];
   if(!contractors_.length){
@@ -8243,7 +8253,7 @@ function anLaborView(d){
   } else {
     html+=contractors_.map(c=>{
       let t2='<table class="apr-table an-table"><thead><tr><th>المهندس</th><th>قبل الاعتماد</th><th>بعد الاعتماد</th><th>الفرق</th></tr></thead><tbody>';
-      t2+=(c.engineers||[]).map(en=>`<tr><td class="an-name">${esc(en.name)}</td><td>${anDays(en.before)}</td><td>${anDays(en.after)}</td><td>${anDays(en.diff)}</td></tr>`).join('');
+      t2+=(c.engineers||[]).map(en=>`<tr><td class="an-name">${esc(en.name)}</td><td>${anDays(en.before)}</td><td>${anDays(en.after)}${en.dupExtra>0?` <span class="an-bad" title="يوميات محسوبة أكتر من مرة">(+${anDays(en.dupExtra)} مكرر)</span>`:''}</td><td>${anDays(en.diff)}</td></tr>`).join('');
       t2+=`<tr><td class="an-name"><b>الإجمالي</b></td><td><b>${anDays(c.before)}</b></td><td><b>${anDays(c.after)}</b></td><td><b>${anDays(c.diff)}</b></td></tr>`;
       t2+='</tbody></table>';
       return `<div class="card"><div class="card-title"><span>👷</span> ${esc(c.name)}</div><div class="apr-scroll">${t2}</div></div>`;
@@ -8286,7 +8296,7 @@ function labPaintFilters(){
   const sc=_labScope||{engineers:[],sites:[]};
   const sel=document.getElementById('lab-user');
   if(sel) sel.innerHTML='<option value="">كل المهندسين</option>'+sc.engineers
-    .map(u=>`<option value="${esc(u.id)}">${esc(u.title?u.title+' — ':'')}${esc(u.email)}</option>`).join('');
+    .map(u=>`<option value="${esc(u.id)}">${esc(u.displayName?u.displayName:(u.title?u.title+' — ':'')+u.email)}</option>`).join('');
   const siteWrap=document.getElementById('lab-site-wrap'), site=document.getElementById('lab-site');
   if(site) site.innerHTML='<option value="">كل المواقع</option>'+(sc.sites||[]).map(s=>`<option value="${s}">${s===2?'الموقع الثاني':'الموقع الأول'}</option>`).join('');
   if(siteWrap) siteWrap.style.display=(sc.sites||[]).length>1?'':'none';
