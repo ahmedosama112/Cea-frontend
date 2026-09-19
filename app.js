@@ -390,7 +390,13 @@ function showToast(msg,isError=false) {
 }
 
 const opt = v => `<option value="${esc(v)}">${esc(v)}</option>`;
-const contractorOpts = () => contractors.map(c=>opt(c.name)).join('');
+// لو فيه مقاولين عمالة: بيتجمّعوا في optgroup لوحدهم عشان يتفرزوا بسهولة عن باقي المقاولين
+const contractorOpts = () => {
+  if(!contractors.some(c=>c.isLabor)) return contractors.map(c=>opt(c.name)).join('');
+  const labor=contractors.filter(c=>c.isLabor), rest=contractors.filter(c=>!c.isLabor);
+  return `<optgroup label="👷 مقاولين العمالة">${labor.map(c=>opt(c.name)).join('')}</optgroup>`
+    + `<optgroup label="🏗 باقي المقاولين">${rest.map(c=>opt(c.name)).join('')}</optgroup>`;
+};
 // لو فيه أماكن متربطة بمشاريع: الخيارات بتتجمّع تحت اسم المشروع — اختيار المكان بيوضّح مشروعه
 const placeOpts      = () => {
   if(_projects.length<=1) return places.map(opt).join('');
@@ -447,7 +453,9 @@ function populateDropdowns() {
   fillSelect('search-place','<option value="">📍 كل الأماكن</option>',placeOpts());
   fillSelect('search-contractor-filter','<option value="">👷 كل المقاولين</option>',contractorOpts());
   fillSelect('f-deduct-on-select','<option value="">-- اختر مقاول --</option>',contractorOpts());
-  fillSelect('export-contractor-select','<option value="">-- اضف مقاول --</option><option value="__ALL__">➕ اضافة جميع المقاولين</option>',contractorOpts());
+  { const laborNames=contractors.filter(c=>c.isLabor).map(c=>c.name);
+    const allLabel = laborNames.length ? `➕ اضافة جميع المقاولين (ماعدا: ${laborNames.join('، ')})` : '➕ اضافة جميع المقاولين';
+    fillSelect('export-contractor-select','<option value="">-- اضف مقاول --</option><option value="__ALL__">'+esc(allLabel)+'</option>',contractorOpts()); }
   fillSelect('export-place-select','<option value="">-- اضف مكان --</option><option value="__ALL__">➕ اضافة جميع الأماكن</option>',placeOpts());
   fillSelect('ir-inspector','<option value="">-- اختر الاستشاري --</option>',inspectors.map(opt).join(''));
   fillSelect('ir-item','<option value="">-- اختر البند --</option>',itemsOptGroups());
@@ -526,7 +534,7 @@ function renderSettings() {
     ? (cList.length ? cList.map(({c,i})=>`
       <div class="setting-item">
         <div style="flex:1;min-width:0">
-          <div class="setting-name">${esc(c.name)}</div>
+          <div class="setting-name">${esc(c.name)}${c.isLabor?' <span title="مقاول عمالة">👷</span>':''}</div>
           <div class="setting-sub">${esc(c.spec)}${c.rate?` · ${Number(c.rate).toLocaleString('ar-EG')} ج.م / ${esc(c.rateType||'يومية')}`:''}</div>
         </div>
         ${isAdmin()?`<div class="setting-actions">
@@ -586,6 +594,7 @@ function startEditContractor(i) {
   document.getElementById('ec-spec').value      = c.spec;
   document.getElementById('ec-rate').value      = c.rate || '';
   document.getElementById('ec-rate-type').value = c.rateType || 'يومية';
+  document.getElementById('ec-is-labor').checked = !!c.isLabor;
   document.getElementById('edit-contractor-form').style.display = 'block';
   document.getElementById('edit-contractor-form').scrollIntoView({behavior:'smooth'});
 }
@@ -596,8 +605,9 @@ function saveEditContractor() {
   const spec = document.getElementById('ec-spec').value.trim();
   const rate = document.getElementById('ec-rate').value.trim();
   const rateType = document.getElementById('ec-rate-type').value;
+  const isLabor = document.getElementById('ec-is-labor').checked;
   if(!name){showToast('⚠ أدخل إسم المقاول',true);return;}
-  contractors[i] = {name, spec, rate, rateType};
+  contractors[i] = {name, spec, rate, rateType, isLabor};
   saveAll(); populateDropdowns(); renderSettings();
   cancelEditContractor();
   showToast('✅ تم تعديل بيانات المقاول');
@@ -608,6 +618,7 @@ function cancelEditContractor() {
   document.getElementById('ec-name').value = '';
   document.getElementById('ec-spec').value = '';
   document.getElementById('ec-rate').value = '';
+  document.getElementById('ec-is-labor').checked = false;
 }
 
 function addContractor() {
@@ -615,13 +626,15 @@ function addContractor() {
   const s = document.getElementById('new-contractor-spec').value.trim();
   const r = document.getElementById('new-contractor-rate').value.trim();
   const rt = document.getElementById('new-contractor-rate-type').value;
+  const isLabor = document.getElementById('new-contractor-is-labor').checked;
   if(!n){showToast('⚠ أدخل إسم المقاول',true);return;}
   if(contractors.find(c=>c.name===n)){showToast('⚠ موجود مسبقاً',true);return;}
-  contractors.push({name:n, spec:s||'—', rate:r, rateType:rt});
+  contractors.push({name:n, spec:s||'—', rate:r, rateType:rt, isLabor});
   saveAll(); populateDropdowns(); renderSettings(); pushContractorsToCloud();
   document.getElementById('new-contractor-name').value='';
   document.getElementById('new-contractor-spec').value='';
   document.getElementById('new-contractor-rate').value='';
+  document.getElementById('new-contractor-is-labor').checked=false;
   showToast('✅ تم إضافة المقاول');
 }
 function removeContractor(i){if(!confirm(`حذف "${contractors[i].name}"؟`))return;contractors.splice(i,1);saveAll();populateDropdowns();renderSettings();pushContractorsToCloud();showToast('🗑 تم الحذف');}
@@ -898,7 +911,8 @@ function addExportContractorChip(){
   if(!sel||!sel.value)return;
   const name=sel.value;
   if(name==='__ALL__'){
-    contractors.forEach(c=>{ if(!exportContractorChips.includes(c.name)) exportContractorChips.push(c.name); });
+    // مقاولين العمالة مستبعدين من "إضافة الكل" — بيتبعتوا في كشف لوحدهم
+    contractors.forEach(c=>{ if(!c.isLabor && !exportContractorChips.includes(c.name)) exportContractorChips.push(c.name); });
     renderExportContractorChips();
     sel.value='';
     renderRecords();
@@ -3040,14 +3054,19 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
 // ── مقاولون بيتقدّموا في أول المصنّف ──
 // (12 سبتمبر 2026) طلب الـDC: سراكي العمالة دي بتتجمّع في الآخر فبتضيع منه وهو بيراجع.
 // الأسماء هنا بتتقارن بعد تطبيع المسافات والألف/الياء، فاختلاف كتابة بسيط مايكسرش المطابقة.
-// لزيادة/تعديل الأسماء: عدّل المصفوفة دي بس — الترتيب جواها هو ترتيب الورقات.
-const SHEET_FIRST_CONTRACTORS = ['أحمد عيد', 'محمد أحمد الليثي'];
+// (19 سبتمبر 2026) اتحولت من مصفوفة ثابتة لمشتقة من علامة isLabor على المقاول — عدّلها من إدارة المقاولين مش هنا.
+function sheetFirstContractors(){ return contractors.filter(c=>c.isLabor).map(c=>c.name); }
 function normContractorName(s){
   return String(s||'').replace(/\s+/g,' ').trim()
     .replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه');
 }
+// مقاول عمالة (يتبعت في كشف لوحده) — العلامة isLabor بتتجاب من قايمة المقاولين نفسها
+function isLaborContractor(name){
+  const n=normContractorName(name);
+  return contractors.some(c=>c.isLabor && normContractorName(c.name)===n);
+}
 function sortContractorsForSheet(names){
-  const pri = SHEET_FIRST_CONTRACTORS.map(normContractorName);
+  const pri = sheetFirstContractors().map(normContractorName);
   const rank = n => { const i = pri.indexOf(normContractorName(n)); return i === -1 ? pri.length : i; };
   // فرز ثابت: المقدَّمون بترتيب المصفوفة، والباقي بترتيبه الأصلي زي ما كان
   return names.map((n,i)=>({n,i})).sort((a,b)=> (rank(a.n)-rank(b.n)) || (a.i-b.i)).map(x=>x.n);
@@ -3118,8 +3137,8 @@ function syncExportChipsFromTopFilter(){
 }
 function exportSelectionHint(){
   return featureEnabled('records_export_chips')
-    ? '⚠ إختار مقاول أو مكان من قائمة الفلاتر الذهبي أعلى الصفحة'
-    : '⚠ إختار مقاول من فلتر "👷 كل المقاولين" أعلى الصفحة الأول';
+    ? '⚠ إختار مقاول ومكان من قائمة الفلاتر الذهبي أعلى الصفحة'
+    : '⚠ إختار مقاول ومكان من فلتر "👷 كل المقاولين" و"📍 كل الأماكن" أعلى الصفحة الأول';
 }
 
 // ورقة الكشف المعتمد أسبوع واحد بالظبط (7 صفوف من بداية الأسبوع) — فالسجلات لازم تتقصّ على نفس الأسبوع.
@@ -3280,8 +3299,16 @@ function resendSubmission(id, kind){
 async function submitApprovedForReview(){
   const {nq,pq,dq,cq}=getRecordFilters();
   syncExportChipsFromTopFilter();
-  if(!exportContractorChips.length && !exportPlaceChips.length){ showToast(exportSelectionHint(), true); return; }
-  if((nq || pq || cq) && !exportContractorChips.length){ showToast(exportSelectionHint(), true); return; }
+  // الكشف لازم يتبعت بمقاول ومكان محددين الاتنين — مفيش كشف بمقاول لوحده من غير مكان (ولا العكس)
+  if(!exportContractorChips.length || !exportPlaceChips.length){ showToast('⚠ لازم تختار مقاول ومكان من القايمة الدهبي — الكشف مايتبعتش بمقاول لوحده', true); return; }
+  // مقاولين العمالة (👷) لازم يتبعتوا في كشف لوحدهم — لو اتخلطوا مع باقي المقاولين في نفس الكشف نوقف الإرسال
+  { const laborSel = exportContractorChips.filter(isLaborContractor);
+    const restSel  = exportContractorChips.filter(n=>!isLaborContractor(n));
+    if(laborSel.length && restSel.length){
+      showToast('⚠ مقاولين العمالة ('+laborSel.join('، ')+') لازم يتبعتوا في كشف لوحدهم — شيل باقي المقاولين أو ابعتهم في كشف تاني', true);
+      return;
+    }
+  }
   await ensureExcelJS();
   let exp=[...records];
   if(dq) exp=exp.filter(r=>r.date===dq);
@@ -6976,7 +7003,10 @@ function recordBody(r){
 }
 function contractorBody(c){
   return { name:c.name, spec:c.spec||'—',
-    rate:(c.rate!==''&&c.rate!=null)?Number(c.rate):null, rateType:c.rateType||'يومية' };
+    rate:(c.rate!==''&&c.rate!=null)?Number(c.rate):null, rateType:c.rateType||'يومية',
+    // isLabor بس لو موجودة على المقاول: نسخة الجهاز القديمة (قبل 19 سبتمبر) مافيهاش المفتاح، ولو بعتناه false
+    // الهاش هيختلف عن الـsnapshot فالأدمن يرفع كل المقاولين "مش عمالة" قبل السحب ويمسح علامة الـmigration
+    ...('isLabor' in c ? {isLabor:!!c.isLabor} : {}) };
 }
 function itemBody(it){
   return { cat:it.cat||'عام', name:it.name,
@@ -7190,7 +7220,7 @@ function refreshNameSnap(entity, list, bodyFn){
 async function pullManagedData(){
   // المقاولون: بيتسحبوا للجميع — الأدمن كمان (كان بيرفع بس، فجهاز أدمن تاني ما كانش بيشوف الجديد إلا بإعادة دخول)
   const ctrRes=await api('GET','/api/contractors');
-  const serverCtr=ctrRes.data.map(c=>({name:c.name, spec:c.spec||'—', rate:c.rate!=null?String(Number(c.rate)):'', rateType:c.rateType||'يومية'}));
+  const serverCtr=ctrRes.data.map(c=>({name:c.name, spec:c.spec||'—', rate:c.rate!=null?String(Number(c.rate)):'', rateType:c.rateType||'يومية', isLabor:!!c.isLabor}));
   if(JSON.stringify(serverCtr)!==JSON.stringify(contractors)) contractors=serverCtr;
   refreshNameSnap('contractors', contractors, contractorBody);
   // الاستشاريون والبنود: نفس الفكرة — إضافات جهاز تاني توصل في المزامنة الدورية مش بس عند الدخول
@@ -7476,7 +7506,7 @@ async function pullAll(opts){
     getOpt('/api/daily-records','site_daily'), getOpt('/api/equipment-records','equipment')
   ]);
   if(eqs) equipmentRecords=eqs.data.map(mapApiEquipment);
-  if(ctr) contractors=ctr.data.map(c=>({name:c.name, spec:c.spec||'—', rate:c.rate!=null?String(Number(c.rate)):'', rateType:c.rateType||'يومية'}));
+  if(ctr) contractors=ctr.data.map(c=>({name:c.name, spec:c.spec||'—', rate:c.rate!=null?String(Number(c.rate)):'', rateType:c.rateType||'يومية', isLabor:!!c.isLabor}));
   if(insp) inspectors=insp.data.map(i=>i.name);
   if(its) items=its.data.map(it=>({cat:it.cat, name:it.name, stages:it.stages||[]}));
   if(irs) irRecords=irs.data.map(r=>({id:Number(r.id), date:ymdOf(r.date), item:r.item, place:r.place, inspector:r.inspector, status:r.status, notes:r.notes||''}));
@@ -7927,16 +7957,19 @@ let _anData=null;
 let _anTrend=null;
 let _anSeq=0;               // الفلتر ممكن يتغيّر والطلب لسه شغال — بنتجاهل الرد القديم
 
-const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'},{k:'matrix',l:'🔀 العلاقة'},{k:'approved',l:'🔒 الإجمالي الفعلي'}];
+const AN_DIMS=[{k:'place',l:'🏗 الأماكن'},{k:'contractor',l:'👷 المقاولين'},{k:'matrix',l:'🔀 العلاقة'},{k:'approved',l:'🔒 الإجمالي الفعلي'},{k:'labor',l:'👷 العمالة'}];
 const AN_PERIODS=[{k:'week',l:'هذا الأسبوع'},{k:'month',l:'هذا الشهر'},{k:'q',l:'آخر 3 شهور'},{k:'all',l:'كل الفترة'},{k:'custom',l:'مخصص'}];
 const AN_SORTS=[{k:'total',l:'الأعلى منصرفًا'},{k:'records',l:'الأكتر سجلات'},{k:'discount',l:'الأعلى خصمًا'},{k:'last',l:'آخر نشاط'},{k:'name',l:'الاسم'}];
 
 const anInt=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:0});
 const anPct=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:1});
+// أيام العمالة ممكن تيجي كسور (نص يوم) — نعرضها بفاصلة بدل ما نقرّبها زي anInt
+const anDays=n=>Number(n||0).toLocaleString('ar-EG',{maximumFractionDigits:2});
 const anIsCtr=()=>_anDim==='contractor';
 const anIsMx=()=>_anDim==='matrix';
-const AN_ENDPOINT={place:'places', contractor:'contractors', matrix:'matrix', approved:'approved-totals'};
+const AN_ENDPOINT={place:'places', contractor:'contractors', matrix:'matrix', approved:'approved-totals', labor:'labor'};
 const anIsApproved=()=>_anDim==='approved';
+const anIsLabor=()=>_anDim==='labor';
 
 // حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
 function anRange(){
@@ -7996,7 +8029,7 @@ async function renderAnalytics(fresh){
     // تاب "الإجمالي الفعلي" له بكت خاص بيه (أسبوعي/شهري/سنوي) ومالوش رسم اتجاه — نطلبه لوحده
     const mainQuery = anIsApproved() ? Object.assign({bucket:_anApprovedBucket}, f) : f;
     const calls=[api('GET','/api/analytics/'+(AN_ENDPOINT[_anDim]||'places')+anQuery(mainQuery))];
-    if(!anIsApproved()) calls.push(api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))));
+    if(!anIsApproved() && !anIsLabor()) calls.push(api('GET','/api/analytics/trend'+anQuery(Object.assign({bucket:_anBucket},f))));
     const [p,t]=await Promise.all(calls);
     if(seq!==_anSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
     _anData=p.data; _anTrend=t?t.data:null;
@@ -8181,10 +8214,35 @@ function anApprovedView(d){
   return html;
 }
 
+// تاب "العمالة": يوميات مسجلة قبل الاعتماد مقابل اللي عدّى الاعتماد فعلًا (بعد شطب/تعديل المديرين)، مقسّمة بمقاول ثم مهندس
+function anLaborView(d){
+  const t=d.totals||{before:0,after:0,diff:0,estimated:0};
+  let html='<div class="summary-grid">'
+    + `<div class="summary-box"><span class="val">${anDays(t.before)}</span><span class="lbl">يوميات مسجلة (قبل الاعتماد)</span></div>`
+    + `<div class="summary-box purple"><span class="val">${anDays(t.after)}</span><span class="lbl">يوميات معتمدة (بعد الاعتماد)</span></div>`
+    + `<div class="summary-box gold"><span class="val">${anDays(t.diff)}</span><span class="lbl">الفرق</span></div>`
+    + '</div>';
+  html+='<div class="hint">قبل الاعتماد = اللي المهندس سجّله في يومياته. بعد الاعتماد = اللي عدّى كل الاعتمادات، بعد ما المديرين شطبوا أو عدّلوا سطور فيها.</div>';
+  const contractors_=d.contractors||[];
+  if(!contractors_.length){
+    html+='<div class="home-empty">مفيش يوميات لمقاولين العمالة في النطاق ده</div>';
+  } else {
+    html+=contractors_.map(c=>{
+      let t2='<table class="apr-table an-table"><thead><tr><th>المهندس</th><th>قبل الاعتماد</th><th>بعد الاعتماد</th><th>الفرق</th></tr></thead><tbody>';
+      t2+=(c.engineers||[]).map(en=>`<tr><td class="an-name">${esc(en.name)}</td><td>${anDays(en.before)}</td><td>${anDays(en.after)}</td><td>${anDays(en.diff)}</td></tr>`).join('');
+      t2+=`<tr><td class="an-name"><b>الإجمالي</b></td><td><b>${anDays(c.before)}</b></td><td><b>${anDays(c.after)}</b></td><td><b>${anDays(c.diff)}</b></td></tr>`;
+      t2+='</tbody></table>';
+      return `<div class="card"><div class="card-title"><span>👷</span> ${esc(c.name)}</div><div class="apr-scroll">${t2}</div></div>`;
+    }).join('');
+  }
+  if(t.estimated>0) html+=`<div class="hint">⚠ ${anInt(t.estimated)} كشف قديم لسه يومياته بعد الاعتماد ما اتحسبتش.</div>`;
+  return html;
+}
 function anPaintBody(){
   const body=document.getElementById('an-body'); if(!body||!_anData) return;
   const d=_anData;
   if(anIsApproved()){ body.innerHTML=anApprovedView(d); return; }
+  if(anIsLabor()){ body.innerHTML=anLaborView(d); return; }
   const rows=anIsMx()?[]:anSortRows(d.rows);
   const k=anKpis(d);
   const box=(x)=>`<div class="summary-box ${x[0]}"><span class="val"${x[3]?' style="font-size:13px"':''}>${x[2]}</span><span class="lbl">${x[1]}</span></div>`;
