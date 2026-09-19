@@ -703,6 +703,7 @@ body.dark-mode .xl-wrap { background:#fff; }
 
 /* ─── اعتمادات المديرين ─── */
 /* شريط تكبير جدول الاعتمادات — الموبايل فقط (≤899px) بقرار صاحب المشروع (8 سبتمبر): على الكمبيوتر الجدول بيتعرض بحجمه الطبيعي بلا زوم */
+.apr-older { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; margin-top:10px; }
 .apr-zoom-bar { display:none; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap; }
 @media (max-width:899px){ .apr-zoom-bar { display:flex; } }
 /* برواز الجدول: تمرير في الاتجاهين جوه البرواز (مش أفقي بس) عشان الجدول المكبّر يتحرّك في كل الاتجاهات.

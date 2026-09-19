@@ -4045,12 +4045,23 @@ const APR_TIPS={
   APPROVED_NOTES:['اعتماد بملاحظات','معتمد مع ملاحظة — بيكمل للمعتمد اللي بعده برضو. الملاحظة بتتسجل، مش بترجع للمهندس.'],
   REJECTED:['رفض بملاحظات','الكشف بيرجع للمهندس، يعمل الملاحظات ويعيد إرساله كنسخة جديدة.']
 };
+// (19 سبتمبر 2026) الطابور بيعرض الكشوف اللي خلصت آخر 7 أيام — "📜 عرض الأقدم" بيزوّد أسبوع مع كل ضغطة.
+// بيفضل ثابت مع التحديث التلقائي كل 20 ث، وبيرجع أسبوع واحد مع أي ريفرش للتطبيق
+let _aprWeeks=1;
+async function aprShowOlder(){
+  if(_aprWeeks>=52){ showToast('⚠ ده أقصى حد — سنة كاملة', true); return; }
+  _aprWeeks++;
+  showToast('⏳ بيتحمّل أسبوع كمان...');
+  await renderApprovals();
+}
 async function renderApprovals(){
   const box=document.getElementById('apr-table'); if(!box) return;
   if(!getAccessToken()||!navigator.onLine){ box.innerHTML='<div class="home-empty">اعتمادات المديرين بيانات حية — محتاج اتصال بالنت</div>'; return; }
   try{
-    const [lv, q]=await Promise.all([api('GET','/api/approvals/levels'), api('GET','/api/approvals/queue')]);
+    const [lv, q]=await Promise.all([api('GET','/api/approvals/levels'), api('GET','/api/approvals/queue?weeks='+_aprWeeks)]);
     _aprLevels=lv.data; _aprRows=q.data; _aprMyLevel=q.myLevel; _aprViewer=!!q.viewer; _aprMyId=String(q.myId||'');
+    const oh=document.getElementById('apr-older-hint');
+    if(oh && q.since) oh.textContent='الكشوف اللي خلصت معروضة من '+new Date(q.since).toLocaleDateString('ar-EG',{day:'numeric',month:'long'})+' — واللي في المراجعة كلها دايمًا';
     aprApplyViewerTitles();
     const roleEl=document.getElementById('apr-myrole');
     const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;

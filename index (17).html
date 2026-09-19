@@ -851,6 +851,11 @@
       <button type="button" class="xl-tool" title="تكبير" onclick="aprTableZoom(1)">➕</button>
     </div>
     <div id="apr-scroll" class="apr-scroll"><div id="apr-table"></div></div>
+    <!-- الكشوف اللي خلصت (اتعتمدت/اترفضت) بتظهر آخر 7 أيام بس — الزرار بيرجّع أسبوع كمان مع كل ضغطة -->
+    <div class="apr-older">
+      <span id="apr-older-hint" class="hint" style="margin:0"></span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="aprShowOlder()">📜 عرض الأقدم (7 أيام كمان)</button>
+    </div>
   </div>
 </div>
 
