@@ -129,6 +129,7 @@
     <button class="drawer-item" data-tab="rent_requests" onclick="switchTab('rent_requests')"><span class="ico">📋</span><span>طلبات الإيجار</span></button>
     <button class="drawer-item" data-tab="rent_approvals" onclick="switchTab('rent_approvals')"><span class="ico">✅</span><span>اعتماد طلبات الإيجار</span></button>
     <button class="drawer-item" data-tab="analytics" onclick="switchTab('analytics')"><span class="ico">📈</span><span>تحليلات المشروع</span></button>
+    <button class="drawer-item" data-tab="labor" onclick="switchTab('labor')"><span class="ico">👷</span><span>تحليل العمالة</span></button>
     <button class="drawer-item" data-tab="summary"  onclick="switchTab('summary')"><span class="ico">📊</span><span>الملخص</span></button>
     <div class="drawer-sep"></div>
     <button class="drawer-item" data-tab="settings" onclick="switchTab('settings')"><span class="ico">⚙️</span><span>الإعدادات</span></button>
@@ -282,6 +283,7 @@
         <option value="ir">📋 طلبات الفحص</option>
         <option value="todo">✅ المهام</option>
         <option value="analytics">📈 تحليلات المشروع</option>
+        <option value="labor">👷 تحليل العمالة</option>
         <option value="settings">⚙️ الإعدادات</option>
         <option value="admin">👥 إدارة الحسابات (أدمن)</option>
       </select>
@@ -886,6 +888,25 @@
     </div>
   </div>
   <div id="an-body"></div>
+</div>
+
+<!-- ══ LABOR ANALYTICS — تحليل العمالة (وحدة مستقلة قابلة للتفعيل، أونلاين فقط) ══ -->
+<!-- بيانات /api/labor-analytics — نفس تقرير "👷 العمالة" اللي جوّه تحليلات المشروع، لكن دايمًا كل
+     المهندسين بغض النظر عن درجة/إسناد الحساب اللي معاه الوحدة دي. -->
+<div id="tab-labor" class="panel">
+  <div class="card">
+    <div class="card-title between"><span class="t">👷 تحليل العمالة</span><button class="link-btn" onclick="renderLaborTab(true)">🔄 تحديث</button></div>
+    <div class="an-periods" id="lab-periods"></div>
+    <div class="an-row" id="lab-custom" style="display:none">
+      <div class="field"><label>من</label><input type="date" id="lab-from" onchange="renderLaborTab()"></div>
+      <div class="field"><label>إلى</label><input type="date" id="lab-to" onchange="renderLaborTab()"></div>
+    </div>
+    <div class="an-row">
+      <div class="field" id="lab-site-wrap" style="display:none"><label>الموقع</label><select id="lab-site" onchange="renderLaborTab()"></select></div>
+      <div class="field"><label>المهندس</label><select id="lab-user" onchange="renderLaborTab()"></select></div>
+    </div>
+  </div>
+  <div id="lab-body"></div>
 </div>
 
 <!-- ══ INVENTORY — المخازن (وحدة قابلة للتفعيل، أونلاين فقط — تصميم بروح Sortly) ══ -->

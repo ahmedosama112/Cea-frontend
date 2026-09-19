@@ -1662,10 +1662,10 @@ function renderSummary(){
 
 // ── الوحدات المفعّلة للحساب (يحددها الأدمن من "إدارة الحسابات") ──
 // الافتراضي قبل أول مزامنة = الأساسيات؛ بتتحدث من السيرفر مع كل مزامنة
-const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics','rent_requests','rent_approvals'];
-const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)', rent_requests:'طلبات الإيجار (طلب معدات/عمالة + اعتماد مدير المشروع)', rent_approvals:'اعتماد طلبات الإيجار (مراجعة واعتماد طلبات المعدات والعمالة)'};
+const ALL_MODULES=['records','submissions','ir','site_daily','site_exec','todo','summary','inventory','approvals','equipment','analytics','rent_requests','rent_approvals','labor_analytics'];
+const MODULE_LABELS={records:'السراكي (تسجيل + قائمة)', submissions:'التسليمات (إرسال الكشوف للاعتماد)', ir:'طلبات الفحص (IR)', site_daily:'التقرير اليومي', site_exec:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن (مخزون + طلبات صرف وشراء)', approvals:'اعتمادات المديرين (مراجعة واعتماد الكشوف)', equipment:'سراكي معدات (شهري) — إيجار معدات 20→19', analytics:'تحليلات المشروع (أماكن + مقاولين — للمديرين)', rent_requests:'طلبات الإيجار (طلب معدات/عمالة + اعتماد مدير المشروع)', rent_approvals:'اعتماد طلبات الإيجار (مراجعة واعتماد طلبات المعدات والعمالة)', labor_analytics:'تحليل العمالة (يوميات مقاولين العمالة قبل/بعد الاعتماد — كل المهندسين)'};
 // أي شاشة (tab) تابعة لأنهي وحدة — الشاشات غير المذكورة (home/settings/admin) دايمًا متاحة
-const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics', rent_requests:'rent_requests', rent_approvals:'rent_approvals'};
+const TAB_MODULE={form:'records', records:'records', submissions:'submissions', ir:'ir', site:['site_daily','site_exec'], todo:'todo', summary:'summary', inventory:'inventory', approvals:'approvals', equipment:'equipment', analytics:'analytics', rent_requests:'rent_requests', rent_approvals:'rent_approvals', labor:'labor_analytics'};
 let enabledModules=JSON.parse(localStorage.getItem('cea_enabled_modules')||'null')||['records','submissions','todo','summary'];
 function setEnabledModules(list){
   enabledModules=Array.isArray(list)?list.filter(m=>ALL_MODULES.includes(m)):[];
@@ -1752,7 +1752,7 @@ function applyModuleVisibility(){
 }
 
 // عناوين الشاشات (تظهر في الهيدر) — الترتيب نفسه في القائمة الجانبية
-const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', rent_requests:'طلبات الإيجار', rent_approvals:'اعتماد طلبات الإيجار', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
+const TAB_TITLES = { home:'الرئيسية', form:'تسجيل سركي', records:'السراكي', submissions:'التسليمات', ir:'طلبات الفحص (IR)', site:'الموقف التنفيذي', todo:'المهام', summary:'الملخص', inventory:'المخازن', approvals:'اعتمادات المديرين', equipment:'سراكي معدات (شهري)', analytics:'تحليلات المشروع', rent_requests:'طلبات الإيجار', rent_approvals:'اعتماد طلبات الإيجار', labor:'تحليل العمالة', settings:'الإعدادات', notify:'التنبيهات', admin:'إدارة الحسابات' };
 // الشاشات اللي ليها زرار في الشريط السفلي؛ الباقي بيفعّل زرار "المزيد"
 const BOTTOM_TABS = new Set(['home','form','records']);
 
@@ -1774,6 +1774,7 @@ function switchTab(name){
   if(name==='inventory')renderInventory();
   if(name==='approvals')renderApprovals();
   if(name==='analytics')renderAnalytics();
+  if(name==='labor')renderLaborTab();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
   if(name==='rent_requests'){populateDropdowns();renderRentRequests();}
   if(name==='rent_approvals'){renderRentApprovals();}
@@ -7972,18 +7973,20 @@ const anIsApproved=()=>_anDim==='approved';
 const anIsLabor=()=>_anDim==='labor';
 
 // حدود الفترة المختارة — بداية الأسبوع سبت (زي أسبوع كشوف السراكي)
-function anRange(){
-  if(_anPeriod==='all') return {};
-  if(_anPeriod==='custom'){
-    const f=document.getElementById('an-from'), t=document.getElementById('an-to');
+// مشترك بين تاب التحليلات وتاب تحليل العمالة — نفس منطق الفترات بفرق الـ ids بس
+function anRangeFor(period, fromId, toId){
+  if(period==='all') return {};
+  if(period==='custom'){
+    const f=document.getElementById(fromId), t=document.getElementById(toId);
     const r={}; if(f&&f.value) r.from=f.value; if(t&&t.value) r.to=t.value; return r;
   }
   const now=new Date(), to=toYMD(now); const d=new Date(now);
-  if(_anPeriod==='week') d.setDate(d.getDate()-((d.getDay()+1)%7));
-  else if(_anPeriod==='month') d.setDate(1);
+  if(period==='week') d.setDate(d.getDate()-((d.getDay()+1)%7));
+  else if(period==='month') d.setDate(1);
   else d.setDate(d.getDate()-90);
   return {from:toYMD(d), to};
 }
+function anRange(){ return anRangeFor(_anPeriod,'an-from','an-to'); }
 function anQuery(extra){
   const r=anRange(), p=new URLSearchParams();
   if(r.from) p.set('from',r.from);
@@ -8238,6 +8241,70 @@ function anLaborView(d){
   if(t.estimated>0) html+=`<div class="hint">⚠ ${anInt(t.estimated)} كشف قديم لسه يومياته بعد الاعتماد ما اتحسبتش.</div>`;
   return html;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// تحليل العمالة (وحدة مستقلة — 👷 تحليل العمالة) — نفس تقرير anLaborView بالظبط،
+// لكن مصدره /api/labor-analytics: كل المهندسين دايمًا، بغض النظر عن درجة/إسناد الحساب.
+// ═══════════════════════════════════════════════════════════════════════════
+let _labPeriod='month';
+let _labScope=null;
+let _labSeq=0;
+
+function labRange(){ return anRangeFor(_labPeriod,'lab-from','lab-to'); }
+function labQuery(extra){
+  const r=labRange(), p=new URLSearchParams();
+  if(r.from) p.set('from',r.from);
+  if(r.to) p.set('to',r.to);
+  const site=document.getElementById('lab-site'), user=document.getElementById('lab-user');
+  if(site&&site.value) p.set('site',site.value);
+  if(user&&user.value) p.set('userId',user.value);
+  Object.entries(extra||{}).forEach(([k,v])=>{ if(v!=null&&v!=='') p.set(k,v); });
+  const s=p.toString(); return s?('?'+s):'';
+}
+function labSetPeriod(k){
+  _labPeriod=k;
+  const box=document.getElementById('lab-custom'); if(box) box.style.display = k==='custom' ? '' : 'none';
+  labPaintChips();
+  if(k!=='custom') renderLaborTab();
+}
+function labPaintChips(){
+  const box=document.getElementById('lab-periods'); if(!box) return;
+  box.innerHTML=AN_PERIODS.map(p=>`<button type="button" class="an-chip${p.k===_labPeriod?' on':''}" onclick="labSetPeriod('${p.k}')">${esc(p.l)}</button>`).join('');
+}
+function labPaintFilters(){
+  const sc=_labScope||{engineers:[],sites:[]};
+  const sel=document.getElementById('lab-user');
+  if(sel) sel.innerHTML='<option value="">كل المهندسين</option>'+sc.engineers
+    .map(u=>`<option value="${esc(u.id)}">${esc(u.title?u.title+' — ':'')}${esc(u.email)}</option>`).join('');
+  const siteWrap=document.getElementById('lab-site-wrap'), site=document.getElementById('lab-site');
+  if(site) site.innerHTML='<option value="">كل المواقع</option>'+(sc.sites||[]).map(s=>`<option value="${s}">${s===2?'الموقع الثاني':'الموقع الأول'}</option>`).join('');
+  if(siteWrap) siteWrap.style.display=(sc.sites||[]).length>1?'':'none';
+  labPaintChips();
+}
+async function renderLaborTab(fresh){
+  const body=document.getElementById('lab-body'); if(!body) return;
+  if(!getAccessToken()||!navigator.onLine){
+    body.innerHTML='<div class="card"><div class="home-empty">👷 تحليل العمالة بيانات حية — محتاج اتصال بالنت</div></div>';
+    return;
+  }
+  const seq=++_labSeq;
+  body.innerHTML='<div class="card"><div class="home-empty">⏳ بيتم تجميع البيانات...</div></div>';
+  try{
+    if(!_labScope){
+      const sc=await api('GET','/api/labor-analytics/scope');
+      _labScope=sc.data;
+      labPaintFilters();
+    }
+    const f=fresh===true?{fresh:'1'}:{};
+    const p=await api('GET','/api/labor-analytics'+labQuery(f));
+    if(seq!==_labSeq) return; // فلتر أحدث اتطلب — الرد ده بقى قديم
+    body.innerHTML=anLaborView(p.data);
+  }catch(e){
+    if(seq!==_labSeq) return;
+    body.innerHTML='<div class="card"><div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div></div>';
+  }
+}
+
 function anPaintBody(){
   const body=document.getElementById('an-body'); if(!body||!_anData) return;
   const d=_anData;
