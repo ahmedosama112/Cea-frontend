@@ -406,6 +406,27 @@ const placeOpts      = () => {
     return `<optgroup label="🏗 ${esc(siteName(g))}">${ps.map(opt).join('')}</optgroup>`;
   }).join('');
 };
+// قوايم شاشة الكشف بس: زيها زي اللي فوق + خيار "اضافة الكل" جوه كل مجموعة.
+// مقاولين العمالة ليهم زرارهم الخاص لأنهم لازم يتبعتوا في كشف لوحدهم (الحارس في sendExport).
+const exportContractorOpts = () => {
+  if(!contractors.some(c=>c.isLabor)) return contractorOpts();
+  const labor=contractors.filter(c=>c.isLabor), rest=contractors.filter(c=>!c.isLabor);
+  return `<optgroup label="👷 مقاولين العمالة"><option value="__ALL_LABOR__">➕ اضافة جميع مقاولين العمالة</option>${labor.map(c=>opt(c.name)).join('')}</optgroup>`
+    + `<optgroup label="🏗 باقي المقاولين">${rest.map(c=>opt(c.name)).join('')}</optgroup>`;
+};
+// الأماكن: "اضافة الكل" بتبقى لكل مشروع على حدة لما يكون فيه أكتر من مشروع —
+// الكشف الواحد مايقدرش يجمع أماكن من مشروعين (الحارس في buildExport)، فإضافة الكل عبر
+// المشاريع كانت بتوقّع الإرسال. بمشروع واحد بس بتفضل زي ما هي (__ALL__).
+const exportPlaceOpts = () => {
+  if(_projects.length<=1) return placeOpts();
+  return _projects.map(p=>p.id).map(g=>{
+    const ps=places.filter(p=>placeProjectId(p)===g);
+    if(!ps.length) return '';
+    return `<optgroup label="🏗 ${esc(siteName(g))}">`
+      + `<option value="__ALL_P${g}__">➕ اضافة جميع أماكن ${esc(siteName(g))}</option>`
+      + ps.map(opt).join('') + `</optgroup>`;
+  }).join('');
+};
 function itemsOptGroups(){
   const cats=[...new Set(items.map(i=>i.cat))];
   return cats.map(cat=>`<optgroup label="${esc(cat)}">${items.filter(i=>i.cat===cat).map(i=>opt(i.name)).join('')}</optgroup>`).join('');
@@ -431,7 +452,7 @@ function filterSelectOptions(inputId, selectId){
   let shown=0;
   Array.from(sel.options).forEach(o=>{
     // الخيارات الخاصة (فاضي / اضافة الكل) تفضل ظاهرة دايمًا
-    const special = o.value==='' || o.value==='__ALL__';
+    const special = o.value==='' || o.value.startsWith('__ALL');
     const match = !q || special || normSearch(o.textContent).includes(q);
     o.hidden = !match;
     if(match && !special) shown++;
@@ -455,8 +476,10 @@ function populateDropdowns() {
   fillSelect('f-deduct-on-select','<option value="">-- اختر مقاول --</option>',contractorOpts());
   { const laborNames=contractors.filter(c=>c.isLabor).map(c=>c.name);
     const allLabel = laborNames.length ? `➕ اضافة جميع المقاولين (ماعدا: ${laborNames.join('، ')})` : '➕ اضافة جميع المقاولين';
-    fillSelect('export-contractor-select','<option value="">-- اضف مقاول --</option><option value="__ALL__">'+esc(allLabel)+'</option>',contractorOpts()); }
-  fillSelect('export-place-select','<option value="">-- اضف مكان --</option><option value="__ALL__">➕ اضافة جميع الأماكن</option>',placeOpts());
+    fillSelect('export-contractor-select','<option value="">-- اضف مقاول --</option><option value="__ALL__">'+esc(allLabel)+'</option>',exportContractorOpts()); }
+  // بأكتر من مشروع: "اضافة جميع الأماكن" العامة بتتشال وبتتحط واحدة في أول كل مشروع
+  { const allPlaces = _projects.length<=1 ? '<option value="__ALL__">➕ اضافة جميع الأماكن</option>' : '';
+    fillSelect('export-place-select','<option value="">-- اضف مكان --</option>'+allPlaces,exportPlaceOpts()); }
   fillSelect('ir-inspector','<option value="">-- اختر الاستشاري --</option>',inspectors.map(opt).join(''));
   fillSelect('ir-item','<option value="">-- اختر البند --</option>',itemsOptGroups());
   // قوائم "اختار من مقاولينك/أماكنك" في إدارة الحسابات — كانت بتتملّي مرة واحدة بس وقت اختيار
@@ -910,9 +933,10 @@ function addExportContractorChip(){
   const sel=document.getElementById('export-contractor-select');
   if(!sel||!sel.value)return;
   const name=sel.value;
-  if(name==='__ALL__'){
-    // مقاولين العمالة مستبعدين من "إضافة الكل" — بيتبعتوا في كشف لوحدهم
-    contractors.forEach(c=>{ if(!c.isLabor && !exportContractorChips.includes(c.name)) exportContractorChips.push(c.name); });
+  if(name==='__ALL__' || name==='__ALL_LABOR__'){
+    // مقاولين العمالة مستبعدين من "إضافة الكل" — بيتبعتوا في كشف لوحدهم (وليهم زرارهم)
+    const wantLabor = name==='__ALL_LABOR__';
+    contractors.forEach(c=>{ if(!!c.isLabor===wantLabor && !exportContractorChips.includes(c.name)) exportContractorChips.push(c.name); });
     renderExportContractorChips();
     sel.value='';
     renderRecords();
@@ -953,8 +977,11 @@ function addExportPlaceChip(){
   const sel=document.getElementById('export-place-select');
   if(!sel||!sel.value)return;
   const name=sel.value;
-  if(name==='__ALL__'){
-    places.forEach(p=>{ if(!exportPlaceChips.includes(p)) exportPlaceChips.push(p); });
+  const allProj = name.match(/^__ALL_P(\d+)__$/);
+  if(name==='__ALL__' || allProj){
+    // أماكن مشروع واحد بس لو الزرار بتاع مشروع — الكشف مايجمعش أماكن من مشروعين
+    const pick = allProj ? places.filter(p=>placeProjectId(p)===Number(allProj[1])) : places;
+    pick.forEach(p=>{ if(!exportPlaceChips.includes(p)) exportPlaceChips.push(p); });
     renderExportPlaceChips();
     sel.value='';
     renderRecords();
