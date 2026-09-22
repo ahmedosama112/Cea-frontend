@@ -4459,7 +4459,7 @@ function aprBuildTable(){
     return sep+'<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+(r.projectName?'<small>🏗 '+esc(r.projectName)+'</small>':'')+'</td>'
-      +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview(\''+r.id+'\')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission(\''+r.id+'\',\''+esc(r.file?.fileName||'sheet.xlsx')+'\',\'/api/approvals\')">⬇ تحميل</button>')+'</td>'
+      +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview('+jsArg(String(r.id))+')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission('+jsArg(String(r.id))+','+jsArg(r.file?.fileName||'sheet.xlsx')+','+jsArg('/api/approvals')+')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+(((r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-wait" title="سطور معدّلة">✏️ '+(r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
@@ -8595,10 +8595,10 @@ function notifWhenLabel(item){
 function notifItemHtml(item){
   const w=notifWhenLabel(item);
   const cls = item.auto ? 'lv-auto' : ('lv-'+(item.level||'info'));
-  const go = item.tab ? '<button class="go" onclick="notifGo(\''+esc(item.tab)+'\')">فتح</button>' : '';
+  const go = item.tab ? '<button class="go" onclick="notifGo('+jsArg(item.tab)+')">فتح</button>' : '';
   const act = item.auto
-    ? go+'<button onclick="notifSnooze(\''+esc(item.key)+'\')">مش دلوقتي</button>'
-    : go+'<button onclick="notifDone(\''+esc(String(item.def.id))+'\',\''+esc(item.occ.ymd)+'\')">✅ تم</button>';
+    ? go+'<button onclick="notifSnooze('+jsArg(item.key)+')">مش دلوقتي</button>'
+    : go+'<button onclick="notifDone('+jsArg(String(item.def.id))+','+jsArg(item.occ.ymd)+')">✅ تم</button>';
   return '<div class="notify-item '+cls+'">'
     +'<div class="ic">'+esc(item.icon||'🔔')+'</div>'
     +'<div class="bd"><div class="ti">'+esc(item.title||'')+'</div>'
@@ -8706,9 +8706,9 @@ function notifAdminRow(d){
     +'<div class="s">'+esc(notifAudienceText(d))+(d.linkTab?(' · يفتح: '+esc(TAB_TITLES[d.linkTab]||d.linkTab)):'')+'</div>'
     +'<div class="s">'+(d.active&&nx?('🗓 الجاي: '+esc(notifRelDay(nx))):'—')+'</div></div>'
     +'<div class="acts">'
-    +'<button class="btn-sm-edit" onclick="notifEdit(\''+esc(String(d.id))+'\')">✏️</button>'
-    +'<button class="btn-sm-edit" style="background:var(--muted)" onclick="notifToggleActive(\''+esc(String(d.id))+'\')">'+(d.active?'⏸':'▶')+'</button>'
-    +'<button class="btn-sm-edit" style="background:var(--red)" onclick="notifDelete(\''+esc(String(d.id))+'\')">🗑</button>'
+    +'<button class="btn-sm-edit" onclick="notifEdit('+jsArg(String(d.id))+')">✏️</button>'
+    +'<button class="btn-sm-edit" style="background:var(--muted)" onclick="notifToggleActive('+jsArg(String(d.id))+')">'+(d.active?'⏸':'▶')+'</button>'
+    +'<button class="btn-sm-edit" style="background:var(--red)" onclick="notifDelete('+jsArg(String(d.id))+')">🗑</button>'
     +'</div></div>';
 }
 async function renderNotifyAdmin(){

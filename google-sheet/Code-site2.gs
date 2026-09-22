@@ -439,17 +439,17 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     sheet.getRange(row, COLS.ENGINEER_NAME).setValue(safeText(engineerName));
     sheet.getRange(row, COLS.TIMESTAMP).setValue(new Date());
     // الأولوية: اختيار صريح (من التطبيق/سؤال الفورم) → وإلا تلقائي حسب اسم المهندس (COMMERCIAL_ENGINEERS)
-    sheet.getRange(row, COLS.PROJECT).setValue(project || projectForEngineer(engineerName));
+    sheet.getRange(row, COLS.PROJECT).setValue(safeText(project || projectForEngineer(engineerName)));
 
     const fileId = getFileIdFromUrl(fileUrl);
     if (!fileId) {
-      sheet.getRange(row, COLS.FILE_URL).setValue(fileUrl);
+      sheet.getRange(row, COLS.FILE_URL).setValue(safeText(fileUrl));
       sheet.getRange(row, COLS.STATUS).setValue('⚠ تعذر قراءة رابط الملف');
       styleNewRow(sheet, row);
       return row;
     }
     try { moveFileToFolder(fileId, CONFIG.RAW_UPLOADS_FOLDER_ID); } catch (err) { Logger.log('نقل الملف الأصلي: ' + err); }
-    try { setFileSmartChip(sheet, row, COLS.FILE_URL, fileUrl); } catch (err) { Logger.log('Smart Chip: ' + err); sheet.getRange(row, COLS.FILE_URL).setValue(fileUrl); }
+    try { setFileSmartChip(sheet, row, COLS.FILE_URL, fileUrl); } catch (err) { Logger.log('Smart Chip: ' + err); sheet.getRange(row, COLS.FILE_URL).setValue(safeText(fileUrl)); }
 
     // (22 سبتمبر 2026) نوع السركي في اسم الشيت المعتمد — الـDC بيميّز عمالة من معدات من الاسم،
     // لأن عمود الملف الأصلي مخفي عنده. المعدات اسمها فيه "معدات" أصلًا فبتفضل زي ما هي.
@@ -583,7 +583,7 @@ function setFileSmartChip(sheet, row, col, fileUrl) {
 }
 function setFileChip(sheet, row, col, fileUrl) {
   try { setFileSmartChip(sheet, row, col, fileUrl); }
-  catch (err) { Logger.log('Smart Chip فشل (عمود ' + col + '): ' + err); sheet.getRange(row, col).setValue(fileUrl); }
+  catch (err) { Logger.log('Smart Chip فشل (عمود ' + col + '): ' + err); sheet.getRange(row, col).setValue(safeText(fileUrl)); }
 }
 
 function convertExcelToGoogleSheet(fileId, newName, folderId) {

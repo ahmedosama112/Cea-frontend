@@ -28,7 +28,9 @@ fs.writeFileSync(path.join(OUT, 'sw.js'), sw);
 // ملفات المكتبات (Excel) — لو موجودة في lib/ تُنسخ، وإلا التصدير هيحمّلها من CDN عند الحاجة (شوف app.js)
 if (fs.existsSync(path.join(ROOT, 'lib'))) {
   fs.mkdirSync(path.join(OUT, 'lib'), { recursive: true });
-  for (const f of fs.readdirSync(path.join(ROOT, 'lib'))) copy(path.join('lib', f));
+  for (const f of ['xlsx.full.min.js', 'exceljs.min.js']) {
+    if (fs.existsSync(path.join(ROOT, 'lib', f))) copy(path.join('lib', f));
+  }
 }
 
 // Cloudflare Pages: هيدرز أمان + منع كاش المتصفح لـ sw.js

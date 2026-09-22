@@ -30,12 +30,10 @@ const RELOAD_SNIPPET = `
 </script>`;
 
 http.createServer((req, res) => {
-  const urlPath = decodeURIComponent(req.url.split('?')[0]);
-
-  // (L9) ملفات حساسة ممنوع السيرفر المحلي يقدّمها حتى بالغلط (env/باك اب/سورس السيرفر)
-  if (/^\/(backend|backups|google-sheet|\.claude|\.wrangler)\//.test(urlPath) || /\.(env|bak|sql|tgz)$/.test(urlPath) || /CEA_backup|db-backup|dump/i.test(urlPath)) {
-    res.writeHead(403); return res.end('forbidden');
-  }
+  let urlPath;
+  try { urlPath = decodeURIComponent(req.url.split('?')[0]); }
+  catch (e) { res.writeHead(400); return res.end('bad request'); }
+  if (urlPath.includes('\0')) { res.writeHead(400); return res.end('bad request'); }
 
   // قناة تشخيص: حفظ ملف مبني في المتصفح على القرص لفحصه (تطوير محلي فقط)
   if (urlPath === '/__save' && req.method === 'POST') {
@@ -58,9 +56,18 @@ http.createServer((req, res) => {
     return;
   }
 
-  const rel = urlPath === '/' ? ENTRY : urlPath;
-  const filePath = path.join(ROOT, rel);
-  if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+  const rel = urlPath === '/' ? ENTRY : urlPath.replace(/^[/\\]+/, '');
+  const filePath = path.resolve(ROOT, rel);
+  const rootRelative = path.relative(ROOT, filePath);
+  if (rootRelative.startsWith('..' + path.sep) || path.isAbsolute(rootRelative)) {
+    res.writeHead(403); res.end('forbidden'); return;
+  }
+  const normalizedPath = '/' + rootRelative.split(path.sep).join('/');
+
+  // (L9) ملفات حساسة ممنوع السيرفر المحلي يقدّمها حتى بالغلط (env/باك اب/سورس السيرفر)
+  if (/^\/(backend|backups|google-sheet|\.claude|\.wrangler|\.git)(\/|$)/i.test(normalizedPath) || /(^|\/)\.env(?:\.|$)/i.test(normalizedPath) || /\.(bak|sql|tgz)$/i.test(normalizedPath) || /CEA_backup|db-backup|dump/i.test(normalizedPath)) {
+    res.writeHead(403); return res.end('forbidden');
+  }
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('not found'); return; }
