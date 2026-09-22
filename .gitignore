@@ -20,3 +20,6 @@ Thumbs.db
 # ملفات مؤقتة للمساعد المحلي (قصاصات من app.js)
 local-ai/scratch/
 local-ai/rag/index.json
+
+# قناة الشغل المؤقتة بين الوكلاء (Claude ↔ Codex) — القواعد الثابتة في AGENTS.md/CLAUDE.md
+brief.me
