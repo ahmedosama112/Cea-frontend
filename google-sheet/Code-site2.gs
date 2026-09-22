@@ -14,8 +14,10 @@
  * التشغيل أول مرة: اختار applyNewDesign من القائمة فوق واضغط ▶ Run
  **************************************************************/
 
-// ⚠⚠ نسخة الموقع الثاني (المشروع الجديد) — الفولدرات متظبطة، والتوقيعات placeholders:
+// ⚠⚠ نسخة المشروع التاني — الفولدرات متظبطة، والتوقيعات placeholders:
 // لحد ما تضيف صور التوقيعات، الاعتماد بيكمل عادي بس من غير صورة توقيع (مش هيقع).
+// (22 سبتمبر 2026) الملف ده بقى نسخة طبق الأصل من Code.gs، وبيختلف عنه في الـ CONFIG بس:
+// فيه action=findRow (اللي بيمنع الصفوف المكررة ويربط كشف رده ضاع) وملخص سلسلة الاعتماد.
 const CONFIG = {
   SHEET_NAME: 'Saraki site',
   FORM_Q_ENGINEER_NAME: 'إسم المهندس',
@@ -25,10 +27,12 @@ const CONFIG = {
   PROCESSING_FOLDER_ID: '1sU3z08utGvRA9oLXe3acxuLtUecDxHtf',
   DC_FOLDER_ID: '1wB0DjuxvtL2XpTnw-k_XZbmmLt8is7da',
   // توقيع مدير التنفيذ — مختلف لكل مشروع (سكني/تجاري)؛ مدير المشروع توقيعه واحد
-  SIG_EXEC_MANAGER_FILE_ID: 'PUT_SITE2_EXEC_SIGNATURE_FILE_ID',            // ⬅ حط هنا ID صورة توقيع مدير التنفيذ الجديد
-  SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID: 'PUT_COMMERCIAL_SIGNATURE_FILE_ID',  // 🏪 تجاري — حط الـ File ID هنا
-  SIG_PROJECT_MANAGER_FILE_ID: 'PUT_SITE2_PM_SIGNATURE_FILE_ID',                 // ⬅ حط هنا ID صورة توقيع مدير المشروع الجديد
-  SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID: 'PUT_COMMERCIAL_PM_SIGNATURE_FILE_ID',     // 🏪 تجاري — حط الـ File ID هنا
+  SIG_EXEC_MANAGER_FILE_ID: 'PUT_SITE2_EXEC_SIGNATURE_FILE_ID',            // 🏠 سكني — ⬅ حط هنا ID صورة توقيع مدير التنفيذ للمشروع ده
+  SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID: 'PUT_SITE2_EXEC_COMMERCIAL_FILE_ID',  // 🏪 تجاري — ⬅ حط هنا الـ File ID (لو مفيش، بيرجع لتوقيع السكني)
+  // مدير المشروع توقيعه واحد للمشروعين (سكني وتجاري) — مفيش نسخة تجاري ليه.
+  // كان فيه SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID هنا؛ اتشال 14 سبتمبر 2026 لأنه
+  // مكانش متنادى من أي مكان في الملف وكان بيوهم إن فيه توقيعين.
+  SIG_PROJECT_MANAGER_FILE_ID: 'PUT_SITE2_PM_SIGNATURE_FILE_ID',                 // ⬅ حط هنا ID صورة توقيع مدير المشروع
   RAW_UPLOADS_FOLDER_ID: '1icKnQu7LdCSeGaRxRQySqbOcM2i6HBVV',
   DEFAULT_PROJECT: '🏠 سكني', // المشروع الافتراضي لو مفيش اختيار (صفوف قديمة / فورم بدون السؤال)
 
@@ -106,17 +110,62 @@ const APPROVAL = {
 /* توافق مع الصفوف القديمة (اللي فيها القيم الإنجليزية) */
 const LEGACY_APPROVAL = { 'APPROVED': APPROVAL.APPROVED, 'NOT APPROVED': APPROVAL.NOT_APPROVED, 'APPROVED WITH COMMENTS': APPROVAL.APPROVED_WITH_COMMENTS };
 const DROPDOWN_OPTIONS = ['', APPROVAL.APPROVED, APPROVAL.NOT_APPROVED, APPROVAL.APPROVED_WITH_COMMENTS];
-const isOk = v => v === APPROVAL.APPROVED || v === APPROVAL.APPROVED_WITH_COMMENTS || v === 'APPROVED' || v === 'APPROVED WITH COMMENTS';
+const isOk = v => v === APPROVAL.APPROVED || v === APPROVAL.APPROVED_WITH_COMMENTS || v === 'APPROVED' || v === 'APPROVED WITH COMMENTS' || v === ADMIN_APPROVED;
 const isNo = v => v === APPROVAL.NOT_APPROVED || v === 'NOT APPROVED';
 
+/* 🖋 (سبتمبر 2026) المراجعة والاعتماد بقوا جوه تطبيق CEA، والصف بيوصل الشيت بعد اكتمال السلسلة:
+   خانة F (كانت "إعتماد مدير المشروع") بتتملي تلقائيًا بالقيمة دي وتتقفل، وG بتحمل ملخص مين اعتمد */
+const ADMIN_APPROVED = '✅ معتمد بالكامل';
+/* ختم خانة F: لازم نشيل قاعدة التحقق الأول — setValue من السكربت بيرفض القيمة لو القاعدة "مقفولة" (حصل فعليًا: F72)،
+   وبعد الكتابة نحط قاعدة بتسمح بالقيمة دي بس (= مقفولة عمليًا من غير ما تكسر الكتابة) */
+function sealAdminApproval(cell) {
+  cell.clearDataValidations();
+  cell.setValue(ADMIN_APPROVED);
+  cell.setDataValidation(sealedValidation(ADMIN_APPROVED));
+}
+/* ارتفاع صف فيه سلسلة اعتماد متعددة الأسطر: wrap + ارتفاع حسب عدد السطور (بحد أدنى ارتفاع الشريط العادي) */
+function fitApprovalChainRow(sheet, row) {
+  const cell = sheet.getRange(row, COLS.NOTES_PM);
+  cell.setWrap(true).setVerticalAlignment('middle');
+  const lines = String(cell.getValue() || '').split('\n').length;
+  const wanted = Math.max(ROW_BAND_HEIGHT, 16 * lines + 12);
+  if (sheet.getRowHeight(row) < wanted) sheet.setRowHeight(row, wanted);
+}
+/* مرة واحدة (من القائمة ▶ Run): الصفوف القديمة اللي سلسلة الاعتماد فيها مفصولة بـ " | " → سطر لكل اعتماد + ضبط الارتفاع */
+function reformatApprovalChainColumn() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return;
+  const last = sheet.getLastRow();
+  if (last <= HEADER_ROWS) return;
+  const rng = sheet.getRange(HEADER_ROWS + 1, COLS.NOTES_PM, last - HEADER_ROWS, 1);
+  const vals = rng.getValues();
+  let changed = 0;
+  const fixed = vals.map(([v]) => {
+    const s = String(v || '');
+    if (!s.includes(' | ')) return [v];
+    changed++;
+    return [s.replace(/\s*\|\s*/g, '\n').replace(/^نسخة (\d+)\s*—\s*/, 'نسخة $1\n')];
+  });
+  if (changed) rng.setValues(fixed);
+  for (let r = HEADER_ROWS + 1; r <= last; r++) {
+    if (String(sheet.getRange(r, COLS.NOTES_PM).getValue() || '').includes('\n')) fitApprovalChainRow(sheet, r);
+  }
+  SpreadsheetApp.getUi().alert('✅ تم تنسيق سلسلة الاعتماد: ' + changed + ' صف اتعدل (سطر لكل اعتماد).');
+}
+function sealedValidation(value) {
+  return SpreadsheetApp.newDataValidation().requireValueInList([String(value)], false).setAllowInvalid(false).build();
+}
+
 const STATUS = {
-  NEW: 'جديد', CONVERTED: 'قيد الاعتماد',
-  EXEC_APPROVED: 'معتمد مدير التنفيذ', PM_APPROVED: 'معتمد مدير المشروع',
-  DONE: 'معتمد بالكامل ✅', REJ_EXEC: 'مرفوض من مدير التنفيذ', REJ_PM: 'مرفوض من مدير المشروع',
+  NEW: 'جديد', CONVERTED: 'بانتظار DC',            // كان "قيد الاعتماد" — دلوقتي المتبقي بعد التطبيق هو DC (التوقيع + PDF) بس
+  EXEC_APPROVED: 'معتمد مدير التنفيذ', PM_APPROVED: 'معتمد مدير المشروع', // (توافق مع الصفوف القديمة)
+  DONE: 'معتمد بالكامل ✅', REJ_EXEC: 'مرفوض من DC', REJ_PM: 'مرفوض من مدير المشروع',
 };
 
 const SIG_CELL_EXEC = 'A16';
 const SIG_CELL_PM   = 'G16';
+const SIG_CELL_TL   = 'J16'; // كان بلوك "توقيع العامل" — بقى توقيع مدير الفريق (بيوصل مختوم من التطبيق)
+// ⚠ الخانتين EXEC/PM فوق بترتيب الملفات القديمة (A = تنفيذ، G = مشروع) — للصفوف القديمة بس؛ الملفات الجديدة بتوصل موقّعة
 
 /* =====================================================================
  * 🎨 التصميم — يُطبَّق مرة على الموجود (applyNewDesign) وتلقائيًا على كل صف جديد
@@ -140,15 +189,15 @@ function applyNewDesign() {
   const r1 = sheet.getRange(1, 1, 1, LAST_COL);
   r1.breakApart();
   sheet.getRange(1, 1, 1, 3).merge().setValue('مهندس الموقع');
-  sheet.getRange(1, 4, 1, 2).merge().setValue('مدير التنفيذ');
-  sheet.getRange(1, 6, 1, 2).merge().setValue('مدير المشروع');
+  sheet.getRange(1, 4, 1, 2).merge().setValue('DC');
+  sheet.getRange(1, 6, 1, 2).merge().setValue('اعتماد التطبيق');
   sheet.getRange(1, 8, 1, 3).merge().setValue('الاعتماد والإخراج');
   sheet.getRange(1, 11).setValue('المشروع');
   r1.setBackground(THEME.navyDark).setFontColor(THEME.white).setFontWeight('bold').setFontSize(11)
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setFontFamily('Cairo');
   sheet.setRowHeight(1, 32);
 
-  const headers = ['إسم المهندس', 'تاريخ الإرسال', 'ملف السركي', 'إعتماد مدير التنفيذ', 'ملاحظات', 'إعتماد مدير المشروع', 'ملاحظات', 'الحالة', 'السراكي بعد الإعتماد', 'PDF النهائي', 'سكني / تجاري'];
+  const headers = ['إسم المهندس', 'تاريخ الإرسال', 'ملف السركي', 'اعتماد DC', 'ملاحظات DC', 'الاعتماد الإداري', 'سلسلة الاعتماد', 'الحالة', 'السراكي بعد الإعتماد', 'PDF النهائي', 'سكني / تجاري'];
   const r2 = sheet.getRange(2, 1, 1, LAST_COL);
   r2.setValues([headers]).setBackground(THEME.navy).setFontColor(THEME.gold).setFontWeight('bold').setFontSize(10)
     .setHorizontalAlignment('center').setVerticalAlignment('middle').setFontFamily('Cairo').setWrap(true);
@@ -189,11 +238,14 @@ function applyNewDesign() {
     const open = SpreadsheetApp.newDataValidation().requireValueInList(DROPDOWN_OPTIONS, true).setAllowInvalid(false).build();
     const locked = SpreadsheetApp.newDataValidation().requireValueInList([''], true).setAllowInvalid(false).build();
     sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_EXEC, n, 1).setDataValidation(open);
-    // خانة مدير المشروع: مفتوحة لو مدير التنفيذ اعتمد أو فيها قيمة، وإلا مقفولة — قاعدة واحدة لكل مجموعة متتالية
+    // خانة الاعتماد الإداري (F): لو فيها قيمة (اتملت تلقائيًا من التطبيق أو صف قديم خلصان) → مقفولة؛
+    // لو فاضية وDC اعتمد (صف قديم كان واقف عند مدير المشروع قبل التحديث) → مفتوحة للتوافق؛ غير كده مقفولة
     const execVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_EXEC, n, 1).getValues();
     const pmVals = sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).getValues();
     const rules = [];
-    for (let i = 0; i < n; i++) rules.push([(isOk(execVals[i][0]) || pmVals[i][0]) ? open : locked]);
+    const sealedCache = {};
+    const sealedFor = v => (sealedCache[v] = sealedCache[v] || sealedValidation(v));
+    for (let i = 0; i < n; i++) rules.push([pmVals[i][0] ? sealedFor(pmVals[i][0]) : (isOk(execVals[i][0]) ? open : locked)]);
     sheet.getRange(HEADER_ROWS + 1, COLS.APPROVE_PM, n, 1).setDataValidations(rules);
 
     // ── عمود المشروع: دروب داون سكني/تجاري + الافتراضي للصفوف القديمة اللي فيها بيانات ──
@@ -229,8 +281,9 @@ function applyRowDropdowns(sheet, row) {
   sheet.getRange(row, COLS.APPROVE_EXEC).setDataValidation(open);
   const execVal = sheet.getRange(row, COLS.APPROVE_EXEC).getValue();
   const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-  // لو خانة مدير المشروع فيها قيمة بالفعل (صف قديم معتمد) ما نقفلهاش — القفل للصفوف الجديدة بس
-  sheet.getRange(row, COLS.APPROVE_PM).setDataValidation((isOk(execVal) || pmCell.getValue()) ? open : locked);
+  // الاعتماد الإداري (F): فيها قيمة (اتملت من التطبيق) → مقفولة؛ فاضية وDC اعتمد (صف قديم) → مفتوحة؛ غير كده مقفولة
+  const pmVal = pmCell.getValue();
+  pmCell.setDataValidation(pmVal ? sealedValidation(pmVal) : (isOk(execVal) ? open : locked));
 }
 
 /* تنسيق شرطي: الاعتماد + الحالة + تظليل متناوب — قواعد واحدة للشيت كله */
@@ -252,7 +305,8 @@ function applyConditionalFormatting(sheet) {
     mk('NOT APPROVED', THEME.dangerBg, THEME.dangerFg, approveRanges),
     // الحالة
     mk('معتمد بالكامل', THEME.okBg, THEME.okFg, statusRange), mk('مرفوض', THEME.dangerBg, THEME.dangerFg, statusRange),
-    mk('قيد الاعتماد', THEME.infoBg, THEME.infoFg, statusRange), mk('معتمد مدير', THEME.warnBg, THEME.warnFg, statusRange),
+    mk('قيد الاعتماد', THEME.infoBg, THEME.infoFg, statusRange), mk('بانتظار DC', THEME.infoBg, THEME.infoFg, statusRange),
+    mk('معتمد مدير', THEME.warnBg, THEME.warnFg, statusRange),
     mk('⚠', THEME.dangerBg, THEME.dangerFg, statusRange),
     // المشروع
     mk('سكني', THEME.infoBg, THEME.infoFg, [sheet.getRange(HEADER_ROWS + 1, COLS.PROJECT, n, 1)]),
@@ -305,7 +359,8 @@ function onFormSubmitHandler(e) {
   const engineerName = findAnswer(CONFIG.FORM_Q_ENGINEER_NAME, ['مهندس', 'الاسم', 'إسم', 'اسم']);
   const fileUrl = findAnswer(CONFIG.FORM_Q_FILE, ['ملف', 'سركي', 'سراكي', 'حمل', 'رفع']);
   const rawProject = findAnswer(CONFIG.FORM_Q_PROJECT, ['مشروع', 'سكني', 'تجاري', 'نوع']);
-  processNewSubmission(engineerName, fileUrl, normalizeProject(rawProject));
+  // 🆘 مسار الطوارئ: الفورم = الملف مش موقّع → المسار القديم بالكامل (DC يعتمد من الشيت → توقيعات Drive → PDF)
+  processNewSubmission(engineerName, fileUrl, normalizeProject(rawProject), '', false);
 }
 
 /* توحيد قيمة المشروع من أي مصدر (فورم/تطبيق) — بيرجع '' لو مفيش اختيار صريح
@@ -319,12 +374,60 @@ function normalizeProject(v) {
 
 /* 🔌 نقطة الدخول من التطبيق (تُستدعى عبر Web App أو Sheets API بعد رفع الملف لـ Drive)
  * engineerName: اسم المهندس، fileUrl: رابط الإكسيل على Drive، project: 'سكني' أو 'تجاري' */
-function addSubmissionRow(engineerName, fileUrl, project) {
-  return processNewSubmission(engineerName, fileUrl, normalizeProject(project));
+function addSubmissionRow(engineerName, fileUrl, project, approvalSummary) {
+  return processNewSubmission(engineerName, fileUrl, normalizeProject(project), approvalSummary, true);
 }
 
-/* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد */
-function processNewSubmission(engineerName, fileUrl, project) {
+/* 🔎 دوّر على صف موجود بالفعل لنفس الكشف (اسم مهندس + اسم ملف) — يُستخدم قبل أي رفع
+   عشان لو ردّ doPost الأول ضاع (تايم آوت من السيرفر) نلاقي الصف اللي اتعمل فعلًا بدل ما نكرره.
+   بيمشي من آخر صف لفوق ويوقف بعد أقصى 300 صف — الدالة دي بتشتغل جوه request ومينفعش تمشي على شيت كبير كله */
+/* notBeforeMs (اختياري): الصف لازم يكون اتعمل بعد الوقت ده. الباك اند بيبعت وقت إنشاء ملف
+   الكشف الحالي — فالصفوف اللي أقدم منه بتخص نسخة سابقة (إعادة إرسال كشف مرفوض بتعمل ملف جديد
+   بنفس الاسم)، وربط الكشف بيها كان هيوصّل المهندس لحالة النسخة القديمة. */
+function findSubmissionRow(engineerName, fileName, maxAgeMinutes, notBeforeMs) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) return null;
+  const name = String(engineerName || '').trim();
+  const wantedFile = String(fileName || '').trim();
+  if (!name || !wantedFile) return null;
+  // ⚠ اسم الملف مش فريد: `سركي_<مقاول>_<بداية>_<نهاية>.xlsx` بيتكرر مع إعادة إرسال نفس الأسبوع.
+  // maxAgeMinutes بيقصر البحث على آخر كام دقيقة: إعادة المحاولة بعد رد ضايع بتحصل في ثواني،
+  // أما إعادة إرسال كشف مرفوض فبعد ساعات. من غير الحد ده النسخة المصححة كانت هتتحسب "مكررة"
+  // وترجع رقم الصف القديم، فما توصلش الـDC خالص.
+  const ageLimit = maxAgeMinutes ? (Date.now() - maxAgeMinutes * 60 * 1000) : null;
+  const floor = Number(notBeforeMs) || null;
+  // الأقسى بين الاتنين هو اللي بيحكم
+  const minTime = (ageLimit && floor) ? Math.max(ageLimit, floor) : (ageLimit || floor);
+  const wantedNoExt = wantedFile.replace(/\.xlsx$/i, '');
+  const lastRow = sheet.getLastRow();
+  const firstRow = Math.max(HEADER_ROWS + 1, lastRow - 300 + 1);
+  for (let row = lastRow; row >= firstRow; row--) {
+    const rowName = String(sheet.getRange(row, COLS.ENGINEER_NAME).getValue() || '').trim();
+    if (rowName !== name) continue; // مقارنة رخيصة — نعملها الأول قبل ما نلمس Drive
+    if (minTime) {
+      const ts = sheet.getRange(row, COLS.TIMESTAMP).getValue();
+      const t = (ts instanceof Date) ? ts.getTime() : 0;
+      if (!t || t < minTime) continue; // صف قديم — مش إعادة محاولة لنفس الدفعة
+    }
+    try {
+      const fileId = fileIdInCell(sheet, row, COLS.FILE_URL);
+      if (!fileId) continue;
+      const actualName = DriveApp.getFileById(fileId).getName().trim();
+      const actualNoExt = actualName.replace(/\.xlsx$/i, '');
+      if (actualName === wantedFile || actualNoExt === wantedNoExt || actualName === wantedNoExt || actualNoExt === wantedFile) {
+        return row;
+      }
+    } catch (err) { continue; } // أي خطأ (ملف اتمسح، رابط تالف...) → نتخطى الصف ده ونكمل
+  }
+  return null;
+}
+
+/* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
+   approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتمادات"
+   signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
+           false = جاي من الفورم (طوارئ — السيرفر واقع) → المسار القديم: "بانتظار DC"، والـ DC يعتمد من
+           خانة D فتنزل توقيعات Drive (تنفيذ + مشروع) ويتولّد الـ PDF (onEditHandler) */
+function processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -333,7 +436,7 @@ function processNewSubmission(engineerName, fileUrl, project) {
     if (!sheet) return null;
     const row = sheet.getLastRow() + 1;
 
-    sheet.getRange(row, COLS.ENGINEER_NAME).setValue(engineerName);
+    sheet.getRange(row, COLS.ENGINEER_NAME).setValue(safeText(engineerName));
     sheet.getRange(row, COLS.TIMESTAMP).setValue(new Date());
     // الأولوية: اختيار صريح (من التطبيق/سؤال الفورم) → وإلا تلقائي حسب اسم المهندس (COMMERCIAL_ENGINEERS)
     sheet.getRange(row, COLS.PROJECT).setValue(project || projectForEngineer(engineerName));
@@ -358,15 +461,40 @@ function processNewSubmission(engineerName, fileUrl, project) {
     sheet.getRange(row, COLS.CONVERTED_SHEET_URL).setNote(convertedId);
 
     sheet.getRange(row, COLS.APPROVE_EXEC).setValue('');
-    sheet.getRange(row, COLS.APPROVE_PM).setValue('');
+    if (!signed) {
+      // 🆘 صف من الفورم (طوارئ): الملف مش موقّع → نسيبه "بانتظار DC" بخانة F فاضية،
+      // والـ DC يعتمد من D زي زمان → onEditHandler بينزّل توقيعات Drive ويختم F ويطلّع الـ PDF
+      styleNewRow(sheet, row);
+      try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
+      return row;
+    }
+    // الصف بيوصل بعد اكتمال اعتمادات المديرين في التطبيق → الاعتماد الإداري (F) يتختم تلقائيًا ويتقفل،
+    // وسلسلة الاعتماد (G) تتكتب زي ما جت من التطبيق
+    // (12 سبتمبر 2026 — قرار صاحب المشروع) الاعتماد الإداري (F) مابقاش بيتختم هنا.
+    // كان بيتملي تلقائيًا وقت الوصول فالصف بيبقى "معتمد بالكامل" قبل ما الـ DC يبص عليه أصلًا.
+    // دلوقتي بيفضل فاضي، والـ DC يعتمد من D → onEditHandler يختم F ويطلّع الـ PDF.
+    if (approvalSummary) sheet.getRange(row, COLS.NOTES_PM).setValue(safeText(approvalSummary));
+
+    // علامة إن الملف وصل موقّعًا من التطبيق: onEditHandler لازم يتخطى تنزيل التوقيعات
+    // من Drive للصف ده — التوقيعات متختومة في الإكسيل من السيرفر (signStamp.ts)،
+    // وإعادة ختمها هتحط صور مكررة فوق بعضها.
+    sheet.getRange(row, COLS.APPROVE_EXEC).setNote('signed');
+
     styleNewRow(sheet, row);
     try { applyConditionalFormatting(sheet); } catch (err) { Logger.log('تنسيق شرطي: ' + err); }
+    // سلسلة الاعتماد بتيجي سطر لكل اعتماد → الصف ياخد ارتفاعه الطبيعي
+    if (approvalSummary) fitApprovalChainRow(sheet, row);
     return row;
   } finally { lock.releaseLock(); }
 }
 
 /* =====================================================================
- * 2) الاعتماد (onEdit) — نفس المنطق القديم بالظبط مع القيم العربية
+ * 2) الاعتماد (onEdit) — للصفوف القديمة + 🆘 صفوف الفورم في الطوارئ (سبتمبر 2026)
+ *    الصفوف الجاية من التطبيق بتوصل موقّعة بالكامل وحالتها "معتمد بالكامل ✅" فورًا،
+ *    والدالة دي بتخرج من غير ما تعمل حاجة على أي صف حالته DONE.
+ *    بتشتغل على: الصفوف اللي كانت واقفة "بانتظار DC" قبل التحديث، وأي صف جاي من الفورم
+ *    (السيرفر واقع → المهندس بيرفع الملف من الفورم → DC يعتمد من هنا → توقيعات Drive + PDF).
+ *    ⚠ عشان كده الدالة دي ومفاتيح التوقيعات في CONFIG لازم يفضلوا — دي خطة الاسترجاع (RECOVERY-PLAN.md).
  * ===================================================================== */
 function onEditHandler(e) {
   const sheet = e.range.getSheet();
@@ -380,16 +508,10 @@ function onEditHandler(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    if (col === COLS.APPROVE_PM) {
-      const execVal = sheet.getRange(row, COLS.APPROVE_EXEC).getValue();
-      if (!isOk(execVal)) {
-        e.range.setValue('');
-        SpreadsheetApp.getUi().alert('لازم مدير التنفيذ يعتمد الأول قبل ما تقدر تعتمد كمدير مشروع.');
-        return;
-      }
-    }
+    // F اتلغت كخطوة خالص — لا اعتماد ولا رفض. أي تعديل فيها بيخرج من غير أثر
+    if (col !== COLS.APPROVE_EXEC) return;
     if (isNo(newValue)) {
-      sheet.getRange(row, COLS.STATUS).setValue(col === COLS.APPROVE_EXEC ? STATUS.REJ_EXEC : STATUS.REJ_PM);
+      sheet.getRange(row, COLS.STATUS).setValue(STATUS.REJ_EXEC);
       return;
     }
     if (!isOk(newValue)) return;
@@ -405,27 +527,26 @@ function onEditHandler(e) {
       // 🖋 زرار واحد للـ DC (سبتمبر 2026): المراجعة والاعتماد بقوا جوه تطبيق CEA (اعتمادات المديرين)،
       // والكشف مابيوصلش الشيت إلا بعد اكتمال السلسلة. فاعتماد الخانة دي = "إخراج": بينزّل التوقيعين
       // (تنفيذ حسب المشروع + مدير المشروع) ويملّي خانة مدير المشروع تلقائيًا بنفس القيمة، والـ PDF بيتولد تحت.
-      const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
-      insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
-      sheet.getRange(row, COLS.STATUS).setValue(STATUS.EXEC_APPROVED);
-      const open = SpreadsheetApp.newDataValidation().requireValueInList(DROPDOWN_OPTIONS, true).setAllowInvalid(false).build();
-      const pmCell = sheet.getRange(row, COLS.APPROVE_PM);
-      pmCell.setDataValidation(open);
-      // لو خانة مدير المشروع متعتمدة من قبل (إعادة اعتماد لصف خلصان) ما نكررش توقيعه
-      if (!isOk(pmCell.getValue())) {
+      // صف خلصان بالفعل (إعادة اختيار القيمة) → ما نكررش التوقيعات ولا الـ PDF
+      if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) return;
+      // الصف اللي جه من التطبيق موقّع خلاص (علامته note='signed' على خانة D) — تنزيل توقيعات
+      // Drive عليه تاني بيحط صور مكررة. الصفوف القديمة/الفورم بس هي اللي محتاجة الختم هنا.
+      // طبقتين: العلامة (بتضيع لو حد مسح الملاحظة) + فحص الملف نفسه (بيصحّح لو العلامة ضاعت)
+      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed'
+        || hasAnySignature(convertedId);
+      if (!alreadySigned) {
+        const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
+        insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
         insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
-        pmCell.setValue(newValue);
       }
-      sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
-    } else {
-      // (توافق) الخانة التانية لسه بتشتغل يدويًا للصفوف القديمة اللي كانت واقفة عند مدير المشروع قبل التحديث
-      insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
+      // الاعتماد الإداري اتلغى كخطوة — سلسلة الاعتماد في G هي السجل، وD هو قرار الـDC،
+      // وF كانت بتتختم بنفس الضغطة اللي بتتحقق منها فبوابة بتفتح دايمًا
+      // بنسيب STATUS.PM_APPROVED هنا لحظيًا وبلوك الـ PDF تحت بيدهسها بـ DONE على طول (D بقى البوابة الوحيدة)
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.PM_APPROVED);
     }
 
     const execOk = isOk(sheet.getRange(row, COLS.APPROVE_EXEC).getValue());
-    const pmOk = isOk(sheet.getRange(row, COLS.APPROVE_PM).getValue());
-    if (execOk && pmOk) {
+    if (execOk) {
       const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
       const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
       const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
@@ -472,6 +593,7 @@ function prepareApprovalSlots(sheetId) {
   SpreadsheetApp.openById(sheetId).getSheets().forEach(ws => {
     try { ws.getRange(SIG_CELL_EXEC).setValue(''); } catch (e) {}
     try { ws.getRange(SIG_CELL_PM).setValue(''); } catch (e) {}
+    try { ws.getRange(SIG_CELL_TL).setValue(''); } catch (e) {}
   });
 }
 
@@ -500,7 +622,7 @@ function fixTextWrapping(sheetId) {
 }
 function getSignatureRowNumbers(ws) {
   const rows = new Set();
-  [SIG_CELL_EXEC, SIG_CELL_PM].forEach(a1 => {
+  [SIG_CELL_EXEC, SIG_CELL_PM, SIG_CELL_TL].forEach(a1 => {
     try {
       let range = ws.getRange(a1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
       for (let r = range.getRow(); r < range.getRow() + range.getNumRows(); r++) rows.add(r);
@@ -517,11 +639,44 @@ function restoreRowHeightsForImages(ws) {
   });
 }
 
+/* فيه توقيع فعلًا في الملف؟ — بنبص على خانات التوقيع الثلاثة في كل ورقات الشيت المحوّل.
+   السبب: علامة note='signed' لوحدها مش كفاية — هي على خانة الـDC نفسها وأي مسح/لصق بيضيّعها،
+   وساعتها السكربت بيفتكر الصف طوارئ وينزّل توقيعات Drive فوق توقيعات حقيقية. */
+function hasAnySignature(sheetId) {
+  try {
+    const ss = SpreadsheetApp.openById(sheetId);
+    // الخانات دي بلوكات مدموجة — نحل الدمج عشان نقارن بالصف/العمود الحقيقي مش النص
+    const cellRefs = [SIG_CELL_EXEC, SIG_CELL_PM, SIG_CELL_TL];
+    for (const ws of ss.getSheets()) {
+      const resolved = cellRefs.map(a1 => {
+        let range = ws.getRange(a1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
+        return { row: range.getRow(), col: range.getColumn() };
+      });
+      for (const img of ws.getImages()) {
+        const anchor = img.getAnchorCell();
+        const ar = anchor.getRow(), ac = anchor.getColumn();
+        if (resolved.some(t => t.row === ar && t.col === ac)) return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    // ما قدرناش نتأكد → نفترض إن فيه توقيع (الأمان في عدم التختيم، مش في التختيم):
+    // توقيع ناقص بيتصلّح باليد، أما توقيع زيادة فوق ملف مالي فبيبوّظه.
+    // بنسجّل السبب: في مسار الطوارئ الفشل ده معناه PDF طلع بلا توقيعات في صمت — لو ظهر في اللوج
+    // يبقى الصف ده محتاج ختم يدوي أو إعادة توليد PDF بعده.
+    Logger.log('⚠ hasAnySignature فشل للشيت ' + sheetId + ' — اتخطينا الختم احتياطًا: ' + e);
+    return true;
+  }
+}
+
 function insertSignatureOnAllSheets(sheetId, sigFileId, cellA1) {
-  // توقيع لسه ما اتضافش في CONFIG؟ نكمل الاعتماد عادي من غير صورة بدل ما العملية تقع
-  if (!sigFileId || String(sigFileId).indexOf('PUT_') === 0) { Logger.log('⚠ توقيع غير مضبوط في CONFIG — الاعتماد كمل بدون صورة التوقيع'); return; }
+  // توقيع مش مضبوط (مفتاح فاضي / PUT_...) أو صورته اتمسحت من Drive → نتخطاه ونكمّل (الـ PDF بيتولّد برضو).
+  // كده ممكن تشيل صور التوقيعات من CONFIG وقت ما تحب والاعتماد ما يتكسرش — وترجّعها بلصق الـ ID تاني.
+  if (!sigFileId || String(sigFileId).indexOf('PUT_') === 0) { Logger.log('⚠ توقيع غير مضبوط — اتخطى: ' + cellA1); return; }
+  let blob;
+  try { blob = DriveApp.getFileById(sigFileId).getBlob(); }
+  catch (e) { Logger.log('⚠ صورة التوقيع مش موجودة في Drive (' + sigFileId + ') — اتخطى: ' + cellA1); return; }
   const ss = SpreadsheetApp.openById(sheetId);
-  const blob = DriveApp.getFileById(sigFileId).getBlob();
   ss.getSheets().forEach(ws => { try { insertSignatureImageCentered(ws, blob, cellA1); } catch (e) {} });
 }
 function insertSignatureImageCentered(ws, blob, cellA1) {
@@ -544,6 +699,28 @@ function getFileIdFromUrl(url) {
   if (!url) return null;
   const m = String(url).match(/[-\w]{25,}/);
   return m ? m[0] : null;
+}
+
+// id الملف من خانة رابط — سواء نص عادي أو smart chip.
+// (18 سبتمبر 2026) الـ chip قيمته '@' أو اسم الملف مش الرابط، و getRichTextValue ما بيشوفش رابطه،
+// فالبحث عن صف موجود (findSubmissionRow) ما كانش بيلاقي ولا صف اتعمل من التطبيق.
+// رابط الـ chip ما بيتقريش غير من Sheets API (نفس الخدمة اللي بتكتبه في setFileSmartChip).
+function fileIdInCell(sheet, row, col) {
+  const cell = sheet.getRange(row, col);
+  let id = getFileIdFromUrl(cell.getValue());
+  if (id) return id;
+  const rich = cell.getRichTextValue();
+  id = getFileIdFromUrl(rich ? rich.getLinkUrl() : null);
+  if (id) return id;
+  const res = Sheets.Spreadsheets.get(sheet.getParent().getId(), {
+    ranges: ["'" + sheet.getName().replace(/'/g, "''") + "'!" + cell.getA1Notation()],
+    fields: 'sheets.data.rowData.values(chipRuns,hyperlink)',
+  });
+  const v = (((((res.sheets || [])[0] || {}).data || [])[0] || {}).rowData || [])[0];
+  const c = v && v.values && v.values[0];
+  if (!c) return null;
+  const chipUri = (c.chipRuns || []).map(r => r.chip && r.chip.richLinkProperties && r.chip.richLinkProperties.uri).filter(Boolean)[0];
+  return getFileIdFromUrl(chipUri || c.hyperlink);
 }
 
 /* ========= فولدر النسخ الاحتياطية "CEA Backups" (بيتعمل تلقائيًا في جذر Drive) ========= */
@@ -576,9 +753,52 @@ function unhideAllRows() {
   const lastRow = sheet.getLastRow();
   if (lastRow > HEADER_ROWS) sheet.showRows(HEADER_ROWS + 1, lastRow - HEADER_ROWS);
 }
+/* 🖨 صف وصل من التطبيق موقّعًا لكن السكربت القديم كان لسه شغال وقتها فوقف "بانتظار DC":
+   اعتماد D هيحط توقيعات Drive فوق التوقيعات الموجودة (تكرار). بدل كده: حدد الصف ← القائمة ← الأمر ده
+   → PDF من الشيت المحوّل زي ما هو + "معتمد بالكامل ✅". (الصفوف الجديدة بعد لصق السكربت بتاخد PDF لوحدها.) */
+function finalizeSignedRow() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) { ui.alert('افتح شيت "' + CONFIG.SHEET_NAME + '" وحدد الصف الأول.'); return; }
+  const row = sheet.getActiveRange().getRow();
+  if (row <= HEADER_ROWS) { ui.alert('حدد صف كشف (مش الترويسة).'); return; }
+  if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) { ui.alert('الصف ده معتمد بالكامل خلاص.'); return; }
+  const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
+  if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
+  const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
+  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
+  setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+  // الاعتماد الإداري (F) اتلغى كخطوة والعمود مخفي — مابقاش يتختم من هنا كمان
+  sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
+  ui.alert('✅ اتولّد الـ PDF للصف ' + row + ' والحالة بقت "معتمد بالكامل".');
+}
+
+/* 🔄 لما الأونر يعدّل الشيت المحوّل يدويًا (يشيل توقيع غلط مثلاً) ويحتاج PDF جديد منه.
+   عن قصد الدالة دي "غبية": مابتلمسش الحالة ولا F ولا التوقيعات — بس بتاخد الملف المحوّل زي
+   ما هو دلوقتي وتعمل منه PDF جديد، فمن الآمن تشغيلها في أي وقت. */
+function regeneratePdfForRow() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) { ui.alert('افتح شيت "' + CONFIG.SHEET_NAME + '" وحدد الصف الأول.'); return; }
+  const row = sheet.getActiveRange().getRow();
+  if (row <= HEADER_ROWS) { ui.alert('حدد صف كشف (مش الترويسة).'); return; }
+  const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
+  if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
+  const confirm = ui.alert('إعادة توليد PDF', 'هيتعمل PDF جديد للصف ' + row + ' من الشيت المحوّل زي ما هو دلوقتي، وهيستبدل رابط الـ PDF القديم. تكمل؟', ui.ButtonSet.YES_NO);
+  if (confirm !== ui.Button.YES) return;
+  const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
+  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
+  setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+  ui.alert('✅ اتولّد PDF جديد للصف ' + row + '.');
+}
+
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('⚙ أدوات السراكي')
     .addItem('🎨 إعادة تطبيق التصميم', 'applyNewDesign')
+    .addItem('🖨 إخراج PDF لصف موقّع من التطبيق (بدون توقيعات Drive)', 'finalizeSignedRow')
+    .addItem('🔄 إعادة توليد PDF للصف (بعد تعديل يدوي)', 'regeneratePdfForRow')
     .addSeparator()
     .addItem('🙈 إخفاء بيانات الأسبوع الآن', 'hideWeeklyData')
     .addItem('👁 إظهار كل الصفوف المخفية', 'unhideAllRows')
@@ -602,12 +822,24 @@ function onOpen() {
 // السر مخزّن في Script Properties (مش مكتوب في الكود).
 // لو احتجت تغيّره: ⚙️ Project Settings → Script Properties → عدّل WEBAPP_SECRET (نفس قيمة Railway).
 const WEBAPP_SECRET = PropertiesService.getScriptProperties().getProperty('WEBAPP_SECRET') || '';
+// (فحص أمني 2026-09-06 — N10) مقارنة بطول ثابت: ما تكشفش طول/بداية السر من زمن الرد
+function secretMatches(given, expected) {
+  if (!expected || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+// (N10) أي نص جاي من التطبيق/الفورم بيتكتب في الشيت كنص: لو بدأ بـ = + - @ يتفسّر كمعادلة — بنسبقه بـ '
+function safeText(v) {
+  const s = String(v == null ? '' : v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
 
 function doPost(e) {
   const out = (obj) => ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
   try {
     const body = JSON.parse(e.postData.contents);
-    if (!body.secret || body.secret !== WEBAPP_SECRET) return out({ ok: false, error: 'unauthorized' });
+    if (!body.secret || !secretMatches(String(body.secret), WEBAPP_SECRET)) return out({ ok: false, error: 'unauthorized' });
 
     // 📊 استعلام الحالة: السيرفر بيبعت أرقام صفوف وبيرجع له حالة كل صف من عمود "الحالة"
     // (عشان المهندس يشوف في التطبيق كشفه وصل لفين في سلسلة الاعتماد)
@@ -615,19 +847,30 @@ function doPost(e) {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
       if (!sheet) return out({ ok: false, error: 'sheet not found' });
       const rows = Array.isArray(body.rows) ? body.rows : [];
+      // ⚡ قراءة واحدة للرينج كله بدل getValue() لكل خانة.
+      // القديم كان 5 نداءات API لكل صف (225 نداء لـ45 كشف) فبيتعدّى مهلة السيرفر (4 ث)
+      // والرد بيرجع null فالكروت كلها تبقى بلا بيانات شيت. دلوقتي نداء واحد مهما كان عدد الصفوف.
       const statuses = {};
-      rows.forEach(r => {
-        const row = Number(r);
-        if (row > HEADER_ROWS && row <= sheet.getLastRow()) {
+      const lastRow = sheet.getLastRow();
+      const wanted = rows.map(Number).filter(row => row > HEADER_ROWS && row <= lastRow);
+      if (wanted.length) {
+        const minRow = Math.min.apply(null, wanted);
+        const maxRow = Math.max.apply(null, wanted);
+        // الأعمدة D..H متجاورة (4..8) فرينج واحد بيغطيها كلها
+        const firstCol = COLS.APPROVE_EXEC;            // 4
+        const width = COLS.STATUS - COLS.APPROVE_EXEC + 1; // 5 → D E F G H
+        const block = sheet.getRange(minRow, firstCol, maxRow - minRow + 1, width).getValues();
+        wanted.forEach(row => {
+          const v = block[row - minRow];
           statuses[row] = {
-            status: String(sheet.getRange(row, COLS.STATUS).getValue() || ''),
-            execApproval: String(sheet.getRange(row, COLS.APPROVE_EXEC).getValue() || ''),
-            pmApproval: String(sheet.getRange(row, COLS.APPROVE_PM).getValue() || ''),
-            execNotes: String(sheet.getRange(row, COLS.NOTES_EXEC).getValue() || ''),
-            pmNotes: String(sheet.getRange(row, COLS.NOTES_PM).getValue() || ''),
+            status: String(v[COLS.STATUS - firstCol] || ''),
+            execApproval: String(v[COLS.APPROVE_EXEC - firstCol] || ''),
+            pmApproval: String(v[COLS.APPROVE_PM - firstCol] || ''),
+            execNotes: String(v[COLS.NOTES_EXEC - firstCol] || ''),
+            pmNotes: String(v[COLS.NOTES_PM - firstCol] || ''),
           };
-        }
-      });
+        });
+      }
       return out({ ok: true, statuses: statuses });
     }
 
@@ -650,7 +893,19 @@ function doPost(e) {
       return out({ ok: true, fileId: file.getId(), fileUrl: file.getUrl(), kept: Math.min(all.length, 30) });
     }
 
+    // 🔎 استعلام: هل الكشف ده موجود فعلًا في الشيت؟ (يُستخدم قبل إعادة رفع بعد ما رد الرفع الأول ضاع)
+    if (body.action === 'findRow') {
+      if (!body.engineerName || !body.fileName) return out({ ok: false, error: 'missing engineerName or fileName' });
+      const row = findSubmissionRow(String(body.engineerName), String(body.fileName), null, body.notBefore);
+      return out({ ok: true, row: row });
+    }
+
     if (!body.fileBase64 || !body.engineerName) return out({ ok: false, error: 'missing engineerName or fileBase64' });
+
+    // ⚠ لو رد النداء الأول ضاع، إعادة المحاولة كانت بتعمل صف تاني لنفس الكشف —
+    // دلوقتي بندوّر الأول وبنرجّع رقم الصف الموجود من غير ما نرفع ملف جديد أو نعمل صف تاني
+    const existingRow = findSubmissionRow(String(body.engineerName), body.fileName || '', 20);
+    if (existingRow) return out({ ok: true, row: existingRow, duplicate: true });
 
     // إنشاء ملف الإكسيل في Drive (processNewSubmission هينقله لفولدر RAW ويحوّله زي الفورم)
     const blob = Utilities.newBlob(
@@ -659,7 +914,8 @@ function doPost(e) {
       body.fileName || ('سركي_' + body.engineerName + '.xlsx')
     );
     const file = DriveApp.createFile(blob);
-    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project));
+    // signed=true: الملف جاي من التطبيق موقّعًا بالكامل → PDF فورًا و"معتمد بالكامل" (مش بانتظار DC)
+    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '', true);
     return out({ ok: true, row: row, fileId: file.getId(), fileUrl: file.getUrl() });
   } catch (err) {
     Logger.log('doPost error: ' + err);
