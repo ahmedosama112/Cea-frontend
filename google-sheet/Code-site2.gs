@@ -427,7 +427,7 @@ function findSubmissionRow(engineerName, fileName, maxAgeMinutes, notBeforeMs) {
    signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
            false = جاي من الفورم (طوارئ — السيرفر واقع) → المسار القديم: "بانتظار DC"، والـ DC يعتمد من
            خانة D فتنزل توقيعات Drive (تنفيذ + مشروع) ويتولّد الـ PDF (onEditHandler) */
-function processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed) {
+function processNewSubmission(engineerName, fileUrl, project, approvalSummary, signed, kind) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -451,7 +451,10 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     try { moveFileToFolder(fileId, CONFIG.RAW_UPLOADS_FOLDER_ID); } catch (err) { Logger.log('نقل الملف الأصلي: ' + err); }
     try { setFileSmartChip(sheet, row, COLS.FILE_URL, fileUrl); } catch (err) { Logger.log('Smart Chip: ' + err); sheet.getRange(row, COLS.FILE_URL).setValue(fileUrl); }
 
-    const newName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm')}`;
+    // (22 سبتمبر 2026) نوع السركي في اسم الشيت المعتمد — الـDC بيميّز عمالة من معدات من الاسم،
+    // لأن عمود الملف الأصلي مخفي عنده. المعدات اسمها فيه "معدات" أصلًا فبتفضل زي ما هي.
+    const kindTag = submissionKindTag(kind, fileId);
+    const newName = `سركي_معتمد_${kindTag}${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm')}`;
     const convertedId = convertExcelToGoogleSheet(fileId, newName, CONFIG.PROCESSING_FOLDER_ID);
     prepareApprovalSlots(convertedId);
     fixTextWrapping(convertedId);
@@ -695,6 +698,17 @@ function exportSheetAsPdfToFolder(sheetId, pdfName, folderId) {
   return DriveApp.getFolderById(folderId).createFile(response.getBlob().setName(pdfName)).getUrl();
 }
 
+// 'عمالة_' لكشف العمالة و'' لكشف المعدات. kind بييجي من التطبيق (labor/equipment)؛
+// لو فاضي (صف جاي من الفورم أو نسخة قديمة) بنحدده من اسم الملف الأصلي.
+function submissionKindTag(kind, fileId) {
+  let k = String(kind || '').trim().toLowerCase();
+  if (!k && fileId) {
+    try { k = DriveApp.getFileById(fileId).getName().indexOf('معدات') >= 0 ? 'equipment' : 'labor'; }
+    catch (err) { k = ''; }
+  }
+  return k === 'equipment' ? '' : 'عمالة_';
+}
+
 function getFileIdFromUrl(url) {
   if (!url) return null;
   const m = String(url).match(/[-\w]{25,}/);
@@ -915,7 +929,7 @@ function doPost(e) {
     );
     const file = DriveApp.createFile(blob);
     // signed=true: الملف جاي من التطبيق موقّعًا بالكامل → PDF فورًا و"معتمد بالكامل" (مش بانتظار DC)
-    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '', true);
+    const row = processNewSubmission(String(body.engineerName), file.getUrl(), normalizeProject(body.project), body.approvalSummary ? String(body.approvalSummary) : '', true, body.kind ? String(body.kind) : '');
     return out({ ok: true, row: row, fileId: file.getId(), fileUrl: file.getUrl() });
   } catch (err) {
     Logger.log('doPost error: ' + err);
