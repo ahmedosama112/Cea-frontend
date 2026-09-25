@@ -1914,7 +1914,7 @@ async function loadProjects(){
   try{
     const r=await api('GET','/api/config');
     if(Array.isArray(r.data.projects) && r.data.projects.length){
-      _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name}));
+      _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name, noApproval:!!p.noApproval}));
       saveProjectsCache();
     }
   }catch(e){ /* نكمل بالقايمة المتخزنة محليًا */ }
@@ -1964,7 +1964,7 @@ async function loadSiteNames(){
   try{
     const r=await api('GET','/api/admin/config');
     _siteNames={ '1':r.data.site1Name||_siteNames['1'], '2':r.data.site2Name||_siteNames['2'] };
-    if(Array.isArray(r.data.projects) && r.data.projects.length){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name})); saveProjectsCache(); }
+    if(Array.isArray(r.data.projects) && r.data.projects.length){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name, noApproval:!!p.noApproval})); saveProjectsCache(); }
   }catch(e){ /* نكمل بالأسماء الافتراضية */ }
   applySiteNames();
 }
@@ -1975,7 +1975,7 @@ async function adminSaveSiteNames(){
   try{
     const r=await api('PATCH','/api/admin/config',{site1Name, site2Name});
     _siteNames={ '1':r.data.site1Name, '2':r.data.site2Name };
-    if(Array.isArray(r.data.projects)){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name})); saveProjectsCache(); }
+    if(Array.isArray(r.data.projects)){ _projects=r.data.projects.map(p=>({id:Number(p.id), name:p.name, noApproval:!!p.noApproval})); saveProjectsCache(); }
     applySiteNames();
     showToast('✅ اتحفظت الأسماء');
     renderAdmin();
@@ -1984,10 +1984,34 @@ async function adminSaveSiteNames(){
 // ── كارت "🏗 المشاريع" في إدارة الحسابات: عرض/إضافة/إعادة تسمية ──
 function adminRenderProjects(){
   const box=document.getElementById('admin-projects-list'); if(!box) return;
-  box.innerHTML=_projects.map(p=>`<div class="setting-item">
+  box.innerHTML=_projects.map(p=>`<div class="setting-item" style="flex-wrap:wrap">
       <div class="setting-name" style="flex:1">${esc(p.name)}</div>
+      <button class="btn-sm-edit" onclick="adminToggleNoApproval(${p.id})">${p.noApproval?'🔓 رجّع الاعتماد':'⏭ بدون اعتماد'}</button>
       <button class="btn-sm-edit" onclick="adminRenameProject(${p.id})">✏️ إعادة تسمية</button>
+      ${p.noApproval?'<div class="apr-miss" style="flex-basis:100%">⚠ المشروع ده بدون اعتماد — الكشوف عليه بتروح الشيت على طول من غير أي معتمد</div>':''}
     </div>`).join('') || '<div class="home-empty">لا يوجد مشاريع</div>';
+}
+// مشروع "بدون اعتماد": أي كشف عليه سلسلته فاضية ويروح الشيت على طول (السيرفر هو اللي بيطبّق ده)
+async function adminToggleNoApproval(id){
+  const cur=_projects.find(p=>Number(p.id)===Number(id)); if(!cur) return;
+  const on=!cur.noApproval;
+  let msg;
+  if(on){
+    let inReview=0;
+    try{ const r=await api('GET','/api/admin/projects'); inReview=((r.data||[]).find(p=>Number(p.id)===Number(id))||{}).inReview||0; }catch(e){}
+    msg='تخلّي مشروع "'+cur.name+'" بدون اعتماد؟\nأي كشف جديد عليه هيروح الشيت على طول من غير أي معتمد.'
+      +(inReview?'\n\n⚠ فيه '+inReview+' كشف قيد المراجعة عليه دلوقتي — هيبانوا معلّقين في طابور الاعتمادات، وأنت تحرّكهم للشيت باعتماد منك.':'');
+  } else {
+    msg='ترجّع الاعتماد لمشروع "'+cur.name+'"؟\nالكشوف الجديدة عليه هتعدّي على المعتمدين المسندين تاني.';
+  }
+  if(!confirm(msg)) return;
+  try{
+    await api('PATCH','/api/admin/projects/'+id,{noApproval:on});
+    await loadProjects();
+    adminRenderProjects();
+    if(_adminSelected) adminRenderUserProjects();
+    showToast(on?'✅ المشروع بقى بدون اعتماد':'✅ الاعتماد رجع للمشروع');
+  }catch(e){ showToast('⚠ '+e.message, true); }
 }
 async function adminAddProject(){
   const inp=document.getElementById('admin-new-project-name'); if(!inp) return;
@@ -2465,7 +2489,9 @@ function adminRenderUserProjects(){
   if(!box||!addSel) return;
   const chain=(_aprMeta.matrix||{})[u.grade||'junior']||[];
   box.innerHTML = _adminUserProjects.length ? _adminUserProjects.map(up=>{
-    const rows = chain.length ? chain.map(l=>{
+    const proj=_projects.find(p=>Number(p.id)===Number(up.projectId));
+    const rows = proj&&proj.noApproval ? '<div class="apr-miss">⚠ المشروع ده بدون اعتماد — كشوفه بتروح الشيت على طول من غير أي معتمد</div>'
+      : chain.length ? chain.map(l=>{
       const ui=APR_LEVEL_UI[l]; const cur=up[ui.field]?String(up[ui.field]):'';
       const opts=(_aprMeta.approvers||[]).filter(a=>a.grade===l&&String(a.id)!==String(u.id))
         .map(a=>`<option value="${esc(String(a.id))}"${String(a.id)===cur?' selected':''}>${esc(personName(a))} — ${esc(a.email)}</option>`).join('');
