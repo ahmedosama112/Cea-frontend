@@ -7142,10 +7142,12 @@ async function mirrorPushById(entity, arr, base, bodyFn){
         const match=serverIdx ? (serverIdx.get(h)||[]).find(id=>!usedServerIds.has(id)) : null;
         if(match){
           // موجود على السيرفر بنفس المحتوى → اربط بدل ما ترفع نسخة تانية
+          if(entity==='todos') notifRemapTodoId(item.id, match);
           item.id=match; usedServerIds.add(match);
           newSnap[item.id]=h;
         } else {
           const res=await api('POST', base, b);
+          if(entity==='todos') notifRemapTodoId(item.id, Number(res.data.id));
           item.id=Number(res.data.id);   // استبدال الـ id المحلي بـ id السيرفر نهائيًا
           usedServerIds.add(item.id);
           newSnap[item.id]=h;
@@ -8425,7 +8427,7 @@ function anPaintBody(){
      • تنبيهات تلقائية بيحسبها النظام (كشف مستني اعتمادك / كشف مرفوض / مهام متأخرة)
        — ما فيهاش "تم": بتختفي لوحدها لما السبب يخلص، وفيها "🕘 مش دلوقتي" لليوم. */
 
-let notifDefs=[], notifAuto={}, _notifKeysShown=null, _notifUsers=[];
+let notifDefs=[], notifAuto={}, _notifKeysShown=null, _notifSeen=[], _notifUsers=[];
 function notifLoadCache(){
   try{ const c=JSON.parse(localStorage.getItem('cea_notifs')||'null');
     if(c){ notifDefs=Array.isArray(c.list)?c.list:[]; notifAuto=c.auto||{}; } }catch(e){}
@@ -8499,26 +8501,52 @@ function notifNextOccurrence(def){
 
 // ── "مش دلوقتي" للتنبيهات التلقائية (على الجهاز بس، لآخر اليوم) ──
 function notifSnoozeMap(){ try{ return JSON.parse(localStorage.getItem('cea_notif_snooze')||'{}'); }catch(e){ return {}; } }
-function notifSnoozed(key){ return notifSnoozeMap()[key]===todayYMD(); }
+// الأنواع اللي ليها بصمة (ikeys) بيتخزن لها {keys, at}: التنبيه بيفضل مستخبي لحد ما يظهر عنصر جديد مش في البصمة
+// (مش لآخر اليوم). المرفوض بس بيرجع صامت (من غير رنّة) لو فات 3 أيام. النسخة الاحتياطية زي ما هي: لآخر اليوم.
+const NOTIF_REJECTED_REMIND_MS=3*24*60*60*1000;
+function notifSnoozeState(item){
+  const v=notifSnoozeMap()[item.key];
+  if(!v) return 'show';
+  if(typeof v==='string' || !item.ikeys) return v===todayYMD() ? 'hidden' : 'show';
+  const old=Array.isArray(v.keys)?v.keys:[];
+  if(item.ikeys.some(k=>old.indexOf(k)<0)) return 'show';
+  if(item.key==='auto:rejected' && Date.now()-(Number(v.at)||0)>=NOTIF_REJECTED_REMIND_MS) return 'silent';
+  return 'hidden';
+}
 function notifSnooze(key){
-  const m=notifSnoozeMap(); m[key]=todayYMD();
+  const item=notifAutoItems(true).filter(x=>x.key===key)[0];
+  const m=notifSnoozeMap();
+  m[key]=(item && item.ikeys) ? {keys:item.ikeys, at:Date.now()} : todayYMD();
   try{ localStorage.setItem('cea_notif_snooze', JSON.stringify(m)); }catch(e){}
   renderBell(); renderNotifyPanel();
 }
+// المهمة بتاخد رقم السيرفر بدل الرقم المحلي أول ما تتزامن — البصمة واللي اتشاف في الجلسة بيتنقلوا معاها،
+// وإلا نفس المهمة المتأخرة تبان «جديدة» وترنّ
+function notifRemapTodoId(oldId, newId){
+  const fix=k=>{ const i=String(k).indexOf(':'); return (i>0 && String(k).slice(0,i)===String(oldId)) ? newId+String(k).slice(i) : k; };
+  const m=notifSnoozeMap(), v=m['auto:todos'];
+  if(v && typeof v==='object' && Array.isArray(v.keys)){
+    v.keys=v.keys.map(fix);
+    try{ localStorage.setItem('cea_notif_snooze', JSON.stringify(m)); }catch(e){}
+  }
+  _notifSeen=_notifSeen.map(t=> t.indexOf('auto:todos|')===0 ? 'auto:todos|'+fix(t.slice(11)) : t);
+}
 
 // ── التنبيهات التلقائية (اعتمادات + كشوف مرفوضة من السيرفر، المهام المتأخرة من بيانات الجهاز) ──
-function notifAutoItems(){
+function notifAutoItems(raw){
   const a=notifAuto||{}, out=[];
   if(a.approvals && a.approvals.count){
     out.push({auto:true, key:'auto:approvals', icon:'📋', level:'urgent',
       title:a.approvals.count+' كشف مستني اعتمادك',
-      body:'ادخل تاب "اعتمادات المديرين" واعتمد الكشوف اللي دورك فيها.', tab:'approvals'});
+      body:'ادخل تاب "اعتمادات المديرين" واعتمد الكشوف اللي دورك فيها.', tab:'approvals',
+      ikeys:a.approvals.keys||['c'+a.approvals.count+':'+(a.approvals.since||'')]});
   }
   if(a.rejected && a.rejected.count){
     const lines=(a.rejected.items||[]).map(i=>'• '+(i.contractorName||'كشف')+(i.note?' — '+i.note:'')).join('\n');
     out.push({auto:true, key:'auto:rejected', icon:'❌', level:'urgent',
       title:a.rejected.count+' كشف مرفوض محتاج تعديل وإعادة إرسال',
-      body:lines||'ادخل تاب "التسليمات" وشوف سبب الرفض.', tab:'submissions'});
+      body:lines||'ادخل تاب "التسليمات" وشوف سبب الرفض.', tab:'submissions',
+      ikeys:(a.rejected.items||[]).map(i=>i.id+':'+(i.revision==null?'':i.revision))});
   }
   if(a.backup){
     const b=a.backup;
@@ -8527,12 +8555,14 @@ function notifAutoItems(){
       body: (b.detail ? b.detail + ' · ' : '')+'افتح إدارة الحسابات → كارت "🗄 النسخة الاحتياطية" وخد نسخة يدوية للتأكد.',
       tab:'admin'});
   }
-  const late=(typeof todos!=='undefined'?todos:[]).filter(t=>!t.done && t.date && t.date<todayYMD()).length;
+  const lateList=(typeof todos!=='undefined'?todos:[]).filter(t=>!t.done && t.date && t.date<todayYMD()), late=lateList.length;
   if(late && moduleEnabled('todo')){
     out.push({auto:true, key:'auto:todos', icon:'⏰', level:'warn',
-      title:late+' مهمة فات ميعادها', body:'خلّصها أو أجّل ميعادها من تاب "المهام".', tab:'todo'});
+      title:late+' مهمة فات ميعادها', body:'خلّصها أو أجّل ميعادها من تاب "المهام".', tab:'todo',
+      ikeys:lateList.map(t=>t.id+':'+t.date)});
   }
-  return out.filter(x=>!notifSnoozed(x.key));
+  if(raw) return out;
+  return out.map(x=>{ const st=notifSnoozeState(x); if(st==='hidden') return null; if(st==='silent') x.silent=true; return x; }).filter(Boolean);
 }
 
 // كل التنبيهات المستحقة دلوقتي: التلقائي الأول (عمل مطلوب فعلًا) وبعده تنبيهات الأدمن بالأقدم ميعادًا
@@ -8555,15 +8585,18 @@ function renderBell(){
   const items=notifActiveItems(), n=items.length;
   if(badge){ badge.style.display = n?'':'none'; badge.textContent = n>9?'9+':String(n); }
   // تنبيه جديد ظهر والتطبيق مفتوح؟ رنّة + Toast مرة واحدة
-  const keys=items.map(i=>i.key);
+  // الأنواع اللي ليها بصمة بتتقارن بعناصرها اللي اتشافت في الجلسة، والباقي بمفتاحه زي الأول؛ والتذكير الصامت ما بيرنّش
+  const keys=items.filter(i=>!i.ikeys).map(i=>i.key);
+  const tokens=[]; items.forEach(i=>{ (i.ikeys||[]).forEach(k=>tokens.push(i.key+'|'+k)); });
   if(_notifKeysShown){
-    const fresh=items.filter(i=>_notifKeysShown.indexOf(i.key)<0);
+    const fresh=items.filter(i=>!i.silent && (i.ikeys ? i.ikeys.some(k=>_notifSeen.indexOf(i.key+'|'+k)<0) : _notifKeysShown.indexOf(i.key)<0));
     if(fresh.length){
       btn.classList.add('ringing'); setTimeout(()=>btn.classList.remove('ringing'), 3000);
       showToast('🔔 '+fresh[0].title+(fresh.length>1?(' (+'+(fresh.length-1)+')'):''));
     }
   }
   _notifKeysShown=keys;
+  tokens.forEach(t=>{ if(_notifSeen.indexOf(t)<0) _notifSeen.push(t); });
   if(document.body.classList.contains('notify-open')) renderNotifyPanel();
 }
 
@@ -8586,7 +8619,7 @@ function closeNotifyPanel(){
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeNotifyPanel(); });
 
 function notifWhenLabel(item){
-  if(item.auto) return {txt:'دلوقتي', late:true};
+  if(item.auto) return {txt:item.silent?'🔁 تذكير — لسه محتاج منك':'دلوقتي', late:true};
   const k=item.occ.ymd, diff=notifDayDiff(k, todayYMD()), t=notifTime12(item.def.timeOfDay);
   if(diff===0)  return {txt:'⏰ النهاردة الساعة '+t, late:false};
   if(diff<0)    return {txt:'⚠ كان المفروض '+notifRelDay(k)+' — لسه ما اتعملش', late:true};
