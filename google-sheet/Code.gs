@@ -547,7 +547,7 @@ function onEditHandler(e) {
     const execOk = isOk(sheet.getRange(row, COLS.APPROVE_EXEC).getValue());
     if (execOk) {
       const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
-      const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+      const pdfName = approvedPdfName(engineerName, convertedId);
       const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
       setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
       sheet.getRange(row, COLS.STATUS).setValue(STATUS.DONE);
@@ -688,6 +688,13 @@ function insertSignatureImageCentered(ws, blob, cellA1) {
   return img;
 }
 
+// (25 سبتمبر 2026) اسم الـPDF بياخد "مقاول_عمالة" لو الشيت المحوّل اسمه فيه كده (submissionKindTag وقت التحويل)
+// — نفس التمييز بتاع الشيت المعتمد، من غير ما نحتاج نوع الكشف في المسارات اللي مالهاش kind (DC/القائمة).
+function approvedPdfName(engineerName, convertedId) {
+  let tag = '';
+  try { if (DriveApp.getFileById(convertedId).getName().indexOf('مقاول_عمالة') >= 0) tag = 'مقاول_عمالة_'; } catch (err) { tag = ''; }
+  return `سركي_معتمد_${tag}${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+}
 function exportSheetAsPdfToFolder(sheetId, pdfName, folderId) {
   const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=pdf&size=A4&portrait=false&scale=4&gridlines=false&printtitle=false&sheetnames=false&pagenumbers=false`;
   const response = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } });
@@ -777,7 +784,7 @@ function finalizeSignedRow() {
   const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
   if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
   const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
-  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfName = approvedPdfName(engineerName, convertedId);
   const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
   setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
   // الاعتماد الإداري (F) اتلغى كخطوة والعمود مخفي — مابقاش يتختم من هنا كمان
@@ -799,7 +806,7 @@ function regeneratePdfForRow() {
   const confirm = ui.alert('إعادة توليد PDF', 'هيتعمل PDF جديد للصف ' + row + ' من الشيت المحوّل زي ما هو دلوقتي، وهيستبدل رابط الـ PDF القديم. تكمل؟', ui.ButtonSet.YES_NO);
   if (confirm !== ui.Button.YES) return;
   const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
-  const pdfName = `سركي_معتمد_${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd')}.pdf`;
+  const pdfName = approvedPdfName(engineerName, convertedId);
   const pdfUrl = exportSheetAsPdfToFolder(convertedId, pdfName, CONFIG.DC_FOLDER_ID);
   setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
   ui.alert('✅ اتولّد PDF جديد للصف ' + row + '.');
