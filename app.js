@@ -3182,7 +3182,9 @@ async function buildApprovedWorkbook(exp, weekBounds, pq){
     const label = contractorNames.length===1
       ? `${contractorNames[0]}${placesLabel?'_'+placesLabel:''}`
       : `${contractorNames.length}_مقاولين${placesLabel?'_'+placesLabel:''}`;
-    const fileName = `سركي_عمالة_${subFileEngName()}${label?'_'+label:''}_${wkStart}_${wkEnd}.xlsx`;
+    // كشف مقاولين عمالة (👷 — بيتبعتوا لوحدهم) اسمه فيه "مقاول_عمالة"؛ باقي الكشوف "سركي_" عادي
+    const laborTag = contractorNames.length && contractorNames.every(isLaborContractor) ? 'مقاول_عمالة_' : '';
+    const fileName = `سركي_${laborTag}${subFileEngName()}${label?'_'+label:''}_${wkStart}_${wkEnd}.xlsx`;
     const total = exp.reduce((a,r)=>a+(Number(r.total)||0),0);
     return {buffer, fileName, sheetsCount, contractorNames, wkStart, wkEnd, total, recordsCount: exp.length, placesLabel, buildLabel: label, workbook, projectId: expSiteIds[0]||DEFAULT_PROJECT_ID};
 

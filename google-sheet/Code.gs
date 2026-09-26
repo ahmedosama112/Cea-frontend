@@ -447,8 +447,8 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     try { moveFileToFolder(fileId, CONFIG.RAW_UPLOADS_FOLDER_ID); } catch (err) { Logger.log('نقل الملف الأصلي: ' + err); }
     try { setFileSmartChip(sheet, row, COLS.FILE_URL, fileUrl); } catch (err) { Logger.log('Smart Chip: ' + err); sheet.getRange(row, COLS.FILE_URL).setValue(safeText(fileUrl)); }
 
-    // (22 سبتمبر 2026) نوع السركي في اسم الشيت المعتمد — الـDC بيميّز عمالة من معدات من الاسم،
-    // لأن عمود الملف الأصلي مخفي عنده. المعدات اسمها فيه "معدات" أصلًا فبتفضل زي ما هي.
+    // (25 سبتمبر 2026) كشف مقاولين العمالة اسم شيته المعتمد فيه "مقاول_عمالة" — الـDC بيميّزه من الاسم،
+    // لأن عمود الملف الأصلي مخفي عنده. باقي الكشوف "سركي_معتمد_<المهندس>" عادي.
     const kindTag = submissionKindTag(kind, fileId);
     const newName = `سركي_معتمد_${kindTag}${engineerName}_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm')}`;
     const convertedId = convertExcelToGoogleSheet(fileId, newName, CONFIG.PROCESSING_FOLDER_ID);
@@ -694,15 +694,16 @@ function exportSheetAsPdfToFolder(sheetId, pdfName, folderId) {
   return DriveApp.getFolderById(folderId).createFile(response.getBlob().setName(pdfName)).getUrl();
 }
 
-// 'عمالة_' لكشف العمالة و'' لكشف المعدات. kind بييجي من التطبيق (labor/equipment)؛
-// لو فاضي (صف جاي من الفورم أو نسخة قديمة) بنحدده من اسم الملف الأصلي.
+// (25 سبتمبر 2026) 'مقاول_عمالة_' لكشف مقاولين العمالة (👷) بس، و'' لأي كشف تاني (مقاولين عاديين أو معدات).
+// kind بييجي من التطبيق: labor_contractor / labor / equipment. لو فاضي (صف جاي من الفورم أو نسخة قديمة)
+// بنحدده من اسم الملف الأصلي — التطبيق بيكتب "سركي_مقاول_عمالة_..." لكشوف مقاولين العمالة.
 function submissionKindTag(kind, fileId) {
   let k = String(kind || '').trim().toLowerCase();
   if (!k && fileId) {
-    try { k = DriveApp.getFileById(fileId).getName().indexOf('معدات') >= 0 ? 'equipment' : 'labor'; }
+    try { k = DriveApp.getFileById(fileId).getName().indexOf('مقاول_عمالة') >= 0 ? 'labor_contractor' : ''; }
     catch (err) { k = ''; }
   }
-  return k === 'equipment' ? '' : 'عمالة_';
+  return k === 'labor_contractor' ? 'مقاول_عمالة_' : '';
 }
 
 function getFileIdFromUrl(url) {
