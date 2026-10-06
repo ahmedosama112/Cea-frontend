@@ -675,7 +675,7 @@
   <div class="card">
     <div class="card-title"><span>💰</span> الأعمال والمبالغ</div>
     <div class="field">
-      <label>يومية / مقطوعية / ساعة / عدد <span class="req">*</span></label>
+      <label>يومية / مقطوعية / ساعة / عدد / شهرية <span class="req">*</span></label>
       <div class="row">
         <input type="number" id="f-qty" class="grow2" placeholder="0" min="0" step="any" inputmode="decimal" oninput="calcTotal()">
         <select id="f-qty-type">
@@ -683,6 +683,8 @@
           <option value="مقطوعية">مقطوعية</option>
           <option value="ساعة">ساعة</option>
           <option value="عدد">عدد</option>
+          <!-- (أكتوبر 2026) "شهرية" محتاجة السيرفر بعد migration rate_type_monthly — قبلها السيرفر بيرفضها -->
+          <option value="شهرية">شهرية</option>
         </select>
       </div>
     </div>
@@ -703,6 +705,8 @@
     </div>
     <div class="field" id="f-deduct-field">
       <label>بالخصم على</label>
+      <input type="search" class="select-search" id="f-deduct-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('f-deduct-search','f-deduct-on-select')">
+      <div class="select-search-empty" id="f-deduct-search-empty">لا يوجد مقاول بهذا الاسم</div>
       <select id="f-deduct-on-select" onchange="addDeductChip()">
         <option value="">-- اختر مقاول --</option>
       </select>
@@ -1065,6 +1069,8 @@
     <div class="field"><label>بيان الأعمال</label><textarea id="eq-works" rows="2" placeholder="مثال: حفر أساسات + نقل ناتج الحفر للمقلب"></textarea></div>
     <div class="field">
       <label>بالخصم على</label>
+      <input type="search" class="select-search" id="eq-deduct-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('eq-deduct-search','eq-deduct-on-select')">
+      <div class="select-search-empty" id="eq-deduct-search-empty">لا يوجد مقاول بهذا الاسم</div>
       <select id="eq-deduct-on-select" onchange="eqAddDeductChip()"><option value="">-- اختر مقاول --</option></select>
       <div id="eq-deduct-chips" class="chips"></div>
     </div>

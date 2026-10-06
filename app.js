@@ -3295,7 +3295,7 @@ async function exportApprovedExcel(){
 
 // ── عرض ورقة Excel كجدول HTML (معاينة الكشف قبل الإرسال — بدون تنزيل) ──
 function argbToCss(argb){ if(!argb) return null; const h=String(argb); return '#'+(h.length===8?h.slice(2):h); }
-function renderSheetHtml(ws, workbook){
+function renderSheetHtml(ws, workbook, selfPmSig=null){
   const rowCount=ws.rowCount, colCount=Math.max(ws.columnCount, 13);
   // خريطة الدمج: master → {rowspan,colspan}, covered → skip
   const master={}, covered=new Set();
@@ -3319,6 +3319,16 @@ function renderSheetHtml(ws, workbook){
       else if(media && media.buffer){ imgRows.set(key, 'data:image/'+(media.extension||'png')+';base64,'+bytesToBase64(new Uint8Array(media.buffer))); }
     });
   }catch(e){}
+  // (أكتوبر 2026) مدير المشروع بيبعت سركيه بنفسه: السيرفر بيختم توقيعه في بلوك "توقيع مدير المشروع" بعد الإرسال
+  // (collectSignatures في الباك اند) — المعاينة قبل الإرسال بتعرضه في نفس البلوك عشان تطابق اللي هيوصل الشيت.
+  // الملف المرفوع نفسه مابيتغيّرش (وإلا التوقيع يتختم مرتين). البلوك بيتعرف من عنوانه زي السيرفر: صف التوقيع = صف العنوان - 1
+  if(selfPmSig){
+    for(const k of Object.keys(master)){
+      const [r1,c1]=k.split(':').map(Number); let txt='';
+      for(let c=c1;c<c1+master[k].cs && !txt.includes('مدير المشروع');c++){ const v=ws.getCell(r1,c).value; txt=String(v&&v.richText?v.richText.map(t=>t.text).join(''):(v??'')); }
+      if(r1>1 && txt.includes('مدير المشروع')){ const sigKey=mergeMaster[(r1-1)+':'+c1]||((r1-1)+':'+c1); if(!imgRows.has(sigKey)) imgRows.set(sigKey, selfPmSig); break; }
+    }
+  }
   const widths=[]; for(let c=1;c<=colCount;c++){ const col=ws.getColumn(c); widths.push(Math.round((col.width||9)*7.2)); }
   // ترتيب الأعمدة يسار→يمين (العمود A على الشمال): الكشف مبني بحيث "اليوم" في آخر عمود (M) والتوقيع في أول عمود (A)،
   // وعناوين البيانات (إسم العامل/المهنة) على يمين قيمها — فبالترتيب ده الصفحة بتتقرأ عربي طبيعي من اليمين للشمال،
@@ -3349,6 +3359,8 @@ function renderSheetHtml(ws, workbook){
   return html+'</table>';
 }
 function colLetterToNum(l){ let n=0; for(const ch of l) n=n*26+(ch.charCodeAt(0)-64); return n; }
+// توقيع مدير المشروع اللي السيرفر هيختمه في بلوكه لما هو اللي يبعت — للمعاينة قبل الإرسال بس (renderSheetHtml)
+function selfPmPreviewSig(){ return isProjectManager() && engineerSignature ? engineerSignature : null; }
 
 // ── إرسال الكشف للاعتماد (بديل: تنزيل + Google Form) ──
 // نفس الفلاتر والتحقق بتوع التنزيل المعتمد، لكن بدل ما ينزّل على الموبايل: مراجعة جوه التطبيق → موافقة → رفع للسيرفر
@@ -3428,7 +3440,7 @@ function openSubmitReview(b, exp){
             <button type="button" class="xl-tool" onclick="toggleSheetFull()" aria-label="ملء الشاشة">⛶</button>
           </span>
         </div>
-        <div class="xl-wrap"><div id="xl-zoom">${b.workbook.worksheets.map((ws,i)=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, b.workbook)).join('')}</div></div>
+        <div class="xl-wrap"><div id="xl-zoom">${b.workbook.worksheets.map((ws,i)=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, b.workbook, selfPmPreviewSig())).join('')}</div></div>
         <details class="mt8"><summary class="hint" style="cursor:pointer">تفاصيل الأيام (ملخص)</summary>
         <div class="list-scroll" style="max-height:220px">
           ${days.map(d=>{ const rs=byDay[d]; const t=rs.reduce((a,r)=>a+(Number(r.total)||0),0);
@@ -3887,7 +3899,7 @@ function openEquipmentReview(b, exp, canSend){
             <button type="button" class="xl-tool" onclick="toggleSheetFull()" aria-label="ملء الشاشة">⛶</button>
           </span>
         </div>
-        <div class="xl-wrap"><div id="xl-zoom">${b.workbook.worksheets.map(ws=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, b.workbook)).join('')}</div></div>
+        <div class="xl-wrap"><div id="xl-zoom">${b.workbook.worksheets.map(ws=>'<div class="xl-sheet-title">'+esc(ws.name)+'</div>'+renderSheetHtml(ws, b.workbook, selfPmPreviewSig())).join('')}</div></div>
         ${canSend?`<div class="subhead">ملاحظة للمعتمد (اختياري)</div>
         <input type="text" id="submit-note" placeholder="مثال: المعدة وقفت يومين عطل" maxlength="500">
         <p class="hint" style="margin-top:8px">بالضغط على "موافق — إرسال" الكشف هيدخل سلسلة اعتمادات المديرين زي السركي الأسبوعي، وبعد اكتمالها يوصل جوجل شيت موقّعًا.</p>`:''}
