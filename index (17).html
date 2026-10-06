@@ -703,6 +703,8 @@
     </div>
     <div class="field" id="f-deduct-field">
       <label>بالخصم على</label>
+      <input type="search" class="select-search" id="f-deduct-search" placeholder="🔍 ابحث بإسم المقاول..." oninput="filterSelectOptions('f-deduct-search','f-deduct-on-select')">
+      <div class="select-search-empty" id="f-deduct-search-empty">لا يوجد مقاول بهذا الاسم</div>
       <select id="f-deduct-on-select" onchange="addDeductChip()">
         <option value="">-- اختر مقاول --</option>
       </select>
