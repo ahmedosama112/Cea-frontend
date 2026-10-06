@@ -87,6 +87,16 @@ function ensureExcelJS(){
   if(!_exceljsLoadPromise) _exceljsLoadPromise=_loadLib('lib/exceljs.min.js','https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js','ExcelJS').catch(e=>{ _exceljsLoadPromise=null; throw e; });
   return _exceljsLoadPromise;
 }
+// (أكتوبر 2026) مكتبات تحميل الكشف PDF من تاب الاعتمادات (aprDownloadPdf) — بتتحمّل أول ما حد يطلب PDF بس
+let _pdfLibsLoadPromise=null;
+function ensurePdfLibs(){
+  if(window.html2canvas && window.jspdf) return Promise.resolve();
+  if(!_pdfLibsLoadPromise) _pdfLibsLoadPromise=Promise.all([
+    window.html2canvas ? null : _loadLib('lib/html2canvas.min.js','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','html2canvas'),
+    window.jspdf ? null : _loadLib('lib/jspdf.umd.min.js','https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js','jspdf'),
+  ]).catch(e=>{ _pdfLibsLoadPromise=null; throw e; });
+  return _pdfLibsLoadPromise;
+}
 
 // (تنظيف أمني) القوائم الافتراضية بأسماء حقيقية اتشالت — كانت غير مستخدمة ومكشوفة في JS العام؛
 // المقاولون والأماكن بيتزرعوا لكل حساب من لوحة الأدمن
@@ -4485,12 +4495,16 @@ function aprBuildTable(){
   const box=document.getElementById('apr-table'); if(!box) return;
   const active=_aprRows.filter(r=>r.reviewState==='IN_REVIEW');
   if(!_aprRows.length){ box.innerHTML='<div class="home-empty">لا توجد كشوف في المراجعة</div>'; return; }
+  // (أكتوبر 2026) فلتر باسم المهندس (الاسم بالعربي / الإيميل / المسمى) — عرض بس، _aprRows نفسها مابتتغيّرش
+  const q=normSearch(document.getElementById('apr-search')?.value||'');
+  const rows=q ? _aprRows.filter(r=>[personName(r.user), r.user?.displayName, r.user?.email, r.user?.title].some(v=>v && normSearch(v).includes(q))) : _aprRows;
+  if(!rows.length){ box.innerHTML='<div class="home-empty">🔍 لا توجد كشوف لمهندس بالاسم ده</div>'; return; }
   const heads=['التاريخ والوقت','المهندس','الملف',..._aprLevels,'النسخة','الإجراء / الحالة'];
   const cols=heads.length;
   let html='<table class="apr-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
   // الطابور بيوصل الأحدث فوق (createdAt desc) — بنحط فاصل ملوّن كل ما ننزل لأسبوع أقدم
   let _prevWk=null;
-  html+=_aprRows.map(r=>{
+  html+=rows.map(r=>{
     const when=new Date(r.createdAt);
     const wk=aprWeekKey(when);
     const sep=(_prevWk!==null && wk!==_prevWk) ? '<tr class="apr-week-sep"><td colspan="'+cols+'">'+esc(aprWeekLabel(when))+'</td></tr>' : '';
@@ -4499,7 +4513,7 @@ function aprBuildTable(){
     return sep+'<tr'+mine+'>'
       +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+(r.projectName?'<small>🏗 '+esc(r.projectName)+'</small>':'')+'</td>'
-      +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview('+jsArg(String(r.id))+')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="downloadSubmission('+jsArg(String(r.id))+','+jsArg(r.file?.fileName||'sheet.xlsx')+','+jsArg('/api/approvals')+')">⬇ تحميل</button>')+'</td>'
+      +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview('+jsArg(String(r.id))+')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="event.stopPropagation();aprDownloadMenu(this,'+jsArg(String(r.id))+')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
       +'<td><span class="apr-rev">rev '+String(r.revision).padStart(2,'0')+'</span>'+(((r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+(r.rowRejections||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+(((r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length)?'<br><span class="apr-pill apr-wait" title="سطور معدّلة">✏️ '+(r.rowEdits||[]).filter(x=>Number(x.revision)===Number(r.revision||0)).length+'</span>':'')+'</td>'
       +'<td>'+aprStatusCell(r)+'</td>'
@@ -4530,6 +4544,55 @@ async function aprReview(id){
     if(!ws) throw new Error('الملف فاضي');
     aprOpenPreview('👁 '+(_aprViewer?'مشاهدة':'مراجعة')+' كشف '+name, wb, r);
   }catch(e){ showToast('⚠ '+(e.message||'تعذر فتح الملف'), true); }
+}
+// (أكتوبر 2026) زرار "⬇ تحميل" بيفتح قايمة: Excel (الملف زي ما هو) أو PDF (نفس شكل المعاينة بالتوقيعات)
+function aprDownloadMenu(btn, id){
+  document.querySelectorAll('.apr-dl-menu').forEach(m=>m.remove());
+  const r=_aprRows.find(x=>String(x.id)===String(id));
+  const menu=document.createElement('div'); menu.className='apr-react-menu apr-dl-menu';
+  const add=(label, fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.onclick=e=>{ e.stopPropagation(); menu.remove(); fn(); }; menu.appendChild(b); };
+  add('📊 Excel', ()=>downloadSubmission(id, r?.file?.fileName||'sheet.xlsx', '/api/approvals'));
+  add('📄 PDF', ()=>aprDownloadPdf(id));
+  document.body.appendChild(menu);
+  const b=btn.getBoundingClientRect();
+  menu.style.top=(window.scrollY+b.bottom+4)+'px';
+  menu.style.left=(window.scrollX+b.left)+'px';
+  setTimeout(()=>{ document.addEventListener('click', function h(e){ if(!menu.contains(e.target)){ menu.remove(); document.removeEventListener('click', h); } }); }, 0);
+}
+// الكشف PDF: نفس ملف المعاينة من السيرفر (موقّع + السطور المشطوبة) → جدول HTML (renderSheetHtml) → صورة (html2canvas)
+// → صفحة A4 عرضية لكل ورقة (jsPDF). الكشف بيتحط كصورة عشان العربي يطلع زي المعاينة بالظبط.
+async function aprDownloadPdf(id){
+  const r=_aprRows.find(x=>String(x.id)===String(id));
+  showToast('⏳ جاري تجهيز الـ PDF...');
+  const host=document.createElement('div');
+  try{
+    await Promise.all([ensureExcelJS(), ensurePdfLibs()]);
+    const res=await fetch(API_URL+'/api/approvals/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    if(!res.ok) throw new Error('تعذر تحميل الملف');
+    const wb=new ExcelJS.Workbook();
+    await wb.xlsx.load(await res.arrayBuffer());
+    if(!wb.worksheets.length) throw new Error('الملف فاضي');
+    host.style.cssText='position:fixed;left:-10000px;top:0;background:#fff;padding:10px';
+    document.body.appendChild(host);
+    const cur=Number(r?.revision||0);
+    const pdf=new window.jspdf.jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), m=8;
+    for(let i=0;i<wb.worksheets.length;i++){
+      host.innerHTML=renderSheetHtml(wb.worksheets[i], wb);
+      // نفس تمييز المعاينة: السطور المشطوبة/المعدّلة في النسخة الحالية
+      const t=host.querySelector('table');
+      (r?.rowRejections||[]).filter(x=>Number(x.revision)===cur && Number(x.sheetIndex)===i).forEach(x=>{ const tr=t && t.rows[Number(x.row)-1]; if(tr) tr.classList.add('xl-struck'); });
+      (r?.rowEdits||[]).filter(x=>Number(x.revision)===cur && Number(x.sheetIndex)===i).forEach(x=>{ const tr=t && t.rows[Number(x.row)-1]; if(tr) tr.classList.add('xl-edited'); });
+      const canvas=await html2canvas(host,{scale:2, backgroundColor:'#ffffff', logging:false});
+      const k=Math.min((pw-2*m)/canvas.width, (ph-2*m)/canvas.height);
+      const w=canvas.width*k, h=canvas.height*k;
+      if(i) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', (pw-w)/2, m, w, h);
+    }
+    pdf.save(String(r?.file?.fileName||'sheet.xlsx').replace(/\.xlsx$/i,'')+'.pdf');
+    showToast('📄 اتنزل الـ PDF ('+wb.worksheets.length+' صفحة)');
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر تجهيز الـ PDF'), true); }
+  finally{ host.remove(); }
 }
 // نفس شكل معاينة المهندس (openSubmitReview) بالظبط — كارت معلومات + زوم + الكشف المنسّق + أزرار القرار
 function aprOpenPreview(title, wb, r){
