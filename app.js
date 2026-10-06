@@ -4164,16 +4164,35 @@ async function renderApprovals(){
     aprRenderStats(st);
   }catch(e){ /* الشريط اختياري — سكوت */ }
 }
+// (أكتوبر 2026) شرايح الإحصاءات بقت فلاتر: الضغط على شريحة بيعرض الكشوف اللي بتعدّها بس، و"✕ عرض الكل" بيلغي.
+// نفس تعريفات /api/approvals/stats في السيرفر، بس على صفوف الطابور المعروضة (المخفية واللي برّه فترة "عرض الأقدم" مش فيها).
+// "النهارده" بتوقيت القاهرة زي السيرفر.
+const aprCairoDay=d=>new Date(d).toLocaleDateString('en-CA',{timeZone:'Africa/Cairo'});
+const aprDecidedToday=(r, decisions)=>{ const today=aprCairoDay(Date.now()); return (r.reviews||[]).some(x=>decisions.includes(x.decision) && aprCairoDay(x.createdAt)===today); };
+const APR_STAT_FILTERS={
+  pending:       r=>r.reviewState==='IN_REVIEW',
+  myTurn:        r=>r.reviewState==='IN_REVIEW' && String(r.currentApproverId??'')===_aprMyId,
+  approvedToday: r=>aprDecidedToday(r, ['APPROVED','APPROVED_NOTES']),
+  returnedToday: r=>aprDecidedToday(r, ['REJECTED']),
+  staleOver24h:  r=>r.reviewState==='IN_REVIEW' && (Date.now()-new Date(r.updatedAt).getTime())>24*60*60*1000,
+};
+let _aprStatFilter=null, _aprLastStats=null;
+function aprSetStatFilter(key){
+  _aprStatFilter = (key && key!==_aprStatFilter) ? key : null; // الضغط على الشريحة المفعّلة تاني = إلغاء
+  if(_aprLastStats) aprRenderStats(_aprLastStats);
+  aprBuildTable();
+}
 function aprRenderStats(st){
   const el=document.getElementById('apr-stats'); if(!el) return;
+  _aprLastStats=st;
   const isApprover=_aprLevels.indexOf(_aprMyLevel)>=0;
-  const chips=[
-    '<span class="apr-chip">⏳ في المراجعة <b>'+esc(String(st.pending))+'</b></span>',
-  ];
-  if(isApprover && (st.myTurn>0)) chips.push('<span class="apr-chip apr-chip-mine">🎯 دورك <b>'+esc(String(st.myTurn))+'</b></span>');
-  chips.push('<span class="apr-chip">✅ تم الاعتماد النهارده <b>'+esc(String(st.approvedToday))+'</b></span>');
-  chips.push('<span class="apr-chip">↩️ رجع النهارده <b>'+esc(String(st.returnedToday))+'</b></span>');
-  if(st.staleOver24h>0) chips.push('<span class="apr-chip apr-chip-warn">🐢 مستني من أكتر من يوم <b>'+esc(String(st.staleOver24h))+'</b></span>');
+  const chip=(key, cls, label, n)=>'<button type="button" class="apr-chip'+(cls?' '+cls:'')+(_aprStatFilter===key?' apr-chip-on':'')+'" onclick="aprSetStatFilter(\''+key+'\')" title="اضغط لعرض الكشوف دي بس">'+label+' <b>'+esc(String(n))+'</b></button>';
+  const chips=[ chip('pending', '', '⏳ في المراجعة', st.pending) ];
+  if(isApprover && (st.myTurn>0 || _aprStatFilter==='myTurn')) chips.push(chip('myTurn', 'apr-chip-mine', '🎯 دورك', st.myTurn));
+  chips.push(chip('approvedToday', '', '✅ تم الاعتماد النهارده', st.approvedToday));
+  chips.push(chip('returnedToday', '', '↩️ رجع النهارده', st.returnedToday));
+  if(st.staleOver24h>0 || _aprStatFilter==='staleOver24h') chips.push(chip('staleOver24h', 'apr-chip-warn', '🐢 مستني من أكتر من يوم', st.staleOver24h));
+  if(_aprStatFilter) chips.push('<button type="button" class="apr-chip apr-chip-clear" onclick="aprSetStatFilter(null)">✕ عرض الكل</button>');
   el.innerHTML=chips.join('');
 }
 // (8 سبتمبر 2026) المشاهد لازم يبان قدامه إن التاب للمتابعة بس — بنزوّد "(مشاهدة فقط)" على عنوان التاب
@@ -4497,8 +4516,10 @@ function aprBuildTable(){
   if(!_aprRows.length){ box.innerHTML='<div class="home-empty">لا توجد كشوف في المراجعة</div>'; return; }
   // (أكتوبر 2026) فلتر باسم المهندس (الاسم بالعربي / الإيميل / المسمى) — عرض بس، _aprRows نفسها مابتتغيّرش
   const q=normSearch(document.getElementById('apr-search')?.value||'');
-  const rows=q ? _aprRows.filter(r=>[personName(r.user), r.user?.displayName, r.user?.email, r.user?.title].some(v=>v && normSearch(v).includes(q))) : _aprRows;
-  if(!rows.length){ box.innerHTML='<div class="home-empty">🔍 لا توجد كشوف لمهندس بالاسم ده</div>'; return; }
+  let rows=q ? _aprRows.filter(r=>[personName(r.user), r.user?.displayName, r.user?.email, r.user?.title].some(v=>v && normSearch(v).includes(q))) : _aprRows;
+  // فلتر شريحة الإحصاءات (في المراجعة / دورك / تم الاعتماد النهارده / ...) — بيتجمع مع البحث بالاسم
+  if(_aprStatFilter && APR_STAT_FILTERS[_aprStatFilter]) rows=rows.filter(APR_STAT_FILTERS[_aprStatFilter]);
+  if(!rows.length){ box.innerHTML='<div class="home-empty">🔍 '+(_aprStatFilter?'لا توجد كشوف بالفلتر ده'+(q?' والاسم ده':'')+' — اضغط "✕ عرض الكل"':'لا توجد كشوف لمهندس بالاسم ده')+'</div>'; return; }
   const heads=['التاريخ والوقت','المهندس','الملف',..._aprLevels,'النسخة','الإجراء / الحالة'];
   const cols=heads.length;
   let html='<table class="apr-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
