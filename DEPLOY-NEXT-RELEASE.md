@@ -136,6 +136,10 @@ sleep 90; until curl -sf --max-time 10 https://cea-backend-production-5cbe.up.ra
 
 ### 3) الواجهة على Cloudflare Pages
 
+> **(أكتوبر 2026) الواجهة بقت بتتنشر من GitHub Actions** (`.github/workflows/deploy-pages.yml`): لوحدها مع أي دمج في `main`
+> بيغيّر ملفات الواجهة، أو يدوي من تاب Actions ← "Deploy to Cloudflare Pages" ← Run workflow. محتاج سرّين في الريبو:
+> `CLOUDFLARE_API_TOKEN` (صلاحية Pages: Edit) و`CLOUDFLARE_ACCOUNT_ID`. الأمر اليدوي تحت لسه شغال كبديل من الجهاز.
+
 ```bash
 cd "/e/fabel max cea project" && node build-pwa.js && npx wrangler pages deploy pwa-dist --project-name cea-app --commit-dirty=true
 ```

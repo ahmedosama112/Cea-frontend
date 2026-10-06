@@ -1,0 +1,82 @@
+# نشر الواجهة على Cloudflare Pages (مشروع cea-app) — بديل الأمر اليدوي من الجهاز:
+#   node build-pwa.js && npx wrangler pages deploy pwa-dist --project-name cea-app
+# بيشتغل لوحده مع أي دمج في main بيغيّر ملفات الواجهة، أو يدوي من تاب Actions (Run workflow).
+# محتاج سرّين في Settings → Secrets and variables → Actions:
+#   CLOUDFLARE_API_TOKEN   — توكن API بصلاحية "Cloudflare Pages: Edit"
+#   CLOUDFLARE_ACCOUNT_ID  — رقم حساب Cloudflare
+# ⚠ الواجهة لازم تتنشر بعد الباك اند لو التعديل معتمد على مسار/قيمة جديدة في السيرفر (Railway بينشر لوحده من main في ريبو cea-backend).
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    # ملفات النسخة المنشورة بس — تعديل المستندات مايعملش نشر (وكل نشر بيغيّر إصدار كاش الـ sw.js عند المستخدمين)
+    paths:
+      - 'index (17).html'
+      - 'app.js'
+      - 'style.css'
+      - 'sw.js'
+      - 'manifest.webmanifest'
+      - 'icons/**'
+      - 'lib/**'
+      - 'build-pwa.js'
+  workflow_dispatch:
+
+# نشرتين ورا بعض مايتداخلوش — التاني بيستنى الأول يخلص
+concurrency:
+  group: cloudflare-pages-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT: cea-app
+      SITE: https://cea-app.pages.dev
+    steps:
+      - name: Check secrets
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::ناقص سر CLOUDFLARE_API_TOKEN أو CLOUDFLARE_ACCOUNT_ID في Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build (build-pwa.js)
+        run: node build-pwa.js
+
+      # الفرع اللي Cloudflare بيعتبره production للمشروع — النشر عليه بالذات عشان مايطلعش preview بالغلط
+      - name: Production branch
+        id: prod
+        run: |
+          branch=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PROJECT" | jq -r '.result.production_branch // empty')
+          if [ -z "$branch" ]; then echo "::error::تعذر قراءة مشروع $PROJECT من Cloudflare — راجع التوكن (Pages: Edit) ورقم الحساب"; exit 1; fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "production branch: $branch"
+
+      - name: Deploy (wrangler pages deploy)
+        run: npx --yes wrangler@4 pages deploy pwa-dist --project-name "$PROJECT" --branch "${{ steps.prod.outputs.branch }}" --commit-hash "$GITHUB_SHA" --commit-dirty=true
+
+      # تحقق إن النسخة الجديدة هي اللي بتتقدّم فعلًا (مش رد HTTP وخلاص): app.js على الموقع = اللي اتبنى
+      - name: Verify live site
+        run: |
+          want=$(sha256sum pwa-dist/app.js | cut -d' ' -f1)
+          for i in $(seq 1 20); do
+            got=$(curl -fsS "$SITE/app.js?v=$GITHUB_SHA" | sha256sum | cut -d' ' -f1 || true)
+            if [ "$got" = "$want" ]; then echo "✅ $SITE بيقدّم النسخة الجديدة"; exit 0; fi
+            sleep 6
+          done
+          echo "::error::$SITE لسه بيقدّم app.js مختلف عن اللي اتبنى بعد دقيقتين"
+          exit 1
