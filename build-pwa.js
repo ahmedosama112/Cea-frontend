@@ -25,10 +25,10 @@ const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
 const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').replace(/const CACHE_VERSION = '[^']*'/, `const CACHE_VERSION = 'cea-${stamp}'`);
 fs.writeFileSync(path.join(OUT, 'sw.js'), sw);
 
-// ملفات المكتبات (Excel) — لو موجودة في lib/ تُنسخ، وإلا التصدير هيحمّلها من CDN عند الحاجة (شوف app.js)
+// ملفات المكتبات (Excel + PDF) — لو موجودة في lib/ تُنسخ، وإلا التصدير هيحمّلها من CDN عند الحاجة (شوف app.js)
 if (fs.existsSync(path.join(ROOT, 'lib'))) {
   fs.mkdirSync(path.join(OUT, 'lib'), { recursive: true });
-  for (const f of ['xlsx.full.min.js', 'exceljs.min.js']) {
+  for (const f of ['xlsx.full.min.js', 'exceljs.min.js', 'html2canvas.min.js', 'jspdf.umd.min.js']) {
     if (fs.existsSync(path.join(ROOT, 'lib', f))) copy(path.join('lib', f));
   }
 }

@@ -847,6 +847,7 @@
     <div class="card-title between"><span class="t">📋 اعتمادات المديرين</span><button class="link-btn" onclick="aprHardRefresh()" title="يعيد تحميل التطبيق كله (أحدث نسخة + أحدث بيانات)">🔄 تحديث</button></div>
     <div id="apr-myrole" class="hint" style="margin-top:0"></div>
     <div id="apr-stats" class="apr-stats"></div>
+    <input type="search" class="select-search" id="apr-search" placeholder="🔍 ابحث باسم المهندس..." oninput="aprBuildTable()">
     <!-- تكبير/تصغير الجدول: زوم حر 25%→300% — بالأزرار أو بإصبعين أو Ctrl+عجلة الماوس، والسحب في كل الاتجاهات -->
     <div class="apr-zoom-bar">
       <span class="hint" style="margin:0;flex:1;min-width:140px">حجم الجدول — قرّب بإصبعين (أو Ctrl+عجلة الماوس) واسحب في أي اتجاه</span>
