@@ -829,6 +829,12 @@ body.dark-mode .xl-wrap { background:#fff; }
 .apr-pill { display:inline-block; font-size:10.5px; font-weight:800; padding:3px 8px; border-radius:999px; white-space:nowrap; }
 .apr-ok { background:var(--ok-bg); color:var(--ok-fg); } .apr-wait { background:var(--warn-bg); color:var(--warn-fg); }
 .apr-lock { background:var(--input); color:var(--muted); } .apr-rej { background:var(--danger-bg); color:var(--danger-fg); } .apr-notes { background:var(--info-bg); color:var(--info-fg); }
+/* (أكتوبر 2026) نسخة قديمة اتبدّلت بإعادة إرسال: سطر باهت مشطوب مكانها، والجديدة سطر فوق بتاريخ إرسالها */
+.apr-table tr.apr-superseded td { opacity:.5; background:var(--input); }
+.apr-table tr.apr-superseded td:last-child { opacity:.8; }
+.apr-table tr.apr-superseded s { text-decoration-thickness:1.5px; }
+.apr-resent-pill { background:var(--info-bg); color:var(--info-fg); }
+.apr-resent { display:block; font-size:10px; font-weight:800; color:var(--info-fg); margin-top:2px; }
 .apr-rev { font-family:monospace; font-weight:800; background:var(--input); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:11px; }
 .apr-hide { margin-inline-start:6px; opacity:.75; }
 .apr-hide:hover { opacity:1; }

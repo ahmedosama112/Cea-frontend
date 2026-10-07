@@ -4502,16 +4502,24 @@ function aprBuildTable(){
   const heads=['التاريخ والوقت','المهندس','الملف',..._aprLevels,'النسخة','الإجراء / الحالة'];
   const cols=heads.length;
   let html='<table class="apr-table"><thead><tr>'+heads.map(h=>'<th>'+esc(h)+'</th>').join('')+'</tr></thead><tbody>';
-  // الطابور بيوصل الأحدث فوق (createdAt desc) — بنحط فاصل ملوّن كل ما ننزل لأسبوع أقدم
+  // (أكتوبر 2026 — قرار صاحب المشروع) الكشف اللي اترفض واتبعت تاني: النسخة القديمة بتفضل سطر باهت مشطوب مكانها
+  // "تم إرسال rev NN"، والنسخة الجديدة سطر لوحدها فوق بتاريخ إرسالها (submittedAt) — بدل ما تاخد مكان القديمة بنفس التاريخ
+  const entries=[];
+  rows.forEach(r=>{
+    entries.push({ r, at:new Date(r.submittedAt||r.createdAt) });
+    (r.revisions||[]).forEach(h=>entries.push({ r:aprOldRev(r, h), at:new Date(h.submittedAt), old:h }));
+  });
+  entries.sort((a,b)=>b.at-a.at);
+  // الأحدث فوق (بتاريخ الإرسال) — بنحط فاصل ملوّن كل ما ننزل لأسبوع أقدم
   let _prevWk=null;
-  html+=rows.map(r=>{
-    const when=new Date(r.createdAt);
+  html+=entries.map(({ r, at:when, old })=>{
     const wk=aprWeekKey(when);
     const sep=(_prevWk!==null && wk!==_prevWk) ? '<tr class="apr-week-sep"><td colspan="'+cols+'">'+esc(aprWeekLabel(when))+'</td></tr>' : '';
     _prevWk=wk;
+    if(old) return sep+aprOldRevRow(r, when);
     const mine=r.canAct?' class="mine"':'';
     return sep+'<tr'+mine+'>'
-      +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</td>'
+      +'<td class="apr-when">'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+(Number(r.revision)>0?'<small class="apr-resent">↻ إعادة إرسال rev '+String(r.revision).padStart(2,'0')+'</small>':'')+'</td>'
       +'<td class="apr-eng">'+esc(personName(r.user))+'<small>'+esc(r.user?.title||'مهندس')+'</small>'+(r.kind==='equipment'?'<small style="color:var(--gold-text)">🚜 كشف معدات</small>':'')+(r.projectName?'<small>🏗 '+esc(r.projectName)+'</small>':'')+'</td>'
       +'<td>'+(_aprViewer && _aprMyLevel!=='viewer' && String(r.user?.id||r.userId||'')!==_aprMyId ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>' : '<button class="apr-fbtn" onclick="aprReview('+jsArg(String(r.id))+')">👁 '+(_aprViewer?'مشاهدة':'مراجعة')+'</button>')+(_aprViewer?'':'<button class="apr-fbtn" onclick="event.stopPropagation();aprDownloadMenu(this,'+jsArg(String(r.id))+')">⬇ تحميل</button>')+'</td>'
       +_aprLevels.map(l=>'<td>'+aprLevelCell(r,l)+'</td>').join('')
@@ -4527,32 +4535,61 @@ function aprBuildTable(){
   if(keepX) sc.scrollLeft=keepX;
   if(keepY) sc.scrollTop=keepY;
 }
+// نسخة قديمة من الكشف (اتبدّلت بإعادة إرسال) كصف للعرض بس: نفس بيانات الكشف بس برقم نسختها وملفها،
+// فقرارات المستويات والشطب والملاحظات بتتفلتر على النسخة دي (كل الدوال بتفلتر على r.revision أصلًا)
+function aprOldRev(r, h){
+  return Object.assign({}, r, { revision:Number(h.revision), file:h.file||null, reviewState:'RETURNED', canAct:false, canEdit:false, _oldRev:true });
+}
+function aprOldRevRow(v, when){
+  const rv=String(v.revision).padStart(2,'0'), next=String(v.revision+1).padStart(2,'0');
+  const cur=Number(v.revision);
+  const rej=(v.reviews||[]).filter(x=>x.decision==='REJECTED' && Number(x.revision)===cur).pop();
+  const struckN=(v.rowRejections||[]).filter(x=>Number(x.revision)===cur).length;
+  const idArg=jsArg(String(v.id));
+  const fileBtns = !v.file ? '<span class="apr-pill apr-lock" title="ملف النسخة دي مش محفوظ">—</span>'
+    : (_aprViewer && _aprMyLevel!=='viewer' && String(v.user?.id||v.userId||'')!==_aprMyId) ? '<span class="apr-pill apr-lock" title="المشاهد يفتح ملفات كشوفه هو بس">—</span>'
+    : '<button class="apr-fbtn" onclick="aprReview('+idArg+','+cur+')">👁 مشاهدة</button>'+(_aprViewer?'':'<button class="apr-fbtn" onclick="event.stopPropagation();aprDownloadMenu(this,'+idArg+','+cur+')">⬇ تحميل</button>');
+  return '<tr class="apr-superseded">'
+    +'<td class="apr-when"><s>'+when.toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit',year:'numeric'})+'<br>'+when.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})+'</s></td>'
+    +'<td class="apr-eng"><s>'+esc(personName(v.user))+'</s><small>'+esc(v.user?.title||'مهندس')+'</small>'+(v.projectName?'<small>🏗 '+esc(v.projectName)+'</small>':'')+'</td>'
+    +'<td>'+fileBtns+'</td>'
+    +_aprLevels.map(l=>'<td>'+aprLevelCell(v,l)+'</td>').join('')
+    +'<td><span class="apr-rev"><s>rev '+rv+'</s></span>'+(struckN?'<br><span class="apr-pill apr-rej" title="سطور مشطوبة">✕ '+struckN+'</span>':'')+'</td>'
+    +'<td><span class="apr-pill apr-resent-pill">↻ تم إرسال rev '+next+'</span><br><span class="apr-pill apr-rej">❌ اترفض'+(rej?' من '+esc(rej.level):'')+'</span>'+aprNotesBlock(v)+'</td>'
+    +'</tr>';
+}
 // مراجعة = معاينة الملف جوه التطبيق (جدول) من غير تحميل — نفس محرك معاينة الكشوف
-async function aprReview(id){
-  const r=_aprRows.find(x=>String(x.id)===String(id));
+// rev = نسخة قديمة اتبدّلت بإعادة إرسال (من الصف الباهت) — للاطلاع بس
+async function aprReview(id, rev){
+  const base=_aprRows.find(x=>String(x.id)===String(id));
+  const h=(rev!=null && base) ? (base.revisions||[]).find(x=>Number(x.revision)===Number(rev)) : null;
+  const r=h ? aprOldRev(base, h) : base;
   const name=personName(r?.user)||'الكشف';
   showToast('⏳ جاري فتح الملف للمراجعة...');
   try{
     await ensureExcelJS();
     // مسار الاعتمادات (مش /submissions): المعتمد مش صاحب الملف وغالبًا مالوش وحدة التسليمات
-    const res=await fetch(API_URL+'/api/approvals/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    const res=await fetch(API_URL+'/api/approvals/'+id+'/file'+(h?'?rev='+Number(rev):''),{headers:{'Authorization':'Bearer '+getAccessToken()}});
     if(!res.ok) throw new Error('تعذر فتح الملف');
     const buf=await res.arrayBuffer();
     const wb=new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
     const ws=wb.worksheets[0];
     if(!ws) throw new Error('الملف فاضي');
-    aprOpenPreview('👁 '+(_aprViewer?'مشاهدة':'مراجعة')+' كشف '+name, wb, r);
+    aprOpenPreview(h ? '👁 مشاهدة rev '+String(rev).padStart(2,'0')+' (نسخة قديمة) — كشف '+name : '👁 '+(_aprViewer?'مشاهدة':'مراجعة')+' كشف '+name, wb, r);
   }catch(e){ showToast('⚠ '+(e.message||'تعذر فتح الملف'), true); }
 }
 // (أكتوبر 2026) زرار "⬇ تحميل" بيفتح قايمة: Excel (الملف زي ما هو) أو PDF (نفس شكل المعاينة بالتوقيعات)
-function aprDownloadMenu(btn, id){
+function aprDownloadMenu(btn, id, rev){
   document.querySelectorAll('.apr-dl-menu').forEach(m=>m.remove());
-  const r=_aprRows.find(x=>String(x.id)===String(id));
+  const base=_aprRows.find(x=>String(x.id)===String(id));
+  const h=(rev!=null && base) ? (base.revisions||[]).find(x=>Number(x.revision)===Number(rev)) : null;
+  const r=h ? aprOldRev(base, h) : base;
+  const q=h ? '?rev='+Number(rev) : '';
   const menu=document.createElement('div'); menu.className='apr-react-menu apr-dl-menu';
   const add=(label, fn)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=label; b.onclick=e=>{ e.stopPropagation(); menu.remove(); fn(); }; menu.appendChild(b); };
-  add('📊 Excel', ()=>downloadSubmission(id, r?.file?.fileName||'sheet.xlsx', '/api/approvals'));
-  add('📄 PDF', ()=>aprDownloadPdf(id));
+  add('📊 Excel', ()=>downloadSubmission(id, r?.file?.fileName||'sheet.xlsx', '/api/approvals', q));
+  add('📄 PDF', ()=>aprDownloadPdf(id, h?rev:undefined));
   document.body.appendChild(menu);
   const b=btn.getBoundingClientRect();
   menu.style.top=(window.scrollY+b.bottom+4)+'px';
@@ -4561,13 +4598,15 @@ function aprDownloadMenu(btn, id){
 }
 // الكشف PDF: نفس ملف المعاينة من السيرفر (موقّع + السطور المشطوبة) → جدول HTML (renderSheetHtml) → صورة (html2canvas)
 // → صفحة A4 عرضية لكل ورقة (jsPDF). الكشف بيتحط كصورة عشان العربي يطلع زي المعاينة بالظبط.
-async function aprDownloadPdf(id){
-  const r=_aprRows.find(x=>String(x.id)===String(id));
+async function aprDownloadPdf(id, rev){
+  const base=_aprRows.find(x=>String(x.id)===String(id));
+  const h=(rev!=null && base) ? (base.revisions||[]).find(x=>Number(x.revision)===Number(rev)) : null;
+  const r=h ? aprOldRev(base, h) : base;
   showToast('⏳ جاري تجهيز الـ PDF...');
   const host=document.createElement('div');
   try{
     await Promise.all([ensureExcelJS(), ensurePdfLibs()]);
-    const res=await fetch(API_URL+'/api/approvals/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    const res=await fetch(API_URL+'/api/approvals/'+id+'/file'+(h?'?rev='+Number(rev):''),{headers:{'Authorization':'Bearer '+getAccessToken()}});
     if(!res.ok) throw new Error('تعذر تحميل الملف');
     const wb=new ExcelJS.Workbook();
     await wb.xlsx.load(await res.arrayBuffer());
@@ -5642,9 +5681,9 @@ function cheerShow(pill){
   }catch(e){}
 }
 // base: '/api/submissions' (صاحب الملف/الأدمن) أو '/api/approvals' (المعتمدين من تاب الاعتمادات)
-async function downloadSubmission(id, name, base='/api/submissions'){
+async function downloadSubmission(id, name, base='/api/submissions', query=''){
   try{
-    const res=await fetch(API_URL+base+'/'+id+'/file',{headers:{'Authorization':'Bearer '+getAccessToken()}});
+    const res=await fetch(API_URL+base+'/'+id+'/file'+query,{headers:{'Authorization':'Bearer '+getAccessToken()}});
     if(!res.ok) throw new Error('تعذر التنزيل');
     const blob=await res.blob(); const url=URL.createObjectURL(blob);
     const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
