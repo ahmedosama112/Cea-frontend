@@ -20,15 +20,9 @@ const CONFIG = {
   FORM_Q_FILE: 'حمل ملف السركي هنا',
   // ⚠ لو ضفت سؤال "المشروع" في الفورم، خلي نصه مطابق للسطر ده حرف بحرف
   FORM_Q_PROJECT: 'المشروع',
+  // (أكتوبر 2026) مفاتيح صور التوقيع (SIG_*_FILE_ID) اتشالت — السكربت مابقاش بينزّل توقيعات خالص
   PROCESSING_FOLDER_ID: '14t459eIi0OVHa2zSbwpD-7FnnQ-uD7Fg',
   DC_FOLDER_ID: '1GrptvPNLk3-6O26m90iRUDPibkEjBGyV',
-  // توقيع مدير التنفيذ — مختلف لكل مشروع (سكني/تجاري)؛ مدير المشروع توقيعه واحد
-  SIG_EXEC_MANAGER_FILE_ID: '1yj9AXVFeLY_GKM_m-sVI1SjUShWbCfEu',            // 🏠 سكني (اتحدّث 14 سبتمبر 2026)
-  SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID: '1vM74f45icYl4ueGAPas9KrBnRO1uT1i5',  // 🏪 تجاري (اتحدّث 14 سبتمبر 2026)
-  // مدير المشروع توقيعه واحد للمشروعين (سكني وتجاري) — مفيش نسخة تجاري ليه.
-  // كان فيه SIG_PROJECT_MANAGER_COMMERCIAL_FILE_ID هنا؛ اتشال 14 سبتمبر 2026 لأنه
-  // مكانش متنادى من أي مكان في الملف وكان بيوهم إن فيه توقيعين.
-  SIG_PROJECT_MANAGER_FILE_ID: '1Rf7xhHPA4TylkInJsGKCzk6LD0vDUfuL',                 // (اتحدّث 14 سبتمبر 2026)
   RAW_UPLOADS_FOLDER_ID: '1hFk4iV5icPkUPQvy4mfZz1lRiKR3HNEz',
   DEFAULT_PROJECT: '🏠 سكني', // المشروع الافتراضي لو مفيش اختيار (صفوف قديمة / فورم بدون السؤال)
 
@@ -58,21 +52,12 @@ function projectForEngineer(engineerName) {
   return hit ? PROJECT.COM : PROJECT.RES;
 }
 
-/* المشروع — بيحدد توقيع مدير التنفيذ */
+/* المشروع (سكني/تجاري) */
 const PROJECT = { RES: '🏠 سكني', COM: '🏪 تجاري' };
 const PROJECT_OPTIONS = ['', PROJECT.RES, PROJECT.COM];
-function execSignatureIdFor(projectValue) {
-  const isCommercial = String(projectValue || '').includes('تجاري');
-  const raw = isCommercial ? CONFIG.SIG_EXEC_MANAGER_COMMERCIAL_FILE_ID : CONFIG.SIG_EXEC_MANAGER_FILE_ID;
-  // لو توقيع التجاري لسه ما اتحطش، نرجع للسكني بدل ما الاعتماد يفشل
-  if (isCommercial && (!raw || raw.indexOf('PUT_') === 0)) {
-    Logger.log('⚠ توقيع المشروع التجاري غير مضبوط في CONFIG — استُخدم توقيع السكني');
-    return getFileIdFromUrl(CONFIG.SIG_EXEC_MANAGER_FILE_ID);
-  }
-  return getFileIdFromUrl(raw);
-}
 
-const SIGNATURE_SIZE = { width: 90, height: 30 };
+// مقاس صور التوقيع اللي السكربت كان بينزّلها (قبل أكتوبر 2026) — بيتستخدم بس لتمييزها ومسحها (removeScriptSignaturesForRow)
+const SCRIPT_SIGNATURE_SIZE = { width: 90, height: 30 };
 const MIN_ROW_HEIGHT = 35;
 const ROW_BAND_HEIGHT = 42; // ارتفاع صفوف شيت المتابعة — أعلى شوية عشان لون الاعتماد يبان كشارة
 
@@ -161,12 +146,12 @@ const STATUS = {
 const SIG_CELL_EXEC = 'A16';
 const SIG_CELL_PM   = 'G16';
 const SIG_CELL_TL   = 'J16'; // كان بلوك "توقيع العامل" — بقى توقيع مدير الفريق (بيوصل مختوم من التطبيق)
-// ⚠ الخانتين EXEC/PM فوق بترتيب الملفات القديمة (A = تنفيذ، G = مشروع) — للصفوف القديمة بس؛ الملفات الجديدة بتوصل موقّعة
+// الخانات دي بتتستخدم بس لتحديد صف التوقيعات (تنسيق + مسح توقيعات السكربت القديمة) — مفيش ختم من هنا
 
 /* =====================================================================
  * 🎨 التصميم — يُطبَّق مرة على الموجود (applyNewDesign) وتلقائيًا على كل صف جديد
  * ===================================================================== */
-function applyNewDesign() {
+function applyNewDesign(quiet) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) { SpreadsheetApp.getUi().alert('مفيش شيت اسمه "' + CONFIG.SHEET_NAME + '"'); return; }
@@ -211,6 +196,7 @@ function applyNewDesign() {
   if (lastRow > HEADER_ROWS) {
     const n = lastRow - HEADER_ROWS;
     const body = sheet.getRange(HEADER_ROWS + 1, 1, n, LAST_COL);
+    body.clearDataValidations(); // أي دروب داون في غير مكانه (مثلًا اتزق مع عمود اتزوّد) — D/F/K بيرجعوا تحت
     body.setFontFamily('Cairo').setFontSize(10).setFontColor(THEME.ink).setVerticalAlignment('middle').setWrap(true)
       .setBorder(true, true, true, true, true, true, THEME.grid, SpreadsheetApp.BorderStyle.SOLID);
     sheet.getRange(HEADER_ROWS + 1, COLS.ENGINEER_NAME, n, 1).setFontWeight('bold').setHorizontalAlignment('center');
@@ -267,6 +253,7 @@ function applyNewDesign() {
     else sheet.hideColumns(LAST_COL + 1, extra);
   }
   // ملاحظة: بدون تجميد أعمدة — دمج مجموعات الترويسة (مثلًا A1:C1) بيتعارض مع أي عمود مجمّد. الصفوف المثبتة كفاية.
+  if (quiet === true) return;
   SpreadsheetApp.getUi().alert('✅ تم تطبيق التصميم الجديد على ' + Math.max(0, lastRow - HEADER_ROWS) + ' صف — بدون مسح أي بيانات.');
 }
 
@@ -418,6 +405,20 @@ function findSubmissionRow(engineerName, fileName, maxAgeMinutes, notBeforeMs) {
   return null;
 }
 
+/* صف "سركي" = فيه اسم مهندس أو تاريخ إرسال. أي حاجة تانية (مسافة، قيمة دروب داون، كلام في عمود تاني)
+   مابتتحسبش — قبل كده الصف الجديد كان getLastRow()+1، فأي خانة فيها حاجة تحت الجدول كانت بتنزّل
+   السراكي الجديدة تحتها وتسيب صفوف فاضية (أكتوبر 2026) */
+function isSarakiRow(name, ts) {
+  return String(name || '').trim() !== '' || (ts !== '' && ts !== null);
+}
+function nextFreeRow(sheet) {
+  const last = sheet.getLastRow();
+  if (last <= HEADER_ROWS) return HEADER_ROWS + 1;
+  const vals = sheet.getRange(HEADER_ROWS + 1, COLS.ENGINEER_NAME, last - HEADER_ROWS, 2).getValues();
+  for (let i = vals.length - 1; i >= 0; i--) if (isSarakiRow(vals[i][0], vals[i][1])) return HEADER_ROWS + 2 + i;
+  return HEADER_ROWS + 1;
+}
+
 /* المنطق المشترك — نفس القديم بالظبط + تنسيق الصف الجديد
    approvalSummary (اختياري): ملخص سلسلة اعتمادات المديرين من التطبيق → خانة G "سلسلة الاعتمادات"
    signed: true = الملف جاي من التطبيق موقّعًا بالكامل (اعتمادات + توقيعات) → PDF فورًا والصف "معتمد بالكامل"
@@ -430,7 +431,12 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
     if (!sheet) return null;
-    const row = sheet.getLastRow() + 1;
+    const row = nextFreeRow(sheet);
+    // (أكتوبر 2026) نشيل أي قاعدة تحقق موروثة على الصف قبل الكتابة — styleNewRow بيرجّع الدروب داون الصح (D/F/K) في الآخر.
+    // حصل فعليًا: عمود اتزوّد في نص الجدول فقاعدة F "المقفولة" (requireValueInList(['']) + منع القيم الغلط) اتزقّت لـ G،
+    // فكتابة سلسلة الاعتماد في G كانت بترمي خطأ والصف يقف في النص: من غير سلسلة، ومن غير علامة 'signed' على D
+    // (فاعتماد الـ DC كان بينزّل توقيعات مكررة)، والسيرفر مابيعرفش رقم الصف.
+    sheet.getRange(row, 1, 1, LAST_COL).clearDataValidations();
 
     sheet.getRange(row, COLS.ENGINEER_NAME).setValue(safeText(engineerName));
     sheet.getRange(row, COLS.TIMESTAMP).setValue(new Date());
@@ -492,8 +498,9 @@ function processNewSubmission(engineerName, fileUrl, project, approvalSummary, s
  *    الصفوف الجاية من التطبيق بتوصل موقّعة بالكامل وحالتها "معتمد بالكامل ✅" فورًا،
  *    والدالة دي بتخرج من غير ما تعمل حاجة على أي صف حالته DONE.
  *    بتشتغل على: الصفوف اللي كانت واقفة "بانتظار DC" قبل التحديث، وأي صف جاي من الفورم
- *    (السيرفر واقع → المهندس بيرفع الملف من الفورم → DC يعتمد من هنا → توقيعات Drive + PDF).
- *    ⚠ عشان كده الدالة دي ومفاتيح التوقيعات في CONFIG لازم يفضلوا — دي خطة الاسترجاع (RECOVERY-PLAN.md).
+ *    (السيرفر واقع → المهندس بيرفع الملف من الفورم → DC يعتمد من هنا → PDF).
+ *    ⚠ الدالة دي لازم تفضل — دي خطة الاسترجاع (RECOVERY-PLAN.md).
+ *    (أكتوبر 2026 — قرار صاحب المشروع) مابقتش بتنزّل أي توقيعات: الختم كان بينزل مكرر فوق توقيعات التطبيق.
  * ===================================================================== */
 function onEditHandler(e) {
   const sheet = e.range.getSheet();
@@ -523,21 +530,10 @@ function onEditHandler(e) {
     }
 
     if (col === COLS.APPROVE_EXEC) {
-      // 🖋 زرار واحد للـ DC (سبتمبر 2026): المراجعة والاعتماد بقوا جوه تطبيق CEA (اعتمادات المديرين)،
-      // والكشف مابيوصلش الشيت إلا بعد اكتمال السلسلة. فاعتماد الخانة دي = "إخراج": بينزّل التوقيعين
-      // (تنفيذ حسب المشروع + مدير المشروع) ويملّي خانة مدير المشروع تلقائيًا بنفس القيمة، والـ PDF بيتولد تحت.
-      // صف خلصان بالفعل (إعادة اختيار القيمة) → ما نكررش التوقيعات ولا الـ PDF
+      // اعتماد D = "إخراج": الـ PDF بيتولد تحت من الشيت المحوّل زي ما هو. التوقيعات كلها بتيجي من التطبيق
+      // (signStamp.ts) — السكربت مابيختمش حاجة (أكتوبر 2026)
+      // صف خلصان بالفعل (إعادة اختيار القيمة) → ما نكررش الـ PDF
       if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) return;
-      // الصف اللي جه من التطبيق موقّع خلاص (علامته note='signed' على خانة D) — تنزيل توقيعات
-      // Drive عليه تاني بيحط صور مكررة. الصفوف القديمة/الفورم بس هي اللي محتاجة الختم هنا.
-      // طبقتين: العلامة (بتضيع لو حد مسح الملاحظة) + فحص الملف نفسه (بيصحّح لو العلامة ضاعت)
-      const alreadySigned = String(sheet.getRange(row, COLS.APPROVE_EXEC).getNote() || '').trim() === 'signed'
-        || hasAnySignature(convertedId);
-      if (!alreadySigned) {
-        const projectValue = sheet.getRange(row, COLS.PROJECT).getValue();
-        insertSignatureOnAllSheets(convertedId, execSignatureIdFor(projectValue), SIG_CELL_EXEC);
-        insertSignatureOnAllSheets(convertedId, getFileIdFromUrl(CONFIG.SIG_PROJECT_MANAGER_FILE_ID), SIG_CELL_PM);
-      }
       // الاعتماد الإداري اتلغى كخطوة — سلسلة الاعتماد في G هي السجل، وD هو قرار الـDC،
       // وF كانت بتتختم بنفس الضغطة اللي بتتحقق منها فبوابة بتفتح دايمًا
       // بنسيب STATUS.PM_APPROVED هنا لحظيًا وبلوك الـ PDF تحت بيدهسها بـ DONE على طول (D بقى البوابة الوحيدة)
@@ -638,55 +634,6 @@ function restoreRowHeightsForImages(ws) {
   });
 }
 
-/* فيه توقيع فعلًا في الملف؟ — بنبص على خانات التوقيع الثلاثة في كل ورقات الشيت المحوّل.
-   السبب: علامة note='signed' لوحدها مش كفاية — هي على خانة الـDC نفسها وأي مسح/لصق بيضيّعها،
-   وساعتها السكربت بيفتكر الصف طوارئ وينزّل توقيعات Drive فوق توقيعات حقيقية. */
-function hasAnySignature(sheetId) {
-  try {
-    const ss = SpreadsheetApp.openById(sheetId);
-    // الخانات دي بلوكات مدموجة — نحل الدمج عشان نقارن بالصف/العمود الحقيقي مش النص
-    const cellRefs = [SIG_CELL_EXEC, SIG_CELL_PM, SIG_CELL_TL];
-    for (const ws of ss.getSheets()) {
-      const resolved = cellRefs.map(a1 => {
-        let range = ws.getRange(a1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
-        return { row: range.getRow(), col: range.getColumn() };
-      });
-      for (const img of ws.getImages()) {
-        const anchor = img.getAnchorCell();
-        const ar = anchor.getRow(), ac = anchor.getColumn();
-        if (resolved.some(t => t.row === ar && t.col === ac)) return true;
-      }
-    }
-    return false;
-  } catch (e) {
-    // ما قدرناش نتأكد → نفترض إن فيه توقيع (الأمان في عدم التختيم، مش في التختيم):
-    // توقيع ناقص بيتصلّح باليد، أما توقيع زيادة فوق ملف مالي فبيبوّظه.
-    // بنسجّل السبب: في مسار الطوارئ الفشل ده معناه PDF طلع بلا توقيعات في صمت — لو ظهر في اللوج
-    // يبقى الصف ده محتاج ختم يدوي أو إعادة توليد PDF بعده.
-    Logger.log('⚠ hasAnySignature فشل للشيت ' + sheetId + ' — اتخطينا الختم احتياطًا: ' + e);
-    return true;
-  }
-}
-
-function insertSignatureOnAllSheets(sheetId, sigFileId, cellA1) {
-  // توقيع مش مضبوط (مفتاح فاضي / PUT_...) أو صورته اتمسحت من Drive → نتخطاه ونكمّل (الـ PDF بيتولّد برضو).
-  // كده ممكن تشيل صور التوقيعات من CONFIG وقت ما تحب والاعتماد ما يتكسرش — وترجّعها بلصق الـ ID تاني.
-  if (!sigFileId || String(sigFileId).indexOf('PUT_') === 0) { Logger.log('⚠ توقيع غير مضبوط — اتخطى: ' + cellA1); return; }
-  let blob;
-  try { blob = DriveApp.getFileById(sigFileId).getBlob(); }
-  catch (e) { Logger.log('⚠ صورة التوقيع مش موجودة في Drive (' + sigFileId + ') — اتخطى: ' + cellA1); return; }
-  const ss = SpreadsheetApp.openById(sheetId);
-  ss.getSheets().forEach(ws => { try { insertSignatureImageCentered(ws, blob, cellA1); } catch (e) {} });
-}
-function insertSignatureImageCentered(ws, blob, cellA1) {
-  let range = ws.getRange(cellA1); const merged = range.getMergedRanges(); if (merged.length) range = merged[0];
-  const c0 = range.getColumn(), r0 = range.getRow();
-  let bw = 0; for (let c = c0; c < c0 + range.getNumColumns(); c++) bw += ws.getColumnWidth(c);
-  let bh = 0; for (let r = r0; r < r0 + range.getNumRows(); r++) bh += ws.getRowHeight(r);
-  const img = ws.insertImage(blob, c0, r0, Math.max(0, Math.round((bw - SIGNATURE_SIZE.width) / 2)), Math.max(0, Math.round((bh - SIGNATURE_SIZE.height) / 2)));
-  img.setWidth(SIGNATURE_SIZE.width).setHeight(SIGNATURE_SIZE.height);
-  return img;
-}
 
 // (25 سبتمبر 2026) اسم الـPDF بياخد "مقاول_عمالة" لو الشيت المحوّل اسمه فيه كده (submissionKindTag وقت التحويل)
 // — نفس التمييز بتاع الشيت المعتمد، من غير ما نحتاج نوع الكشف في المسارات اللي مالهاش kind (DC/القائمة).
@@ -765,6 +712,202 @@ function hideWeeklyData() {
   }
   Logger.log('hideWeeklyData: أُخفي ' + n + ' صف');
 }
+/* 🧰 إعادة تهيئة آمنة لشيت المتابعة (أكتوبر 2026) — بترجّع الشيت لشكله من غير ما رقم أي صف أو عمود يتغيّر،
+   لأن التطبيق مربوط بكل سركي برقم صفه (gsheetRow) وبيقرا الاعتماد والملاحظات بأرقام الأعمدة (COLS).
+   عشان كده مفيش مسح صفوف ولا أعمدة من الجدول — كله إخفاء:
+   1) فحص: الأعمدة في أماكنها؟ (سكني/تجاري في K مش بعده) — لو عمود اتزوّد/اتمسح في النص بتقف من غير ما تغيّر حاجة
+   2) خانات فيها كلام في صفوف مش سراكي (من غير اسم مهندس ولا تاريخ) — بتعرضها وتمسح محتواها بموافقتك.
+      دي اللي بتخلّي السراكي الجديدة تنزل تحت وتسيب صفوف فاضية
+   3) التصميم من تاني (applyNewDesign) + إخفاء F (الاعتماد الإداري — اتلغى كخطوة) والأعمدة بعد K
+   4) إخفاء الصفوف الفاضية اللي في نص الجدول (الفجوة) — إخفاء مش مسح، فأرقام السراكي اللي تحتها ما تتغيرش */
+function resetSheetLayout() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) { ui.alert('مفيش شيت باسم "' + CONFIG.SHEET_NAME + '".'); return; }
+  const lastRow = sheet.getLastRow();
+  const lastCol = Math.max(sheet.getLastColumn(), LAST_COL);
+  const n = Math.max(0, lastRow - HEADER_ROWS);
+  const vals = n ? sheet.getRange(HEADER_ROWS + 1, 1, n, lastCol).getValues() : [];
+  const filled = v => v !== '' && v !== null;
+  const isProject = v => /سكني|تجاري/.test(String(v || ''));
+
+  // 1) ترتيب الأعمدة
+  const shifted = [];
+  vals.forEach((r, i) => {
+    if (!isSarakiRow(r[COLS.ENGINEER_NAME - 1], r[COLS.TIMESTAMP - 1])) return;
+    const k = r[COLS.PROJECT - 1];
+    const projAfterK = r.slice(LAST_COL).some(isProject);   // عمود اتزوّد في النص → المشروع اتزق لـ L
+    const projInJ = isProject(r[COLS.PDF_URL - 1]);          // عمود اتمسح في النص → المشروع اتزق لـ J
+    if ((filled(k) && !isProject(k)) || projAfterK || projInJ) shifted.push(HEADER_ROWS + 1 + i);
+  });
+  if (shifted.length) {
+    ui.alert('⛔ الأعمدة مش في أماكنها',
+      'فيه ' + shifted.length + ' صف قيمة "سكني / تجاري" فيهم مش في عمود K (مثلًا الصفوف: ' + shifted.slice(0, 10).join('، ') + ').\n' +
+      'ده معناه إن عمود اتزوّد أو اتمسح في نص الجدول. ماعملتش أي تغيير — شغّل الأول: ⚙ أدوات السراكي ← 🛠 إصلاح الأعمدة المتزقّة.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  // 2) محتوى في صفوف مش سراكي
+  const strayRows = [];
+  vals.forEach((r, i) => {
+    if (!isSarakiRow(r[COLS.ENGINEER_NAME - 1], r[COLS.TIMESTAMP - 1]) && r.some(filled)) strayRows.push(HEADER_ROWS + 1 + i);
+  });
+  if (strayRows.length) {
+    const ans = ui.alert('🧹 محتوى في صفوف مش سراكي',
+      'فيه ' + strayRows.length + ' صف من غير اسم مهندس ولا تاريخ بس فيهم كلام (الصفوف: ' + strayRows.slice(0, 15).join('، ') + (strayRows.length > 15 ? '…' : '') + ').\n' +
+      'ده اللي بيخلّي السراكي الجديدة تنزل تحت. أمسح محتواهم؟ (المحتوى بس — الصفوف نفسها بتفضل مكانها)',
+      ui.ButtonSet.YES_NO);
+    if (ans === ui.Button.YES) strayRows.forEach(row => sheet.getRange(row, 1, 1, lastCol).clearContent());
+  }
+
+  // 3) التصميم + إخفاء الأعمدة
+  applyNewDesign(true);
+  sheet.hideColumns(COLS.APPROVE_PM);
+
+  // 4) إخفاء الفجوة: الصفوف الفاضية قبل آخر سركي
+  const names = n ? sheet.getRange(HEADER_ROWS + 1, COLS.ENGINEER_NAME, n, 2).getValues() : [];
+  let lastSaraki = -1;
+  names.forEach((r, i) => { if (isSarakiRow(r[0], r[1])) lastSaraki = i; });
+  let hidden = 0, start = -1;
+  for (let i = 0; i <= lastSaraki + 1; i++) {
+    const empty = i <= lastSaraki && !isSarakiRow(names[i][0], names[i][1]);
+    if (empty && start < 0) start = i;
+    if (!empty && start >= 0) { sheet.hideRows(HEADER_ROWS + 1 + start, i - start); hidden += i - start; start = -1; }
+  }
+
+  ui.alert('✅ تمت إعادة التهيئة',
+    'التصميم اتطبق، وعمود F والأعمدة بعد K اتخفوا.\n' +
+    (hidden ? 'اتخفى ' + hidden + ' صف فاضي من نص الجدول (مخفي مش ممسوح).\n' : '') +
+    'السركي الجاي هينزل بعد آخر سركي على طول.',
+    ui.ButtonSet.OK);
+}
+
+/* 🛠 إصلاح الأعمدة المتزقّة (أكتوبر 2026): حد زوّد عمود فاضي في نص الجدول (غالبًا عند F)، فالصفوف اللي كانت
+   موجودة وقتها اتزقّت خطوة يمين (الحالة في I، سكني/تجاري في L)، أما السراكي اللي نزلت بعدها فالسكربت كتبها
+   في أماكنها الصح. الدالة دي بترجّع الصفوف المتزقّة بس خطوة لليسار — من غير مسح أي صف أو عمود،
+   فرقم صف كل سركي (اللي التطبيق مربوط بيه) ما بيتغيرش:
+   - صف متزق = سركي فيه سكني/تجاري بعد K، أو حالة معروفة في I
+   - العمود اللي اتزوّد = أقصى عمود يمين بين D وH فاضي في كل الصفوف المتزقّة (لو فيه كذا عمود فاضي جنب بعض
+     النتيجة واحدة). قبل أي نقل بنجرّب النتيجة على الورق: لازم سكني/تجاري تقع في K وL يفضى — غير كده بنقف
+   - النقل بـ moveTo (زي Cut/Paste): الروابط والـ chips والملاحظات (id الشيت المحوّل على I) بتتنقل معاها
+   - قبل أي تغيير بنعمل نسخة احتياطية من الورقة في نفس الملف */
+function repairShiftedColumns() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEET_NAME);
+  if (!sheet) { ui.alert('مفيش شيت باسم "' + CONFIG.SHEET_NAME + '".'); return; }
+  const lastRow = sheet.getLastRow();
+  const width = LAST_COL + 1; // A..L
+  if (lastRow <= HEADER_ROWS || sheet.getMaxColumns() < width) { ui.alert('مفيش صفوف متزقّة — الجدول مافيهوش عمود L أصلًا.'); return; }
+  const n = lastRow - HEADER_ROWS;
+  const vals = sheet.getRange(HEADER_ROWS + 1, 1, n, width).getValues();
+  const filled = v => v !== '' && v !== null;
+  const isProject = v => /سكني|تجاري/.test(String(v || ''));
+  const statuses = Object.keys(STATUS).map(k => STATUS[k]);
+  const isStatus = v => statuses.indexOf(String(v || '').trim()) >= 0;
+
+  const shifted = [];
+  vals.forEach((r, i) => {
+    if (!isSarakiRow(r[COLS.ENGINEER_NAME - 1], r[COLS.TIMESTAMP - 1])) return;
+    if (isProject(r[LAST_COL]) || isStatus(r[COLS.STATUS])) shifted.push(i);
+  });
+  if (!shifted.length) { ui.alert('✅ مفيش صفوف متزقّة — الأعمدة في أماكنها.'); return; }
+
+  // المرشحين: كل عمود من D لـ H فاضي في كل الصفوف المتزقّة. لكل واحد بنجرّب النقل على الورق ونشوف
+  // النتيجة سليمة ولا لأ (الحالة في H، سكني/تجاري في K، L فاضي، F اعتماد أو فاضي، G مش خانة اعتماد).
+  // لو أكتر من مرشح سليم بيدّوا نفس النتيجة (أعمدة فاضية جنب بعض) مفيش فرق؛ لو نتايج مختلفة → بنقف
+  const approvalVals = [ADMIN_APPROVED].concat(DROPDOWN_OPTIONS.filter(Boolean), Object.keys(LEGACY_APPROVAL));
+  const isApproval = v => approvalVals.indexOf(String(v || '').trim()) >= 0;
+  const statusOk = v => !filled(v) || isStatus(v) || String(v).indexOf('⚠') === 0;
+  const shiftRow = (r, x) => r.slice(0, x - 1).concat(r.slice(x), ['']);
+  const rowOk = a => statusOk(a[COLS.STATUS - 1]) && (!filled(a[COLS.PROJECT - 1]) || isProject(a[COLS.PROJECT - 1]))
+    && !filled(a[LAST_COL]) && (!filled(a[COLS.APPROVE_PM - 1]) || isApproval(a[COLS.APPROVE_PM - 1]))
+    && !isApproval(a[COLS.NOTES_PM - 1]);
+  const results = {};
+  for (let c = COLS.APPROVE_EXEC; c <= COLS.STATUS; c++) {
+    if (!shifted.every(i => !filled(vals[i][c - 1]))) continue;
+    const sim = shifted.map(i => shiftRow(vals[i], c));
+    if (!sim.every(rowOk)) continue;
+    const key = JSON.stringify(sim.map(a => a.map(String)));
+    results[key] = c; // أعمدة فاضية جنب بعض بتدّي نفس النتيجة — بنعرض أقصى واحد يمين فيهم
+  }
+  const options = Object.keys(results).map(k => results[k]);
+  if (options.length !== 1) {
+    ui.alert('⛔ مش قادر أحدد العمود اللي اتزوّد بثقة',
+      (options.length ? 'فيه أكتر من احتمال (' + options.map(c => String.fromCharCode(64 + c)).join('، ') + ').' : 'مفيش عمود من D لـ H لو اتشال الصفوف ترجع سليمة.') +
+      ' ماعملتش أي تغيير — ابعت سكرين شوت لصف منهم.', ui.ButtonSet.OK);
+    return;
+  }
+  const x = options[0];
+
+  const rowsTxt = shifted.slice(0, 10).map(i => HEADER_ROWS + 1 + i).join('، ') + (shifted.length > 10 ? '…' : '');
+  const colLetter = String.fromCharCode(64 + x);
+  const ans = ui.alert('🛠 إصلاح الأعمدة',
+    'العمود اللي اتزوّد: ' + colLetter + '\n' +
+    'هيترجّع ' + shifted.length + ' صف خطوة لليسار (الصفوف: ' + rowsTxt + ').\n' +
+    'باقي الصفوف مش هتتلمس، ومفيش صف ولا عمود هيتمسح. هتتعمل نسخة احتياطية من الورقة الأول. تكمل؟',
+    ui.ButtonSet.YES_NO);
+  if (ans !== ui.Button.YES) return;
+
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HHmm');
+  sheet.copyTo(ss).setName('نسخة قبل إصلاح الأعمدة ' + stamp).hideSheet();
+
+  // بلوكات صفوف متتالية — وجوه كل بلوك عمود عمود من الشمال لليمين، فالهدف دايمًا فاضي (مفيش تداخل)
+  const blocks = [];
+  shifted.forEach(i => {
+    const b = blocks[blocks.length - 1];
+    if (b && b.end === i - 1) b.end = i; else blocks.push({ start: i, end: i });
+  });
+  blocks.forEach(b => {
+    const r0 = HEADER_ROWS + 1 + b.start, len = b.end - b.start + 1;
+    sheet.getRange(r0, x, len, 1).clearContent();
+    for (let c = x; c <= LAST_COL; c++) sheet.getRange(r0, c + 1, len, 1).moveTo(sheet.getRange(r0, c));
+  });
+  SpreadsheetApp.flush();
+
+  ui.alert('✅ اترجّع ' + shifted.length + ' صف لمكانه',
+    'النسخة الاحتياطية في ورقة مخفية اسمها "نسخة قبل إصلاح الأعمدة ' + stamp + '".\n' +
+    'الخطوة الجاية: ⚙ أدوات السراكي ← 🧰 إعادة تهيئة الشيت (آمنة).',
+    ui.ButtonSet.OK);
+}
+
+/* 🧽 مسح توقيعات السكربت من صف (أكتوبر 2026): السكربت كان بينزّل صور توقيع ثابتة من Drive لما الـ DC يعتمد،
+   وساعات كانت بتنزل فوق التوقيعات الحقيقية اللي جاية من التطبيق (مكررة). الختم ده اتشال خالص (قرار صاحب
+   المشروع) — والأمر ده بيمسح اللي نزل قبل كده من الشيت المحوّل للصف المحدد، وبعدين يطلّع PDF جديد.
+   بنميّز صور السكربت بمقاسها الثابت (SCRIPT_SIGNATURE_SIZE) وإنها على صف التوقيعات — توقيعات التطبيق
+   مقاسها محسوب من البلوك فمابتتلمسش. */
+function removeScriptSignaturesForRow() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== CONFIG.SHEET_NAME) { ui.alert('افتح شيت "' + CONFIG.SHEET_NAME + '" وحدد الصف الأول.'); return; }
+  const row = sheet.getActiveRange().getRow();
+  if (row <= HEADER_ROWS) { ui.alert('حدد صف كشف (مش الترويسة).'); return; }
+  const convertedId = sheet.getRange(row, COLS.CONVERTED_SHEET_URL).getNote().trim();
+  if (!convertedId) { ui.alert('مفيش شيت محوّل مرتبط بالصف ' + row + '.'); return; }
+  const found = [];
+  SpreadsheetApp.openById(convertedId).getSheets().forEach(ws => {
+    const sigRows = getSignatureRowNumbers(ws);
+    ws.getImages().forEach(img => {
+      try {
+        if (sigRows.indexOf(img.getAnchorCell().getRow()) < 0) return;
+        if (img.getWidth() === SCRIPT_SIGNATURE_SIZE.width && img.getHeight() === SCRIPT_SIGNATURE_SIZE.height) found.push(img);
+      } catch (e) {}
+    });
+  });
+  if (!found.length) { ui.alert('مفيش توقيعات نازلة من السكربت في الصف ' + row + '.'); return; }
+  const ans = ui.alert('🧽 مسح توقيعات السكربت', 'لقيت ' + found.length + ' توقيع نازل من السكربت في الصف ' + row + '. أمسحهم وأطلّع PDF جديد؟', ui.ButtonSet.YES_NO);
+  if (ans !== ui.Button.YES) return;
+  found.forEach(img => img.remove());
+  SpreadsheetApp.flush();
+  if (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE) {
+    const engineerName = sheet.getRange(row, COLS.ENGINEER_NAME).getValue();
+    const pdfUrl = exportSheetAsPdfToFolder(convertedId, approvedPdfName(engineerName, convertedId), CONFIG.DC_FOLDER_ID);
+    setFileChip(sheet, row, COLS.PDF_URL, pdfUrl);
+  }
+  ui.alert('✅ اتمسح ' + found.length + ' توقيع' + (sheet.getRange(row, COLS.STATUS).getValue() === STATUS.DONE ? ' واتولّد PDF جديد.' : '.'));
+}
+
 function unhideAllRows() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEET_NAME);
   if (!sheet) return;
@@ -815,8 +958,11 @@ function regeneratePdfForRow() {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('⚙ أدوات السراكي')
     .addItem('🎨 إعادة تطبيق التصميم', 'applyNewDesign')
+    .addItem('🛠 إصلاح الأعمدة المتزقّة', 'repairShiftedColumns')
+    .addItem('🧰 إعادة تهيئة الشيت (آمنة)', 'resetSheetLayout')
     .addItem('🖨 إخراج PDF لصف موقّع من التطبيق (بدون توقيعات Drive)', 'finalizeSignedRow')
     .addItem('🔄 إعادة توليد PDF للصف (بعد تعديل يدوي)', 'regeneratePdfForRow')
+    .addItem('🧽 مسح توقيعات السكربت من الصف', 'removeScriptSignaturesForRow')
     .addSeparator()
     .addItem('🙈 إخفاء بيانات الأسبوع الآن', 'hideWeeklyData')
     .addItem('👁 إظهار كل الصفوف المخفية', 'unhideAllRows')
