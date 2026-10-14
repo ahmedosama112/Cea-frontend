@@ -898,21 +898,63 @@ function doPost(e) {
 
     // 💾 نسخة احتياطية يومية من قاعدة بيانات التطبيق — بتتحفظ في فولدر "CEA Backups" على Drive
     // (بيتعمل تلقائيًا لو مش موجود). بنحتفظ بآخر 30 نسخة وبنمسح الأقدم.
-    if (body.action === 'backup') {
+    if (body.action === 'backup' || body.action === 'backup-file') {
       if (!body.fileBase64 || !body.fileName) return out({ ok: false, error: 'missing backup payload' });
-      const folder = getOrCreateBackupFolder();
-      // لو فيه نسخة بنفس الاسم (نفس اليوم) — نستبدلها بدل ما نكرر
-      const existing = folder.getFilesByName(body.fileName);
-      while (existing.hasNext()) existing.next().setTrashed(true);
-      const blob = Utilities.newBlob(Utilities.base64Decode(body.fileBase64), 'application/json', body.fileName);
-      const file = folder.createFile(blob);
-      // الاحتفاظ بآخر 30 نسخة فقط
-      const all = [];
-      const it = folder.getFiles();
-      while (it.hasNext()) all.push(it.next());
-      all.sort((a, b) => b.getDateCreated() - a.getDateCreated());
-      for (let i = 30; i < all.length; i++) all[i].setTrashed(true);
-      return out({ ok: true, fileId: file.getId(), fileUrl: file.getUrl(), kept: Math.min(all.length, 30) });
+      const isObject = body.action === 'backup-file';
+      if (isObject && !/^[a-f0-9]{64}\.json$/.test(body.fileName)) return out({ ok: false, error: 'invalid object name' });
+      if (!isObject && !/^cea-db-backup-\d{4}-\d{2}-\d{2}\.json$/.test(body.fileName)) return out({ ok: false, error: 'invalid backup name' });
+      const bytes = Utilities.base64Decode(body.fileBase64);
+      const blob = Utilities.newBlob(bytes, 'application/json', body.fileName);
+      const parsed = JSON.parse(blob.getDataAsString());
+      if (isObject) {
+        const content = Utilities.base64Decode(parsed.base64);
+        const hash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, content).map(b => ('0' + (b & 255).toString(16)).slice(-2)).join('');
+        if (hash + '.json' !== body.fileName || content.length !== parsed.size) return out({ ok: false, error: 'file checksum mismatch' });
+      } else if (!parsed.tables || !Array.isArray(parsed.tables.users)) {
+        return out({ ok: false, error: 'invalid database backup' });
+      }
+      const lock = LockService.getScriptLock();
+      lock.waitLock(30000);
+      try {
+        let folder;
+        if (isObject) {
+          const folders = DriveApp.getFoldersByName('CEA Backup Files');
+          folder = folders.hasNext() ? folders.next() : DriveApp.createFolder('CEA Backup Files');
+        } else {
+          folder = getOrCreateBackupFolder();
+        }
+        const old = [];
+        const existing = folder.getFilesByName(body.fileName);
+        while (existing.hasNext()) old.push(existing.next());
+        if (isObject) {
+          for (const previous of old) {
+            if (previous.getBlob().getDataAsString() === blob.getDataAsString()) {
+              return out({ ok: true, fileId: previous.getId(), fileUrl: previous.getUrl(), reused: true });
+            }
+          }
+        }
+        // Create and verify first. A failed write never trashes the previous good copy.
+        const file = folder.createFile(blob);
+        if (file.getSize() !== bytes.length) {
+          file.setTrashed(true);
+          throw new Error('backup size mismatch');
+        }
+        old.forEach(previous => previous.setTrashed(true));
+        if (!isObject) {
+          const all = [];
+          const it = folder.getFiles();
+          while (it.hasNext()) {
+            const candidate = it.next();
+            if (/^cea-db-backup-\d{4}-\d{2}-\d{2}\.json$/.test(candidate.getName())) all.push(candidate);
+          }
+          all.sort((a, b) => b.getDateCreated() - a.getDateCreated());
+          for (let i = 30; i < all.length; i++) all[i].setTrashed(true);
+        }
+        // File objects have no automatic expiry: older database copies may reference them.
+        return out({ ok: true, fileId: file.getId(), fileUrl: file.getUrl() });
+      } finally {
+        lock.releaseLock();
+      }
     }
 
     // 🔎 استعلام: هل الكشف ده موجود فعلًا في الشيت؟ (يُستخدم قبل إعادة رفع بعد ما رد الرفع الأول ضاع)
