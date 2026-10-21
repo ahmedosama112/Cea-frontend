@@ -1025,3 +1025,13 @@ body.dark-mode .xl-wrap { background:#fff; }
 #tab-settings .card.set-closed .set-body { display:none; }
 #tab-settings .card.set-closed .card-title.set-head { margin-bottom:0; padding-bottom:0; border-bottom:none; }
 #tab-settings .card.set-closed .set-chev { transform:rotate(-90deg); }
+
+/* Correction obligations share the application's cards and modal controls. */
+.correction-item{border:1px solid var(--border,#cbd5e1);border-radius:10px;padding:12px;margin-block:10px;overflow-wrap:anywhere}
+.correction-stale{border-inline-start:4px solid var(--gold,#c9a84c)}
+.correction-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-block:10px}
+.correction-active{outline:2px solid var(--gold,#c9a84c)}
+.correction-reason{white-space:pre-wrap}
+.correction-input{display:block;width:100%;box-sizing:border-box;margin-block:6px 12px;padding:10px;font:inherit;color:inherit;background:var(--card-bg,transparent);border:1px solid var(--border,#94a3b8);border-radius:6px}
+.correction-sheet{overflow-x:auto;margin-top:12px;background:#fff;color:#111}
+#correction-editor .modal-box{max-width:900px}

@@ -7,7 +7,7 @@ const CACHE_VERSION = 'cea-v1';
 const APP_SHELL = [
   './',
   './index.html',
-  './app.js',
+  './app.js', './corrections.js',
   './style.css',
   './manifest.webmanifest',
   './icons/icon-192.png',
@@ -34,7 +34,7 @@ self.addEventListener('activate', (event) => {
 
 // كود التطبيق (HTML/JS/CSS): شبكة أولاً — عشان أي نشر جديد يوصل فورًا وما نفضلش على نسخة قديمة —
 // مع الرجوع للكاش لو مفيش نت (أوفلاين). باقي الملفات (أيقونات/مكتبات): كاش أولاً للسرعة.
-const CODE_FILES = /\/(index\.html|app\.js|style\.css)$|\/$/;
+const CODE_FILES = /\/(index\.html|app\.js|corrections\.js|style\.css)$|\/$/;
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;

@@ -144,6 +144,7 @@
 
 <!-- ══ HOME ══ -->
 <div id="tab-home" class="panel active">
+  <div id="correction-home" data-module="submissions" aria-live="polite"></div>
   <div class="home-greet">
     <div class="home-greet-text" id="home-greeting">أهلًا</div>
     <div class="home-greet-date" id="home-date"></div>
@@ -618,6 +619,16 @@
 
 <!-- ══ SUBMISSIONS — التسليمات ══ -->
 <div id="tab-submissions" class="panel">
+  <div class="card" id="correction-card">
+    <div class="card-title between"><span class="t">📋 مطلوب تعديل وإعادة إرسال</span><button class="link-btn" onclick="renderCorrections()">تحديث</button></div>
+    <p class="hint">الطلبات المفتوحة لا تختفي بقراءة التنبيه أو بمرور أسبوع، ولا تمنع إرسال كشوف جديدة.</p>
+    <div class="correction-actions" role="group" aria-label="حالات التصحيح">
+      <button class="btn btn-ghost btn-inline" data-correction-state="OPEN" onclick="correctionTab('OPEN')">مطلوب إجراء</button>
+      <button class="btn btn-ghost btn-inline" data-correction-state="RESENT" onclick="correctionTab('RESENT')">أُعيد الإرسال</button>
+      <button class="btn btn-ghost btn-inline" data-correction-state="RESOLVED" onclick="correctionTab('RESOLVED')">تمت المعالجة</button>
+    </div>
+    <div id="correction-list" aria-live="polite"></div>
+  </div>
   <div class="card">
     <div class="card-title between"><span class="t">📬 تسليماتي</span><button class="link-btn" onclick="renderMySubmissions()">🔄 تحديث</button></div>
     <p class="hint">كل كشف بعته للاعتماد وحالته. لإرسال كشف جديد: من شاشة السراكي ← "مراجعة وإرسال الكشف للاعتماد".</p>
@@ -843,6 +854,16 @@
 
 <!-- ══ APPROVALS — اعتمادات المديرين (وحدة قابلة للتفعيل، أونلاين فقط) ══ -->
 <div id="tab-approvals" class="panel">
+  <div class="card"><div class="card-title"><span class="t">متابعة التصحيحات</span></div>
+    <div class="correction-actions">
+      <label>المهندس<input class="correction-input" id="manager-correction-owner" placeholder="اسم أو بريد المهندس"></label>
+      <label>المشروع<select class="correction-input" id="manager-correction-project"></select></label>
+      <label>الحالة<select class="correction-input" id="manager-correction-state"><option value="OPEN">مطلوب إجراء</option><option value="RESENT">أُعيد الإرسال</option><option value="RESOLVED">تمت المعالجة</option></select></label>
+      <label>العمر أكبر من (ساعة)<input class="correction-input" id="manager-correction-age" type="number" min="0" value="0"></label>
+      <label>تمييز بعد (ساعة)<input class="correction-input" id="manager-correction-threshold" type="number" min="1" value="48"></label>
+      <button class="btn btn-ghost btn-inline" onclick="renderManagerCorrections(true)">تطبيق الفلاتر</button>
+    </div><div id="manager-correction-list" aria-live="polite"></div>
+  </div>
   <div class="card">
     <div class="card-title between"><span class="t">📋 اعتمادات المديرين</span><button class="link-btn" onclick="aprHardRefresh()" title="يعيد تحميل التطبيق كله (أحدث نسخة + أحدث بيانات)">🔄 تحديث</button></div>
     <div id="apr-myrole" class="hint" style="margin-top:0"></div>
@@ -1754,5 +1775,6 @@
 <div class="toast" id="toast"></div>
 
 <script src="app.js"></script>
+<script src="corrections.js"></script>
 </body>
 </html>

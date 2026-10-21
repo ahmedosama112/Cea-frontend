@@ -1816,9 +1816,9 @@ function switchTab(name){
   // تاب السراكي والاعتمادات محتاجين حالة المواعيد عشان يقفلوا الأزرار
   if(name==='records'||name==='approvals') loadWindows();
   if(name==='form'||name==='records') rrRefreshPickButton(); // بتنده renderRecords بنفسها بعد تحديث كاش البادج
-  if(name==='submissions'&&typeof renderMySubmissions==='function')renderMySubmissions();
+  if(name==='submissions'&&typeof renderMySubmissions==='function'){renderMySubmissions();if(typeof renderCorrections==='function')renderCorrections();}
   if(name==='inventory')renderInventory();
-  if(name==='approvals')renderApprovals();
+  if(name==='approvals'){renderApprovals();if(typeof renderManagerCorrections==='function')renderManagerCorrections();}
   if(name==='analytics')renderAnalytics();
   if(name==='labor')renderLaborTab();
   if(name==='equipment'){populateDropdowns();renderEquipment();}
@@ -2677,6 +2677,7 @@ async function adminCreateUser(){
 
 // ── الرئيسية: نظرة اليوم (كل الأرقام من البيانات المحلية) ──
 function renderHome(){
+  if(typeof loadCorrectionSummary==='function') loadCorrectionSummary();
   const today=todayYMD();
   const greetEl=document.getElementById('home-greeting');
   if(greetEl){
@@ -3511,6 +3512,7 @@ async function confirmSubmitApproved(){
     const j=await res.json().catch(()=>({}));
     if(!res.ok) throw new Error(j.message||('HTTP '+res.status));
     const wasResend=!!_resendTargetId; _resendTargetId=null;
+    if(typeof loadCorrectionSummary==='function'){loadCorrectionSummary();renderCorrections();}
     closeSubmitReview();
     showToast(wasResend?'✅ اتبعت النسخة الجديدة للمراجعة من أول المستوى':'✅ تم إرسال الكشف للاعتماد — تابع حالته من "تسليماتي"');
     // بادج "متطابق" أداة مراجعة قبل الإرسال بس — بمجرد ما الكشف يوصل المعتمد بطل لزومها
@@ -4414,7 +4416,8 @@ function aprNotesBlock(r){
   });
   (r.rowRejections||[]).forEach(x=>{
     if(Number(x.revision)!==cur) return;
-    out.push('<div class="apr-note apr-note-rej">✕ سطر مشطوب: '+esc(x.label||'')+' · '+esc(x.level||'')+(x.note?': '+esc(x.note):'')+'</div>');
+    out.push('<div class="apr-note apr-note-rej">✕ سطر مشطوب: '+esc(x.label||'')+' · '+esc(x.level||'')+(x.note?': '+esc(x.note):'')+' · '+(x.disposition==='CORRECTION'?'مطلوب تصحيح':x.disposition==='FINAL'?'استبعاد نهائي':'شطب قديم غير مصنّف')
+      +(!x.disposition && r.canClassify && !r._oldRev ? '<button class="btn btn-ghost btn-inline" onclick="classifyLegacyStrike('+jsArg(String(r.id))+','+cur+','+Number(x.sheetIndex)+','+Number(x.row)+')">تصنيف الشطب القديم</button>':'')+'</div>');
   });
   return out.length ? '<div class="apr-notes-box">'+out.join('')+'</div>' : '';
 }
@@ -4860,6 +4863,8 @@ function aprOpenModal(bar, title, body, okLabel, okBg, withNote, okColor){
   b.style.borderTop='6px solid '+bar;
   const hd=document.getElementById('apr-modal-head'); hd.textContent=title;
   document.getElementById('apr-modal-body').textContent=body;
+  document.getElementById('apr-disposition-wrap')?.remove();
+  if(_aprPending?.decision==='ROW_REJECT'){const wrap=document.createElement('label');wrap.id='apr-disposition-wrap';wrap.textContent='تصنيف الشطب (إلزامي)';wrap.innerHTML+='<select id="apr-disposition" class="correction-input"><option value="">اختر التصنيف</option><option value="CORRECTION">مطلوب تصحيح وإعادة إرسال</option><option value="FINAL">استبعاد نهائي — لا يُعاد إرساله</option></select>';document.getElementById('apr-modal-body').appendChild(wrap);}
   const note=document.getElementById('apr-note'); note.style.display=withNote?'block':'none'; note.value='';
   const ok=document.getElementById('apr-modal-ok');
   // مهم: بعد قرار ناجح الزرار كان بيفضل disabled (من "جاري الحفظ") فالنافذة التالية تفتح بزرار باهت مش بيضغط — ده كان سبب "لازم أعمل ريفريش"
@@ -4874,11 +4879,14 @@ async function aprConfirm(){
   const {id, decision}=_aprPending;
   const note=document.getElementById('apr-note').value.trim();
   if(decision!=='APPROVED' && !note){ showToast('⚠ اكتب الملاحظة', true); return; }
+  if(decision==='ROW_REJECT'&&!document.getElementById('apr-disposition')?.value){showToast('اختر تصنيف الشطب',true);return;}
   const ok=document.getElementById('apr-modal-ok'); ok.disabled=true; ok.textContent='⏳ جاري الحفظ...';
   try{
     if(decision==='ROW_REJECT'){
       const {sheetIndex,row,label}=_aprPending;
-      const r=await api('POST','/api/approvals/'+id+'/rows/reject',{sheetIndex,row,label,note});
+      const disposition=document.getElementById('apr-disposition')?.value;
+      if(!disposition){ok.disabled=false;showToast('اختر تصنيف الشطب',true);return;}
+      const r=await api('POST','/api/approvals/'+id+'/rows/reject',{sheetIndex,row,label,note,disposition});
       aprCloseModal();
       if(r.fullyRejected){ aprClosePreview(); showToast('❌ كل السطور اتشطبت — الكشف اترفض ورجع للمهندس'); await renderApprovals(); return; }
       showToast('✕ اتشطب السطر — الكشف يكمّل بدونه');
@@ -5552,7 +5560,7 @@ function subRow(s, adminView){
     <details class="sub-more"><summary>التفاصيل ▾</summary><div class="sub-mbody">${detail}</div></details>
     <div class="sub-acts">
       <button class="btn btn-ghost btn-inline" onclick="downloadSubmission(${jsArg(String(s.id))},${jsArg(s.file?.fileName||'sheet.xlsx')})">⬇️ الملف</button>
-      ${!adminView && s.reviewState==='RETURNED' ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
+      ${!adminView && s.reviewState==='RETURNED' && (!struckRows.length || struckRows.some(x=>x.disposition!=='FINAL') || (s.correctionTasks||[]).some(t=>t.row===0&&t.state==='OPEN')) ? '<button class="btn btn-gold btn-inline" onclick="resendSubmission(\''+s.id+'\',\''+(s.kind||'labor')+'\')">🔄 عدّل السركي وأعد الإرسال</button>' : ''}
       ${s.reviewState==='SENT' && s.googleSyncEnabled ? '<button class="btn btn-ghost btn-inline" onclick="refreshDcNotes(\''+s.id+'\', this)" title="بيعيد قراءة حالة الكشف وملاحظة الـDC من شيت الاعتماد">🔄 تحديث لتلقي ملاحظات DC</button>' : ''}
       ${isAdmin() && s.reviewState==='SENT' && !s.gsheetRow && s.googleSyncEnabled && subSentLongAgo(s) ? '<button class="btn btn-ghost btn-inline" onclick="resyncSubmission(\''+s.id+'\', this)" title="أداة إصلاح للأدمن فقط — بترفع الملف تاني لشيت الاعتماد لو الرفع الأول فشل">☁️ إعادة الإرسال للشيت</button>' : ''}
       ${adminView && isAdmin() ? '<button class="btn btn-danger btn-inline" onclick="adminDeleteSubmission(\''+s.id+'\')" title="حذف نهائي من التطبيق (الأدمن فقط)">🗑 حذف</button>' : ''}

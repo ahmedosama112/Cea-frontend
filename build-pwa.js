@@ -16,6 +16,7 @@ const copy = (from, to) => fs.copyFileSync(path.join(ROOT, from), path.join(OUT,
 
 copy('index (17).html', 'index.html');
 copy('app.js');
+copy('corrections.js');
 copy('style.css');
 copy('manifest.webmanifest');
 for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) copy(path.join('icons', f));
