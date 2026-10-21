@@ -63,6 +63,7 @@ async function editCorrectionDraft(id){
       +'<p class="hint">المشروع والموقع والأيام من الكشف الأصلي. حفظ المسودة لا يعيد إرسال الطلب. راجع الملف قبل تأكيد الإرسال.</p>'
       +r.data.rows.map((row,i)=>'<fieldset class="correction-item" data-correction-edit="'+i+'"><legend>'+esc(row.label)+'</legend>'
         +(row.qty!=null?'<label>العدد<input class="correction-input" data-field="qty" type="number" min="0" step="0.01" value="'+esc(String(row.qty))+'"></label><label>السعر<input class="correction-input" data-field="price" type="number" min="0" step="0.01" value="'+esc(String(row.price))+'"></label>':'')
+        +(row.qty!=null&&row.discount!=null?'<p class="hint">الخصم الأصلي المحفوظ: '+esc(String(row.discount))+' ج.م. عند تغيير العدد أو السعر يظل الخصم مبلغًا ثابتًا؛ لا يُسمح بصافي سالب. راجع الصافي في المعاينة.</p>':'')
         +(row.timeFrom!=null?'<label>من<input class="correction-input" data-field="timeFrom" type="time" value="'+esc(row.timeFrom)+'"></label><label>إلى<input class="correction-input" data-field="timeTo" type="time" value="'+esc(row.timeTo)+'"></label>':'')
         +(row.qty==null&&row.timeFrom==null?'<p class="hint">اليوم يجمع سجلات متعددة أو قيمًا غير قابلة للتحرير؛ تعديل البيان متاح هنا، والتفاصيل المالية تحتاج مراجعة المسؤول.</p>':'')
         +'<label>البيان / الملاحظات<textarea class="correction-input" data-field="notes" maxlength="500">'+esc(row.notes||'')+'</textarea></label></fieldset>').join('')

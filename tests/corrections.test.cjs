@@ -51,3 +51,14 @@ test('retry after a lost submit response confirms the existing replacement inste
  assert.equal(await ctx.saveCorrectionDraft({},true),true);
  assert.equal(elements['correction-editor'].style.display,'none');
 });
+
+test('draft editor explains the retained fixed deduction beside financial inputs',async()=>{
+ const {ctx,elements}=harness(async()=>({data:{id:'1',version:0,rows:[{taskId:'2',label:'2026-10-07',qty:1,price:100,discount:'20',total:'80',notes:'أعمال'}]}}));
+ elements['correction-editor']={style:{}};
+ ctx.document.body={classList:{add(){}}};
+ ctx.showToast=message=>assert.fail(message);
+ await ctx.editCorrectionDraft('1');
+ assert.match(elements['correction-editor'].innerHTML,/الخصم الأصلي المحفوظ: 20 ج.م/);
+ assert.match(elements['correction-editor'].innerHTML,/يظل الخصم مبلغًا ثابتًا/);
+ assert.match(elements['correction-editor'].innerHTML,/لا يُسمح بصافي سالب/);
+});
