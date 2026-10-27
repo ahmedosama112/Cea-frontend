@@ -3747,7 +3747,7 @@ function renderEquipment(){
         </div>
       </div>
       <div class="record-meta"><span class="badge">⏰ ${esc(r.timeFrom)} → ${esc(r.timeTo)}</span>${r.works?'<span class="badge">🧱 '+esc(r.works)+'</span>':''}</div>
-      ${(r.deductOn&&r.deductOn.length)?`<div class="record-notes">💸 بالخصم على: ${esc(r.deductOn.join('، '))}${r.deductNote?' — '+esc(r.deductNote):''}</div>`:''}
+      ${(r.deductOn&&r.deductOn.length)?`<div class="record-notes record-deduct">💸 بالخصم على: ${esc(r.deductOn.join('، '))}${r.deductNote?' — '+esc(r.deductNote):''}</div>`:''}
       ${r.notes?`<div class="record-notes">📝 ${esc(r.notes)}</div>`:''}
     </div>`).join('');
 }

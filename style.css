@@ -462,7 +462,8 @@ select {
 .record-notes{ font-size:11.5px; color:var(--muted); margin-top:6px; line-height:1.6; word-break:break-word; }
 .deduct-box { margin-top:6px; background:var(--danger-bg); border-right:3px solid var(--red); border-radius:6px; padding:5px 8px; font-size:11px; line-height:1.6; }
 .deduct-box b { color:var(--danger-fg); font-weight:900; }
-.deduct-box .note { color:var(--muted); }
+.deduct-box .note { color:var(--red); font-weight:700; }
+.record-deduct { color:var(--red); }
 .done-toggle { margin-top:8px; display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; padding:5px 8px 5px 10px; border-radius:20px; border:1px dashed var(--border-strong); font-size:12px; font-weight:700; color:var(--muted); }
 .done-toggle .box { width:18px; height:18px; border-radius:5px; border:2px solid var(--border-strong); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .done-toggle.on { color:var(--ok-fg); background:var(--ok-bg); border-color:transparent; }
