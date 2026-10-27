@@ -9,9 +9,41 @@ async function loadCorrectionSummary(){
   try{
     const r=await api('GET','/api/submissions/corrections?limit=1');
     box.innerHTML='<button class="btn btn-ghost" onclick="openCorrections()">📋 عندك '+Number(r.summary.submissions)+' كشف مرفوض و'+Number(r.summary.days)+' يوم محتاج تصحيح</button>';
+    if(Number(r.summary.submissions)+Number(r.summary.days)>0)rejectedMascot();
   }catch(e){box.textContent='⚠ تعذّر تحميل المطلوب منك — افتح التسليمات لإعادة المحاولة';}
 }
 function openCorrections(){switchTab('submissions');document.getElementById('correction-card')?.scrollIntoView({behavior:'smooth'});}
+// ── شخصية المهندس بالخوذة: سركي مرفوض/أيام محتاجة تصحيح ──
+// display-only زي باقي الشخصيات — كله جوّه try/catch وماتلمسش أي بيانات.
+// بتظهر مرة واحدة كل تشغيل، من loadCorrectionSummary لما يكون فيه مطلوب فعلًا.
+let _rejMascotShown=false,_rejMascotTimer=null;
+function rejectedMascotHide(){try{if(_rejMascotTimer){clearTimeout(_rejMascotTimer);_rejMascotTimer=null;}const el=document.getElementById('rej-mascot');if(el)el.remove();}catch(e){}}
+function rejectedMascotCSS(){
+  if(document.getElementById('rej-mascot-css'))return;
+  const st=document.createElement('style');st.id='rej-mascot-css';
+  st.textContent='#rej-mascot{position:fixed;z-index:80;left:10px;bottom:80px;direction:ltr;display:flex;align-items:flex-start;gap:6px;animation:rej-pop .35s cubic-bezier(.34,1.4,.64,1)}'
+    +'#rej-mascot img{width:74px;height:auto;display:block;cursor:pointer;transform:scaleX(-1);filter:drop-shadow(0 4px 10px rgba(0,0,0,.22))}'
+    +'#rej-mascot .rej-bubble{direction:rtl;cursor:pointer;align-self:center;max-width:210px;font-weight:800;font-size:12.5px;line-height:1.5;background:var(--danger-bg);color:var(--red);border:1.5px solid var(--red);border-radius:14px;padding:8px 10px;position:relative}'
+    +'#rej-mascot .rej-bubble::after{content:"";position:absolute;top:50%;margin-top:-7px;left:-14px;border:7px solid transparent;border-right-color:var(--red)}'
+    +'#rej-mascot .rej-hint{display:block;margin-top:3px;font-weight:600;font-size:11px;opacity:.75}'
+    +'@keyframes rej-pop{from{transform:translateY(8px) scale(.9);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}'
+    +'@media (prefers-reduced-motion: reduce){#rej-mascot{animation:none}}';
+  document.head.appendChild(st);
+}
+function rejectedMascot(){
+  try{
+    if(_rejMascotShown||typeof MASCOT_ENG_SRC==='undefined')return;
+    _rejMascotShown=true;rejectedMascotCSS();rejectedMascotHide();
+    const el=document.createElement('div');el.id='rej-mascot';
+    el.innerHTML='<img src="'+MASCOT_ENG_SRC+'" alt="" aria-hidden="true">'
+      +'<div class="rej-bubble">🚨 راجع قسم «مطلوب تعديل وإعادة إرسال» — عندك سركي محتاج يتعدل ويتبعت تاني'
+      +'<span class="rej-hint">اضغط للذهاب للقسم · المس الصورة للإخفاء</span></div>';
+    el.querySelector('img').onclick=rejectedMascotHide;
+    el.querySelector('.rej-bubble').onclick=function(){rejectedMascotHide();openCorrections();};
+    document.body.appendChild(el);
+    _rejMascotTimer=setTimeout(rejectedMascotHide,10000);
+  }catch(e){}
+}
 function correctionTab(state){correctionState=state;correctionPage=1;renderCorrections();if(typeof renderMySubmissions==='function')renderMySubmissions();}
 function correctionMove(delta){correctionPage=Math.max(1,correctionPage+delta);renderCorrections();}
 async function renderCorrections(){

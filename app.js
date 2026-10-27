@@ -1026,7 +1026,8 @@ function addDeductChip(){
   const sel=document.getElementById('f-deduct-on-select');
   if(!sel||!sel.value)return;
   const name=sel.value;
-  if(!deductChips.includes(name)){deductChips.push(name);renderDeductChips();discountMascot(name);}
+  // (أكتوبر 2026 — طلب صاحب المشروع) شخصية المقاول الزعلان اتشالت من هنا — مفيش شخصية عند الخصم
+  if(!deductChips.includes(name)){deductChips.push(name);renderDeductChips();}
   sel.value='';
 }
 function removeDeductChip(name){
