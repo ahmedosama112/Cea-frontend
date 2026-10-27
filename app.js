@@ -3088,6 +3088,8 @@ function buildApprovedSheet(workbook, contractorName, exp, weekBounds, sigImgId,
       filledRows.push(row);
     }
     styleRange(row,1,row,13,{font:{size:10,name:'Arial'}});
+    // خانة "بالخصم على + ملاحظة الخصم" بالأحمر — بعد styleRange عشان ما يتمسحش
+    if(ws.getCell(row,2).value) ws.getCell(row,2).font={size:10,name:'Arial',bold:true,color:{argb:'FFC62828'}};
     ws.getRow(row).height = 30;
   }
 
@@ -3817,7 +3819,9 @@ function buildEquipmentSheet(workbook, exp, bounds, pageIdx, pagesTotal, dayStar
         ws.getCell(row,1).value=recs.map(r=>r.notes).filter(Boolean).join(' / ');
       }
     }
-    styleRange(row,1,row,13,{font:{size:10,name:'Arial'}}); ws.getRow(row).height=30;
+    styleRange(row,1,row,13,{font:{size:10,name:'Arial'}});
+    if(ws.getCell(row,2).value) ws.getCell(row,2).font={size:10,name:'Arial',bold:true,color:{argb:'FFC62828'}}; // بالخصم على بالأحمر
+    ws.getRow(row).height=30;
   }
   const totalRow=headerRow+6; // 13
   ws.mergeCells(totalRow,8,totalRow,13); ws.getCell(totalRow,13).value='إجمالي ساعات الورقة';
