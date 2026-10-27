@@ -854,6 +854,12 @@
 
 <!-- ══ APPROVALS — اعتمادات المديرين (وحدة قابلة للتفعيل، أونلاين فقط) ══ -->
 <div id="tab-approvals" class="panel">
+  <!-- تابات فرعية: الطابور الافتراضي، والتصحيحات في تاب لوحدها مع بادج أحمر بعدد المفتوح -->
+  <div class="an-periods an-dims" role="tablist" aria-label="أقسام الاعتمادات">
+    <button type="button" class="an-chip an-dim on" id="apr-subtab-queue" onclick="aprSubTab('queue')">📋 اعتمادات المديرين</button>
+    <button type="button" class="an-chip an-dim" id="apr-subtab-corrections" onclick="aprSubTab('corrections')">🛠 متابعة التصحيحات<span class="corr-badge" id="apr-corr-badge" hidden></span></button>
+  </div>
+  <div id="apr-sub-corrections" hidden>
   <div class="card"><div class="card-title"><span class="t">متابعة التصحيحات</span></div>
     <div class="correction-actions">
       <label>المهندس<input class="correction-input" id="manager-correction-owner" placeholder="اسم أو بريد المهندس"></label>
@@ -864,6 +870,8 @@
       <button class="btn btn-ghost btn-inline" onclick="renderManagerCorrections(true)">تطبيق الفلاتر</button>
     </div><div id="manager-correction-list" aria-live="polite"></div>
   </div>
+  </div>
+  <div id="apr-sub-queue">
   <div class="card">
     <div class="card-title between"><span class="t">📋 اعتمادات المديرين</span><button class="link-btn" onclick="aprHardRefresh()" title="يعيد تحميل التطبيق كله (أحدث نسخة + أحدث بيانات)">🔄 تحديث</button></div>
     <div id="apr-myrole" class="hint" style="margin-top:0"></div>
@@ -882,6 +890,7 @@
       <span id="apr-older-hint" class="hint" style="margin:0"></span>
       <button type="button" class="btn btn-ghost btn-sm" onclick="aprShowOlder()">📜 عرض الأقدم (7 أيام كمان)</button>
     </div>
+  </div>
   </div>
 </div>
 

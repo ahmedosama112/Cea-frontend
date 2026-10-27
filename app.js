@@ -1818,7 +1818,7 @@ function switchTab(name){
   if(name==='form'||name==='records') rrRefreshPickButton(); // بتنده renderRecords بنفسها بعد تحديث كاش البادج
   if(name==='submissions'&&typeof renderMySubmissions==='function'){renderMySubmissions();if(typeof renderCorrections==='function')renderCorrections();}
   if(name==='inventory')renderInventory();
-  if(name==='approvals'){renderApprovals();if(typeof renderManagerCorrections==='function')renderManagerCorrections();}
+  if(name==='approvals'){renderApprovals();if(typeof loadManagerCorrectionBadge==='function')loadManagerCorrectionBadge();}
   if(name==='analytics')renderAnalytics();
   if(name==='labor')renderLaborTab();
   if(name==='equipment'){populateDropdowns();renderEquipment();}

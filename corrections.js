@@ -115,6 +115,20 @@ async function deleteCorrectionDraft(id,btn){
   if(!confirm('حذف المسودة فقط؟ طلب التصحيح هيفضل مطلوبًا.'))return;
   btn.disabled=true;try{await api('DELETE','/api/submissions/corrections/drafts/'+id);await renderCorrections();}catch(e){showToast(e.message,true);}finally{btn.disabled=false;}
 }
+// التابات الفرعية جوه اعتمادات المديرين — الطابور الافتراضي، والتصحيحات بتتحمّل عند فتح تابها بس
+function aprSubTab(name){
+  document.getElementById('apr-sub-queue').hidden=name!=='queue';
+  document.getElementById('apr-sub-corrections').hidden=name!=='corrections';
+  document.getElementById('apr-subtab-queue').classList.toggle('on',name==='queue');
+  document.getElementById('apr-subtab-corrections').classList.toggle('on',name==='corrections');
+  if(name==='corrections')renderManagerCorrections(true);
+}
+// البادج الأحمر = عدد طلبات التصحيح المفتوحة — فشل التحميل يخفي البادج بس من غير ما يكسر التاب
+async function loadManagerCorrectionBadge(){
+  const badge=document.getElementById('apr-corr-badge');if(!badge)return;
+  try{const r=await api('GET','/api/approvals/corrections?state=OPEN&limit=1');const n=Number(r.total)||0;badge.hidden=!n;badge.textContent=n>99?'99+':String(n);}
+  catch(e){badge.hidden=true;}
+}
 async function renderManagerCorrections(reset){
   const box=document.getElementById('manager-correction-list');if(!box)return;if(reset)managerCorrectionPage=1;
   const project=document.getElementById('manager-correction-project');
@@ -123,6 +137,7 @@ async function renderManagerCorrections(reset){
   if(project.value)params.set('projectId',project.value);
   const owner=document.getElementById('manager-correction-owner').value.trim();if(owner)params.set('ownerSearch',owner);
   box.textContent='جاري التحميل...';
+  loadManagerCorrectionBadge();
   try{const r=await api('GET','/api/approvals/corrections?'+params);box.innerHTML=(r.data.length?r.data.map(t=>correctionRowHtml(t,true)).join(''):'<p class="hint">لا توجد طلبات مطابقة للفلاتر.</p>')
     +'<div class="correction-actions"><button class="btn btn-ghost btn-inline" '+(managerCorrectionPage===1?'disabled':'')+' onclick="managerCorrectionPage--;renderManagerCorrections()">السابق</button><span>'+managerCorrectionPage+' / '+Math.max(1,Math.ceil(r.total/30))+'</span><button class="btn btn-ghost btn-inline" '+(managerCorrectionPage*30>=r.total?'disabled':'')+' onclick="managerCorrectionPage++;renderManagerCorrections()">التالي</button></div>';}
   catch(e){box.innerHTML='<p role="alert">⚠ '+esc(e.message)+'</p><button class="btn btn-ghost" onclick="renderManagerCorrections()">إعادة المحاولة</button>';}
