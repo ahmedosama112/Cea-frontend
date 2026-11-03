@@ -7,7 +7,7 @@ const CACHE_VERSION = 'cea-v1';
 const APP_SHELL = [
   './',
   './index.html',
-  './app.js', './corrections.js',
+  './app.js', './corrections.js', './exit-guard.js',
   './style.css',
   './manifest.webmanifest',
   './icons/icon-192.png',
