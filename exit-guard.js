@@ -1,12 +1,23 @@
 // تأكيد الخروج عند الضغط على زرار الرجوع (نوفمبر 2026 — طلب صاحب المشروع)
 // - جوه APK الكابسيتور: لو إضافة App موجودة بنستخدم حدث backButton و exitApp.
-// - في الـ PWA / المتصفح: بنحط خطوة "حارسة" في الـ history، والرجوع بيشيلها فبنعرض التأكيد.
+// - على أندرويد (كروم 120+): CloseWatcher — زرار الرجوع بيقفله بدل ما يخرج، وكروم بيسمح بواحد
+//   من غير أي لمسة، فالتأكيد بيشتغل من أول ما البرنامج يفتح.
+// - غير كده (متصفحات أقدم): بنحط خطوة "حارسة" في الـ history، والرجوع بيشيلها فبنعرض التأكيد.
 //   كروم بيتجاهل خطوات الـ history اللي اتحطت من غير لمسة من المستخدم، فبنحطها بعد أول لمسة.
 // confirm() النظامي بيتكتم في الـ PWA، فالتأكيد نافذة جوه البرنامج.
 (function(){
   'use strict';
   var GUARD = 'cea-exit-guard';
-  var modal = null, armed = false;
+  var modal = null, armed = false, watcher = null, useWatcher = false;
+
+  function watch(){
+    try{
+      if(watcher) return;
+      watcher = new CloseWatcher();
+      watcher.onclose = function(){ watcher = null; if(shown()) stay(); else ask(); };
+    }catch(e){ watcher = null; }
+  }
+  function shown(){ return !!(modal && modal.style.display === 'flex'); }
 
   function capApp(){
     try{
@@ -48,12 +59,14 @@
     try{
       if(!modal) build();
       modal.style.display = 'flex';
+      if(useWatcher) watch(); // رجوع والرسالة مفتوحة = «لا»
       var no = modal.querySelector('#exit-confirm-no'); if(no) no.focus();
     }catch(e){}
   }
 
   function stay(){
     hide();
+    if(useWatcher){ watch(); return; }
     armed = false;
     if(!capApp()) arm(); // نرجّع الخطوة الحارسة (الضغطة دي لمسة مستخدم فكروم بيقبلها)
   }
@@ -62,6 +75,7 @@
     hide();
     var app = capApp();
     if(app && app.exitApp){ try{ app.exitApp(); return; }catch(e){} }
+    if(watcher){ try{ watcher.destroy(); }catch(e){} watcher = null; }
     // الـ PWA: الخطوة الحارسة اتشالت خلاص — نحاول نقفل النافذة، ولو المتصفح منع ده
     // فضغطة الرجوع الجاية هتخرج على طول من غير سؤال.
     try{ window.close(); }catch(e){}
@@ -76,6 +90,16 @@
       app.addListener('backButton', function(){
         if(modal && modal.style.display === 'flex') stay(); else ask();
       });
+      return;
+    }
+  }catch(e){}
+
+  try{
+    var standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    // على الكمبيوتر CloseWatcher بيتقفل بزرار Esc — فبنستخدمه على الموبايل / التطبيق المثبّت بس
+    if(typeof CloseWatcher === 'function' && (standalone || /Android/i.test(navigator.userAgent))){
+      useWatcher = true;
+      watch();
       return;
     }
   }catch(e){}
