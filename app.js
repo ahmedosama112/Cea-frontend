@@ -3315,7 +3315,10 @@ async function exportApprovedExcel(){
 
 
 // ── عرض ورقة Excel كجدول HTML (معاينة الكشف قبل الإرسال — بدون تنزيل) ──
-function argbToCss(argb){ if(!argb) return null; const h=String(argb); return '#'+(h.length===8?h.slice(2):h); }
+// (أمان) القيم جاية من styles.xml بتاع ملف المهندس — أي حاجة مش hex بتترفض عشان ماتكسرش style="…" وتحقن HTML
+function argbToCss(argb){ if(!argb) return null; const h=String(argb); if(!/^(?:[0-9A-Fa-f]{2})?[0-9A-Fa-f]{6}$/.test(h)) return null; return '#'+(h.length===8?h.slice(2):h); }
+const XL_ALIGN_OK=/^(left|right|center|justify|start|end|top|middle|bottom|baseline)$/;
+const XL_IMG_EXT_OK=/^(png|jpe?g|gif|webp|bmp)$/i;
 function renderSheetHtml(ws, workbook, selfPmSig=null){
   const rowCount=ws.rowCount, colCount=Math.max(ws.columnCount, 13);
   // خريطة الدمج: master → {rowspan,colspan}, covered → skip
@@ -3336,8 +3339,9 @@ function renderSheetHtml(ws, workbook, selfPmSig=null){
       const r=Math.floor(im.range.tl.nativeRow)+1, c=Math.floor(im.range.tl.nativeCol)+1;
       const key=mergeMaster[r+':'+c]||(r+':'+c);
       const media=workbook.getImage ? workbook.getImage(im.imageId) : null;
-      if(media && media.base64) imgRows.set(key, 'data:image/'+(media.extension||'png')+';base64,'+media.base64);
-      else if(media && media.buffer){ imgRows.set(key, 'data:image/'+(media.extension||'png')+';base64,'+bytesToBase64(new Uint8Array(media.buffer))); }
+      const ext=media && XL_IMG_EXT_OK.test(String(media.extension||'')) ? String(media.extension).toLowerCase() : 'png';
+      if(media && media.base64) imgRows.set(key, 'data:image/'+ext+';base64,'+media.base64);
+      else if(media && media.buffer){ imgRows.set(key, 'data:image/'+ext+';base64,'+bytesToBase64(new Uint8Array(media.buffer))); }
     });
   }catch(e){}
   // (أكتوبر 2026) مدير المشروع بيبعت سركيه بنفسه: السيرفر بيختم توقيعه في بلوك "توقيع مدير المشروع" بعد الإرسال
@@ -3364,8 +3368,8 @@ function renderSheetHtml(ws, workbook, selfPmSig=null){
       const cell=row.getCell(c); const m=master[r+':'+c]||{rs:1,cs:1};
       const st=[]; const f=cell.fill, fo=cell.font, al=cell.alignment, bd=cell.border;
       if(f && f.type==='pattern' && f.fgColor && f.fgColor.argb){ const bg=argbToCss(f.fgColor.argb); if(bg && bg.toLowerCase()!=='#ffffff' && bg.toLowerCase()!=='#000000') st.push('background:'+bg); else if(bg && bg.toLowerCase()==='#ffffff') st.push('background:#fff'); }
-      if(fo){ if(fo.bold) st.push('font-weight:700'); if(fo.size) st.push('font-size:'+Math.round(fo.size*1.15)+'px'); if(fo.color&&fo.color.argb) st.push('color:'+argbToCss(fo.color.argb)); }
-      if(al){ if(al.horizontal) st.push('text-align:'+al.horizontal); if(al.vertical) st.push('vertical-align:'+al.vertical); if(al.wrapText) st.push('white-space:pre-wrap'); }
+      if(fo){ if(fo.bold) st.push('font-weight:700'); if(fo.size) st.push('font-size:'+Math.round(fo.size*1.15)+'px'); const fc=fo.color&&fo.color.argb?argbToCss(fo.color.argb):null; if(fc) st.push('color:'+fc); }
+      if(al){ if(XL_ALIGN_OK.test(String(al.horizontal||''))) st.push('text-align:'+al.horizontal); if(XL_ALIGN_OK.test(String(al.vertical||''))) st.push('vertical-align:'+al.vertical); if(al.wrapText) st.push('white-space:pre-wrap'); }
       const hasBorder = bd && (bd.top||bd.left||bd.right||bd.bottom);
       if(hasBorder) st.push('border:1px solid #999');
       let v=cell.value;
@@ -3373,7 +3377,7 @@ function renderSheetHtml(ws, workbook, selfPmSig=null){
       let content = (v===null||v===undefined) ? '' : esc(String(v)).replace(/\n/g,'<br>');
       // توقيع المهندس في صف البيانات صغير؛ توقيعات المديرين في البلوكات المدموجة أكبر (بنسبة الصورة، جوّه الخلية)
       const img=imgRows.get(r+':'+c); if(img) content='<img src="'+img+'" alt="توقيع" style="'+(m.cs>1?'max-height:36px;max-width:60%;':'height:22px;max-width:70px;')+'object-fit:contain;vertical-align:middle">'+content;
-      html+='<td'+(m.rs>1?' rowspan="'+m.rs+'"':'')+(m.cs>1?' colspan="'+m.cs+'"':'')+' style="'+st.join(';')+'">'+content+'</td>';
+      html+='<td'+(m.rs>1?' rowspan="'+m.rs+'"':'')+(m.cs>1?' colspan="'+m.cs+'"':'')+' style="'+esc(st.join(';'))+'">'+content+'</td>';
     }
     html+='</tr>';
   }
