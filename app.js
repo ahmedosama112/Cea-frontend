@@ -7008,7 +7008,7 @@ function showMaintenance(message){
     el.innerHTML='<div class="maint-box">'
       +'<div class="maint-icon">⛔</div>'
       +'<h1 class="maint-title">Service stopped</h1>'
-      +'<p class="maint-sub">الخدمة متوقفة مؤقتًا — هترجع تشتغل لوحدها أول ما الإيقاف يتشال.</p>'
+      +'<p class="maint-sub">الخدمة متوقفة مؤقتًا</p>'
       +'<p class="maint-msg"></p>'
       +'<p class="maint-note">بياناتك المحفوظة على الجهاز في أمان ومش هتتمسح.</p>'
       +'<button type="button" class="btn btn-navy maint-retry" onclick="checkMaintenance(true)">🔄 حاول تاني</button>'
