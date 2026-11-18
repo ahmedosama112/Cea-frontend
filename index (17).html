@@ -345,6 +345,16 @@
     </div>
   </details>
 
+  <details class="acc" data-acc="maintenance">
+    <summary class="acc-head"><span class="acc-t">⛔ إيقاف الخدمة</span><button class="link-btn acc-act" onclick="event.preventDefault();event.stopPropagation();loadMaintenanceAdmin()">🔄 تحديث</button><span class="acc-caret">▾</span></summary>
+    <div class="acc-body">
+    <p class="hint" style="margin-top:0">لما توقفها، كل المستخدمين (غير الأدمن) هيشوفوا صفحة "Service stopped" ومش هيقدروا يدخلوا أو يزامنوا لحد ما تشغّلها تاني. إنت هتفضل شغال عادي. بياناتهم المحلية مش بتتمسح.</p>
+    <div id="maint-admin-status"><div class="home-empty">⏳</div></div>
+    <input type="text" id="maint-admin-msg" class="mt8" placeholder="رسالة تظهر للمستخدمين تحت Service stopped (اختياري)" maxlength="500">
+    <button class="btn btn-danger mt8" id="maint-admin-btn" data-on="0" onclick="toggleMaintenance()">⛔ أوقف الخدمة</button>
+    </div>
+  </details>
+
   <div class="card" id="admin-user-card" style="display:none">
     <div class="card-title between"><span class="t" id="admin-user-title">—</span><button class="link-btn" onclick="adminCloseUser()">✕ إغلاق</button></div>
 

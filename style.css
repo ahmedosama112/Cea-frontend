@@ -1039,3 +1039,16 @@ body.dark-mode .xl-wrap { background:#fff; }
 /* بادج أحمر على تاب متابعة التصحيحات — نفس روح bell-badge بس على شريحة التاب */
 #apr-subtab-corrections{position:relative}
 .corr-badge{position:absolute;top:-7px;left:-7px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;border:2px solid var(--card);font-size:10px;font-weight:900;line-height:14px;text-align:center}
+
+
+/* ⛔ وضع الإيقاف (Service stopped) — بيغطي التطبيق كله لغير الأدمن */
+#maint-screen{ position:fixed; inset:0; z-index:2147483000; display:none; align-items:center; justify-content:center; padding:24px 16px; background:var(--bg); color:var(--text); overflow:auto; }
+#maint-screen .maint-box{ max-width:420px; width:100%; text-align:center; background:var(--card); border:1px solid var(--border); border-radius:18px; padding:32px 22px; box-shadow:0 10px 30px rgba(0,0,0,.08); }
+#maint-screen .maint-icon{ font-size:52px; line-height:1; margin-bottom:12px; }
+#maint-screen .maint-title{ margin:0 0 10px; font-size:28px; font-weight:800; color:var(--danger-fg); direction:ltr; }
+#maint-screen .maint-sub{ margin:0 0 10px; color:var(--text); }
+#maint-screen .maint-msg{ margin:0 0 10px; padding:10px 12px; border-radius:10px; background:var(--danger-bg); color:var(--danger-fg); white-space:pre-wrap; }
+#maint-screen .maint-note{ margin:0 0 18px; color:var(--muted); font-size:13px; }
+#maint-screen .maint-retry{ width:100%; }
+#maint-screen .maint-admin{ display:block; margin:14px auto 0; font-size:13px; color:var(--muted); }
+#maint-banner{ position:fixed; top:0; left:0; right:0; z-index:2147482000; display:none; padding:6px 12px; text-align:center; font-size:13px; font-weight:700; background:var(--danger-bg); color:var(--danger-fg); border-bottom:1px solid var(--danger-fg); }

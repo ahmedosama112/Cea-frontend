@@ -2073,6 +2073,7 @@ async function renderAdmin(){
   renderWindowsAdmin();
   renderActivityTable();
   loadBackupStatus();
+  loadMaintenanceAdmin();
   adminModuleCheckboxes('admin-create-modules', ['records','submissions','todo','summary'], DEFAULT_FEATURES);
   const list=document.getElementById('admin-users-list');
   try{
@@ -6979,11 +6980,132 @@ async function api(method, path, body, _retried, _rlTries){
   let data=null;
   try{ data=await res.json(); }catch(e){ /* استجابة غير JSON */ }
   if(!res.ok){
+    if(res.status===503 && data && data.code==='MAINTENANCE') showMaintenance(data.message);
     const err=new Error((data&&data.message)||('HTTP '+res.status));
     err.status=res.status; err.code=data&&data.code; err.details=data&&data.details;
     throw err;
   }
   return data;
+}
+
+/* ═══════════ ⛔ وضع الإيقاف (Service stopped) ═══════════
+   الأدمن بيشغّله ويطفيه من شاشة الإدارة (كارت "إيقاف الخدمة"). وهو شغال، السيرفر بيرد 503 MAINTENANCE
+   على أي حساب غير الأدمن (حتى الدخول والتجديد)، والواجهة بتغطي الشاشة كلها بصفحة "Service stopped".
+   بنتأكد من /api/status (من غير تسجيل دخول) عند الفتح وكل دقيقة، فالصفحة بتظهر وتختفي لوحدها.
+   البيانات المحلية ما بتتلمسش — لما الخدمة ترجع الصفحة بتعمل reload وكل حاجة بتكمل زي ما هي. */
+let _maintOn=false, _maintShown=false, _maintLoginBypass=false, _maintTimer=null;
+function _maintIsAdmin(){ return !!getAccessToken() && isAdmin(); }
+function showMaintenance(message){
+  _maintOn=true;
+  if(_maintIsAdmin()){ renderMaintBanner(); return; } // الأدمن بيشتغل عادي — بس بيشوف تنبيه إن الوضع شغال
+  // "دخول المسؤول" من صفحة الإيقاف: نسيب شاشة الدخول ظاهرة لحد ما حد يحاول يدخل
+  if(_maintLoginBypass && !getAccessToken()) return;
+  let el=document.getElementById('maint-screen');
+  if(!el){
+    el=document.createElement('div');
+    el.id='maint-screen';
+    el.setAttribute('role','alert');
+    el.innerHTML='<div class="maint-box">'
+      +'<div class="maint-icon">⛔</div>'
+      +'<h1 class="maint-title">Service stopped</h1>'
+      +'<p class="maint-sub">الخدمة متوقفة مؤقتًا — هترجع تشتغل لوحدها أول ما الإيقاف يتشال.</p>'
+      +'<p class="maint-msg"></p>'
+      +'<p class="maint-note">بياناتك المحفوظة على الجهاز في أمان ومش هتتمسح.</p>'
+      +'<button type="button" class="btn btn-navy maint-retry" onclick="checkMaintenance(true)">🔄 حاول تاني</button>'
+      +'<button type="button" class="link-btn maint-admin" onclick="maintAdminLogin()">دخول المسؤول</button>'
+      +'</div>';
+    document.body.appendChild(el);
+  }
+  const msg=el.querySelector('.maint-msg');
+  msg.textContent=message||'';
+  msg.style.display=message?'block':'none';
+  // زرار "دخول المسؤول" ليه لازمة بس لو مفيش حد مسجّل على الجهاز
+  el.querySelector('.maint-admin').style.display=getAccessToken()?'none':'';
+  el.style.display='flex';
+  _maintShown=true;
+  const s=document.getElementById('splash'); if(s) s.classList.add('hide');
+}
+function hideMaintenance(){
+  const wasShown=_maintShown;
+  _maintOn=false; _maintShown=false; _maintLoginBypass=false;
+  const el=document.getElementById('maint-screen'); if(el) el.style.display='none';
+  renderMaintBanner();
+  // الصفحة كانت مغطية التطبيق وهو بيحاول يتصل — reload بيرجّع الجلسة والمزامنة من الأول بشكل نضيف
+  if(wasShown) location.reload();
+}
+function maintAdminLogin(){
+  _maintLoginBypass=true;
+  const el=document.getElementById('maint-screen'); if(el) el.style.display='none';
+  _maintShown=false;
+  showLoginScreen('⛔ الخدمة متوقفة — الدخول متاح للمسؤول بس');
+}
+// شريط تنبيه للأدمن وهو الوضع شغال — عشان ما ينساش يطفيه
+function renderMaintBanner(){
+  let b=document.getElementById('maint-banner');
+  const show=_maintOn && _maintIsAdmin();
+  if(!show){ if(b) b.style.display='none'; return; }
+  if(!b){
+    b=document.createElement('div');
+    b.id='maint-banner';
+    b.textContent='⛔ وضع الإيقاف شغال — المستخدمين شايفين صفحة Service stopped. اطفيه من الإدارة ← إيقاف الخدمة';
+    document.body.appendChild(b);
+  }
+  b.style.display='block';
+}
+async function checkMaintenance(manual){
+  try{
+    const res=await _fetchWithTimeout(API_URL+'/api/status',{cache:'no-store'},12000);
+    if(!res.ok){ if(manual) showToast('⚠ السيرفر مش بيرد — جرّب كمان شوية', true); return; }
+    const d=await res.json();
+    const m=d&&d.data;
+    if(m&&m.maintenance){ showMaintenance(m.message); if(manual) showToast('⛔ الخدمة لسه متوقفة', true); }
+    else if(_maintOn) hideMaintenance();
+  }catch(e){ if(manual) showToast('⚠ مفيش اتصال بالنت', true); }
+}
+function startMaintenanceWatch(){
+  checkMaintenance();
+  if(_maintTimer) return;
+  _maintTimer=setInterval(checkMaintenance, 60000);
+  window.addEventListener('online', ()=>checkMaintenance());
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') checkMaintenance(); });
+}
+
+// كارت "إيقاف الخدمة" في شاشة الإدارة
+async function loadMaintenanceAdmin(){
+  const box=document.getElementById('maint-admin-status'); if(!box) return;
+  const btn=document.getElementById('maint-admin-btn');
+  if(!navigator.onLine){ box.innerHTML='<div class="home-empty">⚠ محتاج اتصال بالنت</div>'; return; }
+  try{
+    const st=(await api('GET','/api/admin/maintenance')).data||{};
+    _maintOn=!!st.on; renderMaintBanner();
+    const since=st.since ? new Date(st.since).toLocaleString('ar-EG',{dateStyle:'medium',timeStyle:'short'}) : '';
+    box.innerHTML='<div class="setting-item"><div style="flex:1;min-width:0">'
+      +(st.on
+        ? '<div class="setting-name" style="color:var(--danger-fg)">⛔ الخدمة متوقفة دلوقتي</div>'
+          +(since?'<div class="setting-sub">من '+esc(since)+'</div>':'')
+          +(st.message?'<div class="setting-sub" style="margin-top:3px">الرسالة: '+esc(st.message)+'</div>':'')
+        : '<div class="setting-name" style="color:var(--ok-fg)">✅ الخدمة شغالة عادي</div>')
+      +'</div></div>';
+    const inp=document.getElementById('maint-admin-msg');
+    if(inp && st.on && !inp.value) inp.value=st.message||'';
+    if(btn){
+      btn.dataset.on=st.on?'1':'0';
+      btn.textContent=st.on?'▶ شغّل الخدمة تاني':'⛔ أوقف الخدمة';
+      btn.className='btn mt8 '+(st.on?'btn-navy':'btn-danger');
+    }
+  }catch(e){ box.innerHTML='<div class="home-empty">⚠ '+esc(e.message||'تعذر التحميل')+'</div>'; }
+}
+async function toggleMaintenance(){
+  const btn=document.getElementById('maint-admin-btn'); if(!btn) return;
+  const turnOn=btn.dataset.on!=='1';
+  const message=((document.getElementById('maint-admin-msg')||{}).value||'').trim();
+  if(turnOn && !confirm('توقف الخدمة دلوقتي؟\n\nكل المستخدمين (غير الأدمن) هيشوفوا صفحة "Service stopped" ومش هيقدروا يدخلوا أو يزامنوا لحد ما تشغّلها تاني.')) return;
+  btn.disabled=true;
+  try{
+    await api('PUT','/api/admin/maintenance',{on:turnOn, message});
+    showToast(turnOn?'⛔ الخدمة اتوقفت':'✅ الخدمة رجعت تشتغل');
+  }catch(e){ showToast('⚠ '+(e.message||'تعذر الحفظ'), true); }
+  finally{ btn.disabled=false; loadMaintenanceAdmin(); }
 }
 
 // (15 سبتمبر 2026) مهلة على نداءات الإقلاع — على نت "معلّق" (بيقبل الاتصال وما بيردّش)
@@ -7007,6 +7129,8 @@ async function verifySession(token){
       if(d.data){ localStorage.setItem('cea_user_role', d.data.role||'ENGINEER'); localStorage.setItem('cea_user_title', d.data.title||''); localStorage.setItem('cea_user_name', d.data.displayName||''); localStorage.setItem('cea_user_site', String(d.data.site||1)); localStorage.setItem('cea_user_grade', d.data.grade||''); applyFormButtons(); }
       return 'ok';
     }
+    // وضع الإيقاف: الجلسة سليمة — نعرض صفحة الإيقاف ونكمل كأننا أوفلاين (من غير ما نمسح أي حاجة)
+    if(res.status===503){ try{ const d=await res.json(); if(d&&d.code==='MAINTENANCE') showMaintenance(d.message); }catch(e){} }
     // 429 (ضغط طلبات) أو خطأ سيرفر مؤقت = مش انتهاء جلسة — نعتبره مشكلة شبكة ونكمل أوفلاين
     if(res.status===429 || res.status>=500) return 'network_error';
     return 'invalid';
@@ -7074,6 +7198,12 @@ async function doLogin(){
       body:JSON.stringify({email,password})
     });
     const d=await res.json();
+    if(res.status===503 && d && d.code==='MAINTENANCE'){
+      btn.disabled=false; btn.textContent='دخول';
+      _maintLoginBypass=false;
+      showMaintenance(d.message);
+      return;
+    }
     if(!res.ok){
       err.textContent='❌ الإيميل أو كلمة المرور غلط';
       btn.disabled=false; btn.textContent='دخول';
@@ -7137,6 +7267,7 @@ function renderLocalNow(){
   }catch(e){ /* الرسم المبكر مايوقفش الإقلاع أبدًا */ }
 }
 async function initAuthGate(){
+  startMaintenanceWatch(); // من غير await — صفحة الإيقاف تظهر لوحدها لو الخدمة متوقفة
   const token=getAccessToken();
   const email=getCurrentUserEmail();
   if(token&&email){
